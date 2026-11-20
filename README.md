@@ -28,3 +28,10 @@ node scripts/mentez.js clinicas
 ```
 
 Sem `MENTEZ_PLATFORM_DB`, o app funciona como antes, com uma clínica só (variáveis `DB_*`).
+
+## Publicação na VPS
+
+1. `infra/vps-sync.yml` (projeto `mentez-sync` no Docker Manager): baixa o código para `/opt/mentez/src` com a deploy key só de leitura que fica na VPS (`/opt/mentez/keys/deploy`).
+2. `infra/vps.yml` (projeto `mentez`): monta e sobe app, MySQL e Caddy a partir de `/opt/mentez/src`.
+
+Os segredos ficam em `/opt/mentez/.env`, gerados na própria VPS. **Guarde uma cópia da `MENTEZ_MASTER_KEY`** em local seguro (gerenciador de senhas): sem ela as chaves das clínicas não abrem.

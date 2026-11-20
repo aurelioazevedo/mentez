@@ -1,0 +1,20 @@
+# Baixa (ou atualiza) o código do GitHub para /opt/mentez/src na VPS, usando a deploy key só de leitura
+# gerada na própria VPS (/opt/mentez/keys/deploy). Rodar antes de cada publicação.
+services:
+  sync:
+    image: alpine/git:2.47.2
+    restart: "no"
+    volumes: ["/opt/mentez:/opt/mentez"]
+    environment:
+      GIT_SSH_COMMAND: "ssh -i /opt/mentez/keys/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/opt/mentez/keys/known_hosts"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ -d /opt/mentez/src/.git ]; then
+          git -C /opt/mentez/src fetch --depth 1 origin main
+          git -C /opt/mentez/src reset --hard origin/main
+        else
+          git clone --depth 1 --branch main git@github.com:aurelioazevedo/mentez.git /opt/mentez/src
+        fi
+        echo "SYNC: $$(git -C /opt/mentez/src log -1 --format='%h %s')"
