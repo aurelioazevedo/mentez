@@ -1,0 +1,29 @@
+# Atualização na VPS (projeto "mentez-update" no Docker Manager da Hostinger):
+# 1) baixa o código do GitHub para /opt/mentez/src, com a deploy key só de leitura que fica na VPS;
+# 2) monta a imagem do app (mentez-app:latest) no próprio servidor.
+# Depois disso, publicar o projeto "mentez" (infra/vps.yml) troca o app pela versão nova.
+services:
+  update:
+    image: docker:27-cli
+    restart: "no"
+    volumes:
+      - /opt/mentez:/opt/mentez
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      GIT_SSH_COMMAND: "ssh -i /opt/mentez/keys/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/opt/mentez/keys/known_hosts"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache git openssh-client >/dev/null
+        if [ -d /opt/mentez/src/.git ]; then
+          git -C /opt/mentez/src fetch --depth 1 origin main
+          git -C /opt/mentez/src reset --hard origin/main
+        else
+          git clone --depth 1 --branch main git@github.com:aurelioazevedo/mentez.git /opt/mentez/src
+        fi
+        REV=$$(git -C /opt/mentez/src log -1 --format='%h')
+        echo "SYNC: $$REV $$(git -C /opt/mentez/src log -1 --format='%s')"
+        docker build -q -t mentez-app:latest -t mentez-app:$$REV /opt/mentez/src/app
+        echo "BUILD: ok mentez-app:$$REV"
+        docker image prune -f >/dev/null || true

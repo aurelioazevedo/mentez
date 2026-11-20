@@ -1,5 +1,5 @@
 # Mentez — produção na VPS (projeto "mentez" no Docker Manager da Hostinger).
-# Usa o código baixado em /opt/mentez/src (infra/vps-sync.yml) e os segredos em /opt/mentez/.env,
+# Usa o código e a imagem preparados por infra/vps-update.yml (/opt/mentez/src, mentez-app:latest) e os segredos em /opt/mentez/.env,
 # gerados na própria VPS (nunca passam pelo Git nem pela API).
 services:
   caddy:
@@ -13,8 +13,8 @@ services:
       - caddy_config:/config
     depends_on: [app]
   app:
-    build: /opt/mentez/src/app
-    image: mentez-app:latest
+    image: mentez-app:latest   # montada na VPS por infra/vps-update.yml
+    pull_policy: never
     restart: unless-stopped
     env_file: /opt/mentez/.env
     environment:
