@@ -1,0 +1,19 @@
+# Comando avulso da plataforma na VPS (projeto "mentez-cli"): roda scripts/mentez.js com a imagem e a rede do app.
+# Trocar a linha "command" pelo comando desejado e publicar; apagar o projeto depois (o log pode ter senha provisória).
+services:
+  cli:
+    image: mentez-app:latest
+    pull_policy: never
+    restart: "no"
+    env_file: /opt/mentez/.env
+    environment:
+      MENTEZ_DB_HOST: db
+      MENTEZ_DB_PORT: "3306"
+    networks: [mentez]
+    entrypoint: ["sh", "-c"]
+    command:
+      - node scripts/mentez.js clinicas
+networks:
+  mentez:
+    name: mentez_default
+    external: true

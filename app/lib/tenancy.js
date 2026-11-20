@@ -191,6 +191,15 @@ export async function createTenant({ slug, name, ownerName = null, ownerEmail = 
   clearCache();
   return bySlug(slug);
 }
+// Altera uma configuração guardada (cifrada) da clínica, ex.: SETUP_TOKEN do convite de primeiro acesso
+export async function setSecretEnv(tenantId, name, value) {
+  const row = await pone('SELECT secrets_enc FROM tenants WHERE id = ?', [tenantId]);
+  if (!row) throw new Error('Clínica não encontrada.');
+  const sec = unseal(row.secrets_enc); sec.env = sec.env || {};
+  if (value === null || value === undefined || value === '') delete sec.env[name]; else sec.env[name] = value;
+  await pq('UPDATE tenants SET secrets_enc = ? WHERE id = ?', [seal(sec), tenantId]);
+  clearCache();
+}
 export async function addDomain(tenantId, domain, { primary = false, verified = false } = {}) {
   const d = String(domain || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (!/^(?=.{4,190}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(d)) throw new Error('Domínio inválido.');

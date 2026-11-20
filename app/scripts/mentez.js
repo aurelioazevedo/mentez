@@ -2,6 +2,7 @@
 // Utilitário da plataforma Mentez (rodar dentro do contêiner do app):
 //   node scripts/mentez.js clinicas
 //   node scripts/mentez.js criar <endereco> "<Nome da clínica>" [--email dono@x.com] [--nome "Dono"]
+//   node scripts/mentez.js convite <endereco>                       → link de primeiro acesso (a pessoa cria a própria senha)
 //   node scripts/mentez.js admin <endereco> "<Nome>" <email>        → cria o primeiro acesso (admin) e mostra a senha provisória
 //   node scripts/mentez.js dominio <endereco> <dominio> [--principal] → domínio próprio (ex.: app.clinica.com.br)
 //   node scripts/mentez.js situacao <endereco> ativa|suspensa|cancelada
@@ -35,6 +36,14 @@ try {
       await q("INSERT INTO users (name, email, password_hash, role, must_change_password, is_master) VALUES (?,?,?,'admin',1,1)", [name, email, bcrypt.hashSync(pass, 10)]);
       console.log(`Acesso criado em ${t.env.PUBLIC_URL}\n  e-mail: ${email}\n  senha provisória: ${pass}\n  (trocar no primeiro acesso)`);
     });
+  } else if (cmd === 'convite') {
+    // Link de primeiro acesso: a própria pessoa cria e-mail e senha. Vale até ser usado (a tela fecha depois do 1º acesso).
+    const [slug] = args; const t = await T.bySlug(slug); if (!t) die('Clínica não encontrada.');
+    const has = await T.run(t, () => one('SELECT id FROM users LIMIT 1'));
+    if (has) die('Esta clínica já tem acesso criado. Use "admin" para criar outro usuário.');
+    const code = crypto.randomBytes(18).toString('base64url');
+    await T.setSecretEnv(t.id, 'SETUP_TOKEN', code);
+    console.log(`Convite de primeiro acesso: ${t.env.PUBLIC_URL}/setup?codigo=${code}`);
   } else if (cmd === 'dominio') {
     const [slug, domain] = args; const t = await T.bySlug(slug); if (!t) die('Clínica não encontrada.');
     const d = await T.addDomain(t.id, domain, { primary: !!flag('principal'), verified: !!flag('principal') });
@@ -42,5 +51,5 @@ try {
   } else if (cmd === 'situacao') {
     const [slug, st] = args; if (!['ativa', 'suspensa', 'cancelada'].includes(st)) die('Situação: ativa, suspensa ou cancelada.');
     await T.pq('UPDATE tenants SET status = ? WHERE slug = ?', [st, slug]); T.clearCache(); console.log('ok');
-  } else die('Comandos: clinicas | criar | admin | dominio | situacao');
+  } else die('Comandos: clinicas | criar | convite | admin | dominio | situacao');
 } finally { process.exit(0); }

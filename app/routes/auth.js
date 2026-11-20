@@ -30,8 +30,9 @@ r.get('/setup', async (req, res) => {
   if (await hasUsers()) return res.redirect('/login');
   send(res, shell('Primeiro acesso', html`
     <form method="post" action="/setup" class="stack">
-      <label class="fld"><span>Código de instalação</span><input name="token" required autocomplete="off"></label>
-      <label class="fld"><span>Nome</span><input name="name" required value="Lorrainy Mendes"></label>
+      <label class="fld"><span>Código de convite</span><input name="token" required autocomplete="off" value="${String(req.query.codigo || '').slice(0, 80)}"></label>
+      <label class="fld"><span>Seu nome completo</span><input name="name" required maxlength="120" autocomplete="name"></label>
+      <label class="fld"><span>CRP</span><input name="crp" maxlength="30" placeholder="00/00000"></label>
       <label class="fld"><span>E-mail de acesso</span><input type="email" name="email" required autocomplete="username"></label>
       <label class="fld"><span>Senha (mínimo 10 caracteres)</span><input type="password" name="password" minlength="10" required autocomplete="new-password"></label>
       <label class="fld"><span>Repita a senha</span><input type="password" name="password2" minlength="10" required autocomplete="new-password"></label>
@@ -46,7 +47,8 @@ r.post('/setup', async (req, res) => {
   if (!expected || !safeEqual(str(token), expected)) return res.flash('Código de instalação inválido.', 'err').redirect('/setup');
   if (!password || password.length < 10 || password !== password2) return res.flash('As senhas precisam ser iguais e ter pelo menos 10 caracteres.', 'err').redirect('/setup');
   const hash = await bcrypt.hash(password, 12);
-  await q("INSERT INTO users (name, crp, email, role, password_hash) VALUES (?, '09/23862', ?, 'admin', ?)", [str(name, 120), str(email, 190).toLowerCase(), hash]);
+  await q("INSERT INTO users (name, crp, email, role, password_hash) VALUES (?, ?, ?, 'admin', ?)", [str(name, 120), str(req.body.crp, 30) || null, str(email, 190).toLowerCase(), hash]);
+  if (Tenancy.multi()) await Tenancy.setSecretEnv(Tenancy.current().id, 'SETUP_TOKEN', null).catch(() => {}); // convite de uso único
   res.flash('Acesso criado. Entre com seu e-mail e senha.').redirect('/login');
 });
 
