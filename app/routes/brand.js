@@ -44,12 +44,13 @@ settings.get('/', async (req, res) => {
     </form>
     <section class="card brand-logos">
       <h2>Logo</h2>
-      <p class="muted small">PNG (de preferência com fundo transparente) ou JPG, até 1 MB, de preferência horizontal. A versão para o tema escuro é opcional (logo clara).</p>
+      <p class="muted small">PNG (de preferência com fundo transparente), JPG ou WebP, até 2 MB, de preferência horizontal. A versão para o tema escuro é opcional (logo clara). Nos documentos em PDF entram só PNG e JPG.</p>
       <div class="brand-logo-grid">
         ${[['claro', 'Fundo claro', b.logo], ['escuro', 'Fundo escuro (opcional)', b.logoDark]].map(([k, l, has]) => html`<form method="post" action="/configuracoes/identidade/logo/${k}" enctype="application/octet-stream" class="brand-logo ${k}" data-logo-form>
           <b>${l}</b>
           <div class="brand-logo-prev">${has ? html`<img src="/marca/${k === 'escuro' ? 'logo-escuro' : 'logo'}?v=${has}" alt="Logo atual">` : html`<span class="muted small">Sem logo${k === 'claro' ? ' — o nome da clínica aparece no lugar' : ''}</span>`}</div>
-          <label class="btn ghost btn-sm">Escolher imagem<input type="file" accept="image/png,image/jpeg" data-logo-file hidden></label>
+          <label class="btn ghost btn-sm">Escolher imagem<input type="file" accept="image/png,image/jpeg,image/webp" data-logo-file hidden></label>
+          <p class="small" data-logo-msg role="status"></p>
           ${has ? html`<button class="btn ghost btn-sm danger-text" name="remover" value="1" formaction="/configuracoes/identidade/logo/${k}/remover" formenctype="application/x-www-form-urlencoded">Remover</button>` : ''}
         </form>`)}
       </div>
@@ -64,7 +65,7 @@ settings.post('/', async (req, res) => {
   res.flash('Identidade da clínica salva.').redirect('/configuracoes/identidade');
 });
 // Envio da logo: o navegador manda o arquivo direto (corpo binário), com o tipo no cabeçalho
-settings.post('/logo/:k', express.raw({ type: ['image/png', 'image/jpeg'], limit: '1100kb' }), async (req, res) => {
+settings.post('/logo/:k', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '2200kb' }), async (req, res) => {
   const k = req.params.k === 'escuro' ? 'escuro' : 'claro';
   try { await Brand.saveLogo(k, Buffer.isBuffer(req.body) ? req.body : null, String(req.get('content-type') || '').split(';')[0]); }
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }

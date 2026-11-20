@@ -57,7 +57,7 @@ export async function buildPdf(d, { base, signaturePng = null, city = Brand.get(
   const need = (h) => { if (y - h < M + 40) newPage(); };
   // Logo: a enviada pela clínica (PNG ou JPG); no sistema da Dra. Lorrainy, a dela; sem logo, só o texto do documento
   const lf = await Brand.logoFile();
-  if (lf || Brand.get().legacy) try { const logo = lf ? (lf.mime === 'image/png' ? await pdf.embedPng(lf.buf) : await pdf.embedJpg(lf.buf)) : await pdf.embedPng(fs.readFileSync(LOGO)); const s = 150 / logo.width; pg.drawImage(logo, { x: (W - 150) / 2, y: y - logo.height * s, width: 150, height: logo.height * s }); y -= logo.height * s + 26; } catch { y -= 10; }
+  if ((lf && lf.mime !== 'image/webp') || (!lf && Brand.get().legacy)) try { const logo = lf ? (lf.mime === 'image/png' ? await pdf.embedPng(lf.buf) : await pdf.embedJpg(lf.buf)) : await pdf.embedPng(fs.readFileSync(LOGO)); const s = 150 / logo.width; pg.drawImage(logo, { x: (W - 150) / 2, y: y - logo.height * s, width: 150, height: logo.height * s }); y -= logo.height * s + 26; } catch { y -= 10; }
   if (d.status === 'cancelado') { pg.drawText('DOCUMENTO CANCELADO', { x: M, y, size: 12, font: bold, color: rgb(0.7, 0.1, 0.1) }); y -= 22; }
   const title = clean(bold, d.title || '');
   for (const l of wrap(bold, 15, title, TW)) { pg.drawText(l, { x: (W - bold.widthOfTextAtSize(l, 15)) / 2, y, size: 15, font: bold, color: INK }); y -= 22; }

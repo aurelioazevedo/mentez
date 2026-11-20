@@ -1440,15 +1440,18 @@ document.addEventListener('live:updated', initRecordForm);
 // ---------- Identidade da clínica: envio da logo (arquivo direto, sem formulário de várias partes) ----------
 document.querySelectorAll('[data-logo-file]').forEach((inp) => inp.addEventListener('change', async () => {
   const f = inp.files[0]; if (!f) return;
-  const form = inp.closest('[data-logo-form]');
-  if (!['image/png', 'image/jpeg'].includes(f.type)) { alert('Envie a logo em PNG ou JPG.'); return; }
-  if (f.size > 1024 * 1024) { alert('A logo precisa ter até 1 MB.'); return; }
+  const form = inp.closest('[data-logo-form]'); const msg = form.querySelector('[data-logo-msg]');
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.className = `small ${bad ? 'err-txt' : 'muted'}`; } else if (bad) alert(t); };
+  const type = f.type || (/\.png$/i.test(f.name) ? 'image/png' : /\.jpe?g$/i.test(f.name) ? 'image/jpeg' : /\.webp$/i.test(f.name) ? 'image/webp' : '');
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(type)) { say('Envie a logo em PNG, JPG ou WebP (SVG e PDF não são aceitos).', true); inp.value = ''; return; }
+  if (f.size > 2 * 1024 * 1024) { say(`A logo tem ${(f.size / 1048576).toFixed(1)} MB; o limite é 2 MB. Exporte em tamanho menor.`, true); inp.value = ''; return; }
+  say('Enviando a logo…');
   try {
-    const r = await fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': f.type, Accept: 'application/json' }, body: f });
+    const r = await fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': type, Accept: 'application/json' }, body: f });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) throw new Error(d.error || `erro ${r.status}`);
-    location.reload();
-  } catch (e) { alert(`Não foi possível enviar a logo: ${e.message}`); }
+    say('Logo salva. Atualizando…'); location.reload();
+  } catch (e) { say(`Não foi possível enviar a logo: ${e.message}`, true); inp.value = ''; }
 }));
 
 // ---------- Mentez: criar conta (sugere o endereço pelo nome do consultório e confere se está livre) ----------

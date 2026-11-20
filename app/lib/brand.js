@@ -75,10 +75,14 @@ export async function save(b) {
   return load(true);
 }
 
-// ---------- logo (PNG ou JPEG, até 1 MB; também usada nos PDFs) ----------
+// ---------- logo (PNG, JPEG ou WebP, até 2 MB; PNG e JPEG também entram nos PDFs) ----------
 export async function saveLogo(kind, buf, mime) {
-  if (!['image/png', 'image/jpeg'].includes(mime)) throw new Error('Envie a logo em PNG ou JPG.');
-  if (!buf?.length || buf.length > 1024 * 1024) throw new Error('A logo precisa ter até 1 MB.');
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) throw new Error('Envie a logo em PNG, JPG ou WebP.');
+  if (!buf?.length || buf.length > 2 * 1024 * 1024) throw new Error('A logo precisa ter até 2 MB.');
+  // confere a assinatura do arquivo (não confia só no tipo informado pelo navegador)
+  const sig = buf.subarray(0, 12);
+  const real = sig[0] === 0x89 && sig[1] === 0x50 ? 'image/png' : sig[0] === 0xff && sig[1] === 0xd8 ? 'image/jpeg' : sig.toString('latin1', 0, 4) === 'RIFF' && sig.toString('latin1', 8, 12) === 'WEBP' ? 'image/webp' : null;
+  if (real !== mime) throw new Error('O arquivo não parece ser uma imagem PNG, JPG ou WebP válida.');
   const key = kind === 'escuro' ? 'brand_logo_dark' : 'brand_logo';
   await setSetting(key, JSON.stringify({ mime, data: buf.toString('base64') }));
   const cur = JSON.parse((await getSetting('brand')) || '{}');

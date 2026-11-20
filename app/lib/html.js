@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import * as Tenancy from './tenancy.js';
 import * as Brand from './brand.js';
 import { can, ROLES } from './perm.js';
@@ -18,7 +22,16 @@ export function html(strings, ...vals) {
   return raw(out);
 }
 
-export const VERSION = '20271119a';
+// Versão dos arquivos do navegador (app.js, app.css, tele.js…): calculada pelo conteúdo, para o navegador
+// sempre buscar a versão nova depois de uma atualização (os arquivos ficam em cache por 7 dias).
+export const VERSION = (() => {
+  try {
+    const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+    const h = crypto.createHash('sha1');
+    for (const f of fs.readdirSync(dir).filter((x) => /\.(js|css)$/.test(x)).sort()) h.update(fs.readFileSync(path.join(dir, f)));
+    return h.digest('hex').slice(0, 10);
+  } catch { return String(Date.now()); }
+})();
 const ICON = {
   home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   agenda: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
