@@ -1,0 +1,30 @@
+{
+  "name": "sistema-lorrainy-mendes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de gestão do consultório — Lorrainy Mendes, Psicóloga (CRP 09/23862)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@signpdf/placeholder-pdf-lib": "^4.0.0",
+    "@signpdf/signer-p12": "^4.0.0",
+    "@signpdf/signpdf": "^4.0.0",
+    "@signpdf/utils": "^4.0.0",
+    "adm-zip": "^0.6.1",
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "mysql2": "^3.11.5",
+    "node-forge": "^1.4.3",
+    "nodemailer": "^10.6.0",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
+    "web-push": "^3.6.7"
+  }
+}

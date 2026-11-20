@@ -1,0 +1,235 @@
+import express from 'express';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { migrate } from './lib/db.js';
+import { loadUser, requireUser, checkOrigin } from './lib/auth.js';
+import { bare, html } from './lib/html.js';
+import { flash } from './lib/router.js';
+import authRoutes from './routes/auth.js';
+import dashRoutes from './routes/dashboard.js';
+import patientRoutes from './routes/patients.js';
+import agendaRoutes from './routes/agenda.js';
+import financeRoutes from './routes/finance.js';
+import exerciseRoutes, { portal } from './routes/exercises.js';
+import accountRoutes from './routes/account.js';
+import userRoutes, { acessos } from './routes/users.js';
+import configRoutes from './routes/config.js';
+import maintRoutes, { requireMaster } from './routes/maint.js';
+import backupRoutes from './routes/backup.js';
+import recepcaoRoutes, { settings as flowSettings } from './routes/recepcao.js';
+import * as Flow from './lib/flow.js';
+import { privacidade, termos } from './routes/legal.js';
+import monitorRoutes, { health, watcher } from './routes/monitor.js';
+import { publicView as consentView, publicDecide as consentDecide, internal as consentRoutes, settings as consentSettings } from './routes/consent.js';
+import privacyRoutes from './routes/privacy.js';
+import waitlistRoutes, { settings as waitlistSettings } from './routes/waitlist.js';
+import * as Waitlist from './lib/waitlist.js';
+import * as SessionAI from './lib/sessionai.js';
+import sessionAiRoutes, { settings as sessionAiSettings } from './routes/sessionai.js';
+import portalRoutes, { staff as portalStaff, settings as portalSettings } from './routes/portal.js';
+import rentalRoutes, { settings as rentalSettings } from './routes/rental.js';
+import * as Rental from './lib/rental.js';
+import * as Gateway from './lib/gateway.js';
+import * as Notify from './lib/notify.js';
+import * as Engage from './lib/engage.js';
+import * as Scales from './lib/scales.js';
+import * as RL from './lib/ratelimit.js';
+import * as Nfse from './lib/nfse.js';
+import { settings as nfseSettings, notes as nfseNotes, mySettings as nfseMine } from './routes/nfse.js';
+import { settings as teleSettings, account as teleAccount, staff as teleStaff, patient as telePatient } from './routes/tele.js';
+import { staff as scaleStaff, publicScale } from './routes/scales.js';
+import { birthdays as engageBirthdays, survey as engageSurvey, publicSurvey, followup as surveyFollowup } from './routes/engage.js';
+import { settings as notifySettings, publicLink as notifyLink } from './routes/notify.js';
+import { webhook as gatewayWebhook, webhookMercadoPago, actions as gatewayActions, settings as gatewaySettings } from './routes/gateway.js';
+import { publicTv, settings as tvSettings, qrRedirect, publicReport } from './routes/tv.js';
+import psyDocRoutes, { publicDoc, publicDocPdf, verifyPage, cloudReturn, settings as psyDocSettings } from './routes/psydocs.js';
+import { settings as icpCloudSettings } from './routes/icpcloud.js';
+import marketingRoutes, { publicOptOut } from './routes/marketing.js';
+import { settings as insSettings, patients as insPatients, sheets as insSheets, billing as insBilling } from './routes/insurance.js';
+import * as Reactivation from './lib/reactivation.js';
+import { publicBooking, settings as bookingSettings } from './routes/booking.js';
+import * as Privacy from './lib/privacy.js';
+import * as Monitor from './lib/monitor.js';
+import * as Backup from './lib/backup.js';
+import escalaRoutes from './routes/escala.js';
+import crmRoutes from './routes/crm.js';
+import reportsRoutes from './routes/reports.js';
+import { admin as agentAdmin, team as agentTeam } from './routes/agente.js';
+import { account as googleAccount, admin as googleAdmin, icalFeed } from './routes/google.js';
+import { admin as waAdmin, webhook as waWebhook, cron as waCron, siteLink } from './routes/whatsapp.js';
+import { startScheduler as startWhatsApp } from './lib/whatsapp.js';
+import { requirePerm } from './lib/perm.js';
+import { middleware as notes } from './lib/notes.js';
+import * as Live from './lib/live.js';
+import * as Fin from './lib/fin.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
+// ---- segurança + bloqueio de indexação em TODAS as respostas ----
+// A página de agendamento pode ser exibida dentro do site da clínica (seção “Agende”); o resto do sistema, nunca.
+const EMBED_ORIGINS = (process.env.EMBED_ORIGINS || 'https://lorrainymendes.com.br https://www.lorrainymendes.com.br').trim();
+app.use((req, res, next) => {
+  const embeddable = req.path === '/agendar' || req.path.startsWith('/agendar/');
+  res.set({
+    'X-Robots-Tag': 'noindex, nofollow, noarchive, nosnippet, noimageindex',
+    'X-Content-Type-Options': 'nosniff',
+    ...(embeddable ? {} : { 'X-Frame-Options': 'DENY' }),
+    'Referrer-Policy': 'same-origin',
+    'Permissions-Policy': 'camera=(self), microphone=(self), display-capture=(self), fullscreen=(self), geolocation=(), interest-cohort=()',
+    'Content-Security-Policy': `default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; form-action 'self'; frame-ancestors ${embeddable ? `'self' ${EMBED_ORIGINS}` : "'none'"}; base-uri 'none'`,
+  });
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
+
+app.get('/robots.txt', (_req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
+app.use('/static', express.static(path.join(__dirname, 'public'), { maxAge: '7d', index: false }));
+// App instalável (PWA) e notificações push
+app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
+app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'manifest.webmanifest')));
+app.get('/favicon.ico', (_req, res) => res.redirect(301, '/static/img/favicon.png'));
+
+app.use(express.urlencoded({ extended: true, limit: '400kb', parameterLimit: 3000 }));
+app.use(checkOrigin);
+app.use(flash);
+app.use(Live.middleware); // alterações → aviso ao vivo para todas as páginas abertas
+app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+
+// Proteções das páginas públicas: limite geral por IP, limites mais apertados nos envios que disparam
+// mensagens (código no WhatsApp) e armadilha para robôs nos formulários públicos.
+app.use(['/tc', '/s', '/e', '/l', '/t', '/agendar', '/paciente', '/r', '/d', '/v', '/q', '/p', '/wa', '/sair'], RL.limit({ name: 'publico', windowMs: 60e3, max: 240 }));
+app.post(/^\/tc\/[^/]+\/sinal$/, RL.limit({ name: 'sinal', windowMs: 60e3, max: 900 }));
+app.post('/agendar/dados', RL.limit({ name: 'agendar', windowMs: 10 * 60e3, max: 20 }), RL.botGuard);
+app.post('/paciente/entrar', RL.limit({ name: 'portal-codigo', windowMs: 10 * 60e3, max: 15 }), RL.botGuard);
+app.post('/paciente/entrar/codigo', RL.limit({ name: 'portal-confere', windowMs: 10 * 60e3, max: 30 }));
+app.post(/^\/s\/[\w.-]+$/, RL.botGuard);
+app.post(/^\/e\/[\w.-]+$/, RL.botGuard);
+// Portal do paciente (acesso por link seguro, sem login)
+app.use('/p', portal);
+app.get('/ical/:file', icalFeed);
+app.post('/webhooks/whatsapp/:secret', express.json({ limit: '2mb' }), waWebhook);
+app.post('/webhooks/cobranca/asaas', express.json({ limit: '1mb' }), (req, res, next) => gatewayWebhook(req, res).catch(next));
+app.post('/webhooks/cobranca/mercadopago', express.json({ limit: '1mb' }), (req, res, next) => webhookMercadoPago(req, res).catch(next));
+app.get('/wa', (req, res, next) => siteLink(req, res).catch(next));
+app.get('/saude', (req, res, next) => health(req, res).catch(next));
+app.get('/saude/vigia', (req, res, next) => watcher(req, res).catch(next));
+app.get('/t/:token', (req, res, next) => consentView(req, res).catch(next));
+app.post('/t/:token', (req, res, next) => consentDecide(req, res).catch(next));
+app.get('/privacidade', privacidade);
+app.get('/termos', termos);
+app.use('/tv', publicTv); // TV da recepção (sem login; conectada por código)
+app.get('/q/:id', (req, res, next) => qrRedirect(req, res).catch(next)); // QR code das campanhas da TV
+app.get('/r/:token', (req, res, next) => publicReport(req, res).catch(next)); // relatório do parceiro (link com código)
+app.all('/sair/:tok', (req, res, next) => (['GET', 'POST'].includes(req.method) ? publicOptOut(req, res).catch(next) : next())); // não receber mais convites de retorno
+app.get('/d/:token', (req, res, next) => publicDoc(req, res).catch(next));
+app.get('/d/:token/pdf', (req, res, next) => publicDocPdf(req, res).catch(next)); // documento psicológico (link pessoal do paciente)
+app.get('/v/:code', (req, res, next) => verifyPage(req, res).catch(next)); // verificação de documento
+app.use('/paciente', portalRoutes); // portal do paciente (login próprio, pelo WhatsApp)
+app.use('/tc', telePatient); // teleconsulta própria: sala do paciente (link da sessão)
+app.use('/e', publicScale); // escalas (PHQ-9, GAD-7): link do paciente
+app.use('/s', publicSurvey); // pesquisa de satisfação (link do paciente)
+app.use('/l', notifyLink); // lembrete por e-mail/SMS: confirmar ou remarcar
+app.use('/agendar', publicBooking); // agendamento online pelo paciente
+app.get('/tarefas/lembretes/:token', (req, res, next) => waCron(req, res).catch(next));
+
+app.use(loadUser);
+app.use(authRoutes);
+app.use(requireUser);
+// Canal ao vivo (SSE) e reserva por consulta periódica
+app.get('/live', (req, res, next) => Live.stream(req, res).catch(next));
+app.get('/live/since', (req, res, next) => Live.since(req, res).catch(next));
+app.use(notes);
+// Módulos ligáveis (menu): relê a configuração no máximo a cada 30 s
+let featuresAt = 0;
+app.use((req, res, next) => { if (Date.now() - featuresAt > 30e3) { featuresAt = Date.now(); Rental.config().then(() => next(), () => next()); } else next(); });
+app.use('/conta/teleconsulta', teleAccount);
+app.use('/conta/fiscal/nfse', (req, res, next) => (['admin', 'psicologo'].includes(req.user?.role) ? next() : res.status(403).send('Sem permissão')), nfseMine);
+app.use('/teleconsulta', teleStaff);
+app.use('/conta', googleAccount);
+app.use('/conta', accountRoutes);
+// Endereços antigos (antes de Configurações) → novos
+app.get(/^\/usuarios\/(google|whatsapp|agente|acessos)(\/.*)?$/, (req, res) => res.redirect(301, req.originalUrl.replace(/^\/usuarios\//, '/configuracoes/')));
+app.use('/configuracoes/google', requirePerm('usuarios'), googleAdmin);
+app.use('/configuracoes/whatsapp', requirePerm('usuarios'), waAdmin);
+app.use('/configuracoes/agente', requirePerm('usuarios'), agentAdmin);
+app.get('/configuracoes/acessos', requirePerm('usuarios'), (req, res, next) => acessos(req, res).catch(next));
+app.use('/configuracoes/dados', requirePerm('usuarios'), requireMaster, maintRoutes);
+app.use('/configuracoes/backup', requirePerm('usuarios'), requireMaster, backupRoutes);
+app.use('/configuracoes/atendimento', requirePerm('usuarios'), flowSettings);
+app.use('/configuracoes/monitoramento', requirePerm('usuarios'), monitorRoutes);
+app.use('/configuracoes/termos', requirePerm('usuarios'), consentSettings);
+app.use('/configuracoes/privacidade', requirePerm('usuarios'), privacyRoutes);
+app.use('/configuracoes/lista-espera', requirePerm('usuarios'), waitlistSettings);
+app.use('/configuracoes/tv', requirePerm('usuarios'), tvSettings);
+app.use('/configuracoes/documentos', requirePerm('usuarios'), psyDocSettings);
+app.use('/configuracoes/agendamento-online', requirePerm('usuarios'), bookingSettings);
+app.use('/configuracoes/sessao-ia', requirePerm('usuarios'), sessionAiSettings);
+app.use('/configuracoes/portal', requirePerm('usuarios'), portalSettings);
+app.use('/configuracoes/locacao', requirePerm('usuarios'), rentalSettings);
+app.use('/configuracoes/cobranca', requirePerm('usuarios'), gatewaySettings);
+app.use('/configuracoes/lembretes', requirePerm('usuarios'), notifySettings);
+app.use('/configuracoes/teleconsulta', requirePerm('usuarios'), teleSettings);
+app.use('/configuracoes/nfse', requirePerm('usuarios'), nfseSettings);
+app.use('/configuracoes/assinatura', requirePerm('usuarios'), icpCloudSettings);
+app.use('/configuracoes/convenios', requirePerm('usuarios'), insSettings);
+app.use('/configuracoes/aniversarios', requirePerm('usuarios'), engageBirthdays);
+app.use('/configuracoes/pesquisa', requirePerm('usuarios'), engageSurvey);
+app.use('/termos', requirePerm('cadastro', 'prontuario'), consentRoutes);
+app.use('/configuracoes', requirePerm('usuarios'), configRoutes);
+app.use('/usuarios', requirePerm('usuarios'), userRoutes);
+app.use('/pacientes', requirePerm('cadastro'), patientRoutes);
+app.use('/documentos', requirePerm('prontuario'), psyDocRoutes);
+app.get('/assinatura/retorno', requirePerm('prontuario'), (req, res, next) => cloudReturn(req, res).catch(next)); // volta da certificadora (certificado em nuvem)
+app.use('/escalas', requirePerm('prontuario'), scaleStaff);
+app.use('/sessao-ia', requirePerm('prontuario'), sessionAiRoutes);
+app.use('/portal-paciente', requirePerm('cadastro'), portalStaff);
+app.use('/locacao', requirePerm('agenda'), rentalRoutes);
+app.use('/financeiro/cobranca-online', requirePerm('financeiro', 'meufin'), gatewayActions);
+app.use('/financeiro/notas', requirePerm('financeiro', 'meufin'), nfseNotes);
+app.use('/financeiro/convenios', requirePerm('financeiro'), insBilling);
+app.use('/recepcao', requirePerm('agenda'), recepcaoRoutes);
+app.use('/relatorios/satisfacao', requirePerm('financeiro', 'meufin'), surveyFollowup);
+app.use('/relatorios', requirePerm('financeiro', 'meufin'), reportsRoutes);
+app.use('/agenda/lista-espera', requirePerm('agenda'), waitlistRoutes);
+app.use('/agenda', requirePerm('agenda'), agendaRoutes);
+app.use('/marketing', requirePerm('agenda'), marketingRoutes);
+app.use('/convenios', requirePerm('cadastro', 'agenda'), insPatients, insSheets);
+app.use('/escala', requirePerm('agenda'), escalaRoutes);
+app.use('/atendimento', requirePerm('agenda'), agentTeam);
+app.use('/crm', requirePerm('agenda'), crmRoutes);
+app.use('/financeiro', requirePerm('financeiro', 'meufin'), financeRoutes);
+app.use('/exercicios', requirePerm('prontuario'), exerciseRoutes);
+app.use(dashRoutes);
+
+// Folhas em PDF dos cadernos (somente usuárias logadas)
+const FOLHAS = path.join(__dirname, 'private');
+app.get('/folhas/:dir/:file', requirePerm('prontuario'), (req, res) => {
+  const { dir, file } = req.params;
+  if (!/^folhas(-ilustradas|-tematicas)?$/.test(dir) || !/^[a-z0-9-]+\.pdf$/.test(file)) return res.sendStatus(404);
+  const p = path.join(FOLHAS, dir, file);
+  if (!fs.existsSync(p)) return res.sendStatus(404);
+  res.sendFile(p);
+});
+
+app.use((req, res) => res.status(404).send(String(bare('Página não encontrada', html`<div class="center-card"><h1>Página não encontrada</h1><p><a href="/">Voltar ao início</a></p></div>`))));
+app.use((err, req, res, _next) => {
+  if (err.status === 403) {
+    return res.status(403).send(String(bare('Acesso restrito', html`<div class="center-card"><h1>Acesso restrito</h1><p>Seu perfil de acesso não permite abrir esta página.</p><p><a href="/">Voltar ao início</a></p></div>`)));
+  }
+  console.error(err);
+  Monitor.recordError(err, req.path);
+  res.status(500).send(String(bare('Erro', html`<div class="center-card"><h1>Algo deu errado</h1><p>Tente novamente em instantes.</p><p><a href="/">Voltar ao início</a></p></div>`)));
+});
+
+const port = Number(process.env.PORT || 3000);
+migrate()
+  .then(() => console.log('Banco de dados pronto.'))
+  .catch((e) => console.error('Falha ao preparar o banco:', e.message))
+  .finally(() => app.listen(port, () => { console.log(`Sistema rodando na porta ${port}`); startWhatsApp(); Live.cleanup(); setInterval(Live.cleanup, 3600e3).unref(); Fin.ensureRecurring().catch(() => {}); setInterval(() => Fin.ensureRecurring().catch(() => {}), 6 * 3600e3).unref(); setTimeout(() => Backup.tick(), Number(process.env.BACKUP_TICK_MS) || 90e3).unref(); setInterval(() => Backup.tick(), Number(process.env.BACKUP_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Flow.autoReminders(), Number(process.env.FLOW_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Monitor.tick(), Number(process.env.MONITOR_TICK_MS) || 2 * 60e3).unref(); setTimeout(() => Privacy.tick(), 5 * 60e3).unref(); setInterval(() => Waitlist.tick(), Number(process.env.WAITLIST_TICK_MS) || 60e3).unref(); setInterval(() => Privacy.tick(), 12 * 3600e3).unref(); setInterval(() => SessionAI.tick().catch(() => {}), 10 * 60e3).unref(); Rental.config().then(() => Rental.tick()).catch(() => {}); setInterval(() => Rental.tick().catch(() => {}), 6 * 3600e3).unref(); setInterval(() => Nfse.tick().catch((e) => console.error('NFS-e:', e.message)), Number(process.env.NFSE_TICK_MS) || 5 * 60e3).unref(); setInterval(() => Scales.tick().catch((e) => console.error('escalas:', e.message)), Number(process.env.SCALES_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Reactivation.tick().catch((e) => console.error('reativação:', e.message)), Number(process.env.REACT_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Engage.tick().catch((e) => console.error('aniversário/pesquisa:', e.message)), Number(process.env.ENGAGE_TICK_MS) || 5 * 60e3).unref(); setInterval(() => Notify.tick().catch((e) => console.error('lembretes e-mail/SMS:', e.message)), Number(process.env.NOTIFY_TICK_MS) || 5 * 60e3).unref(); setInterval(() => Gateway.tick().catch((e) => console.error('cobrança online:', e.message)), Number(process.env.GATEWAY_TICK_MS) || 10 * 60e3).unref(); }));
+process.on('unhandledRejection', (e) => { console.error('unhandledRejection', e); Monitor.recordError(e, 'processo'); });
+
+export default app;

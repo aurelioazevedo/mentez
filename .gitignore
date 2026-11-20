@@ -1,0 +1,6 @@
+node_modules/
+*.zip
+.env
+.env.*
+app/private/
+graphify-out/
