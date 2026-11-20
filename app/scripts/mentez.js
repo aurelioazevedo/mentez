@@ -44,6 +44,15 @@ try {
     const code = crypto.randomBytes(18).toString('base64url');
     await T.setSecretEnv(t.id, 'SETUP_TOKEN', code);
     console.log(`Convite de primeiro acesso: ${t.env.PUBLIC_URL}/setup?codigo=${code}`);
+  } else if (cmd === 'painel-convite') {
+    // Convite de primeiro acesso ao Painel da Mentez (app.mentez.com.br) — só funciona enquanto o painel não tem nenhum usuário
+    await T.pq('CREATE TABLE IF NOT EXISTS platform_users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, email VARCHAR(190) NOT NULL UNIQUE, password_hash VARCHAR(100) NOT NULL, session_version INT NOT NULL DEFAULT 1, last_login_at DATETIME NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+    await T.pq('CREATE TABLE IF NOT EXISTS platform_settings (k VARCHAR(60) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+    if (await T.pone('SELECT id FROM platform_users LIMIT 1')) die('O painel já tem usuário. Entre em /entrar.');
+    const code = crypto.randomBytes(18).toString('base64url');
+    await T.pq("INSERT INTO platform_settings (k, v) VALUES ('convite_painel', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)", [code]);
+    const host = [...T.platformHosts()].find((h) => h.startsWith('app.')) || `app.${T.baseDomain()}`;
+    console.log(`Convite do painel: https://${host}/primeiro-acesso?codigo=${code}`);
   } else if (cmd === 'dominio') {
     const [slug, domain] = args; const t = await T.bySlug(slug); if (!t) die('Clínica não encontrada.');
     const d = await T.addDomain(t.id, domain, { primary: !!flag('principal'), verified: !!flag('principal') });
@@ -51,5 +60,5 @@ try {
   } else if (cmd === 'situacao') {
     const [slug, st] = args; if (!['ativa', 'suspensa', 'cancelada'].includes(st)) die('Situação: ativa, suspensa ou cancelada.');
     await T.pq('UPDATE tenants SET status = ? WHERE slug = ?', [st, slug]); T.clearCache(); console.log('ok');
-  } else die('Comandos: clinicas | criar | convite | admin | dominio | situacao');
+  } else die('Comandos: clinicas | criar | convite | painel-convite | admin | dominio | situacao');
 } finally { process.exit(0); }
