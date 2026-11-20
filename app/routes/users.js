@@ -1,5 +1,7 @@
 import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
+import { canAddPro } from './subscription.js';
+import * as Billing from '../lib/billing.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { q, one, audit } from '../lib/db.js';
@@ -10,6 +12,14 @@ import { isYmd } from '../lib/time.js';
 import { syncLater, futureIds } from '../lib/google.js';
 
 const r = router();
+
+// Mentez: limite de profissionais que atendem, conforme o plano. Devolve true se bloqueou (e já respondeu).
+async function planBlock(res, url) {
+  const c = await canAddPro();
+  if (c.ok) { if (c.extra) await Billing.setExtraPros(Tenancy.current(), +1).catch((e) => console.error('profissional extra', e.message)); return false; }
+  res.flash(`O plano ${c.plan} permite ${c.max} profissional(is) atendendo. Mude de plano em Configurações → Plano e assinatura.`, 'err').redirect(url);
+  return true;
+}
 
 // Senha provisória legível (sem caracteres ambíguos), trocada no primeiro login.
 function tempPassword() {
@@ -115,6 +125,7 @@ r.post('/novo', async (req, res) => {
   if (!d.name || !validEmail(d.email) || !d.role) return res.flash('Preencha nome, e-mail válido e perfil.', 'err').redirect('/usuarios/novo');
   if (isClinician(d.role) && !d.title) return res.flash('Escolha o tratamento (Dr. ou Dra.) para perfis clínicos.', 'err').redirect('/usuarios/novo');
   if (d.attends && !d.modalities) return res.flash('Marque em quais modalidades o profissional atende (on-line e/ou presencial).', 'err').redirect('/usuarios/novo');
+  if (d.attends && await planBlock(res, '/usuarios/novo')) return;
   if (await one('SELECT id FROM users WHERE email = ?', [d.email])) return res.flash('Já existe um usuário com este e-mail.', 'err').redirect('/usuarios/novo');
   const pwd = tempPassword();
   const out = await q('INSERT INTO users (name, email, phone, crp, title, role, attends, modalities, password_hash, must_change_password) VALUES (?,?,?,?,?,?,?,?,?,1)',
@@ -181,6 +192,9 @@ r.post('/:id', async (req, res, next) => {
   if (d.attends && !d.modalities) return res.flash('Marque em quais modalidades o profissional atende (on-line e/ou presencial).', 'err').redirect(`/usuarios/${u.id}`);
   if (await one('SELECT id FROM users WHERE email = ? AND id <> ?', [d.email, u.id])) return res.flash('Já existe outro usuário com este e-mail.', 'err').redirect(`/usuarios/${u.id}`);
   if (u.role === 'admin' && d.role !== 'admin' && (await activeAdmins(u.id)) === 0) return res.flash('É preciso manter pelo menos um(a) administrador(a) ativo(a).', 'err').redirect(`/usuarios/${u.id}`);
+  if (d.attends && !(u.attends && u.active)) {
+    if (await planBlock(res, `/usuarios/${u.id}`)) return;
+  }
   const roleChanged = d.role !== u.role;
   await q(`UPDATE users SET name = ?, email = ?, phone = ?, crp = ?, title = ?, role = ?, attends = ?, modalities = ?${roleChanged ? ', session_version = session_version + 1' : ''} WHERE id = ?`,
     [d.name, d.email, d.phone, d.crp, d.title, d.role, d.attends, d.modalities || u.modalities || 'online,presencial', u.id]);
@@ -220,6 +234,9 @@ r.post('/:id/ativo', async (req, res, next) => {
   const active = req.body.active === '1';
   if (u.id === req.user.id) return res.flash('Você não pode desativar o próprio acesso.', 'err').redirect(`/usuarios/${u.id}`);
   if (!active && u.role === 'admin' && (await activeAdmins(u.id)) === 0) return res.flash('É preciso manter pelo menos um(a) administrador(a) ativo(a).', 'err').redirect(`/usuarios/${u.id}`);
+  if (active && !u.active && u.attends && isClinician(u.role)) {
+    if (await planBlock(res, `/usuarios/${u.id}`)) return;
+  }
   await q('UPDATE users SET active = ?, session_version = session_version + 1 WHERE id = ?', [active ? 1 : 0, u.id]);
   await audit(req, active ? 'usuario-reativar' : 'usuario-desativar', `user:${u.id}`);
   res.flash(active ? 'Acesso reativado.' : 'Acesso desativado.').redirect(`/usuarios/${u.id}`);

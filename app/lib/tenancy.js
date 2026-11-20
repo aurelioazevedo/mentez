@@ -128,6 +128,8 @@ function shape(row) {
   const primary = row.primary_domain || null;
   const url = `https://${primary || `${row.slug}.${baseDomain()}`}`;
   return { id: row.id, slug: row.slug, name: row.name, db_name: row.db_name, status: row.status, plan: row.plan, primaryDomain: primary,
+    billingStatus: row.billing_status || 'cortesia', trialEndsAt: row.trial_ends_at || null, paidUntil: row.paid_until || null, overdueSince: row.overdue_since || null, extraPros: Number(row.extra_pros || 0),
+    ownerEmail: row.owner_email || null, ownerName: row.owner_name || null,
     env: { PUBLIC_URL: url, ...(secrets.env || {}), SESSION_SECRET: secrets.SESSION_SECRET, ENCRYPTION_KEY: secrets.ENCRYPTION_KEY } };
 }
 const cache = new Map(); // host → { t, at }

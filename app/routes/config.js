@@ -1,3 +1,5 @@
+import * as Tenancy from '../lib/tenancy.js';
+import * as Billing from '../lib/billing.js';
 import * as Brand from '../lib/brand.js';
 import { one } from '../lib/db.js';
 import { page, html, raw, brDateTime } from '../lib/html.js';
@@ -68,6 +70,11 @@ r.get('/', async (req, res) => {
       desc: 'Nome, profissional responsável e CRP, contatos, cidade, site, logo e cor. Aparecem nas telas, documentos, recibos, mensagens e no portal do paciente.',
       status: br.logo && br.phone && br.city ? ['realizada', br.short] : ['falta', br.legacy ? br.short : 'Complete a ficha'],
     },
+    ...(Tenancy.multi() ? [{
+      key: 'assinatura', href: '/configuracoes/assinatura', title: 'Plano e assinatura',
+      desc: 'Plano da Mentez, faturas e forma de pagamento (Pix, boleto ou cartão).',
+      status: (() => { const a = Billing.accessOf(Tenancy.current()); return a.state === 'ativa' || a.state === 'cortesia' ? ['realizada', a.state === 'ativa' ? 'Em dia' : 'Cortesia'] : a.state === 'teste' ? ['confirmada', `Teste · ${a.daysLeft} dia(s)`] : ['falta', a.state === 'atrasada' ? 'Em aberto' : 'Suspenso']; })(),
+    }] : []),
     {
       key: 'whatsapp', href: '/configuracoes/whatsapp', title: 'WhatsApp',
       desc: 'Conexão do aparelho (QR code), WhatsApp do site (atendente ou profissional), lembretes e textos das mensagens.',

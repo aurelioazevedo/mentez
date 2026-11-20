@@ -160,6 +160,7 @@ export function page(req, { title, active = '', body, flash = '', live = null })
     </div>
   </header>` : ''}
   <main class="main">
+    ${req.billing && req.path !== '/configuracoes/assinatura' ? html`<div class="flash ${req.billing.tone} bill-bar">${req.billing.text} ${can(u, 'usuarios') ? html`<a class="btn btn-sm" href="/configuracoes/assinatura">${req.billing.cta}</a>` : html`<span class="small">Fale com a administração da clínica.</span>`}</div>` : ''}
     ${f ? html`<div class="flash ${f.type || 'ok'}">${f.text || f}</div>` : ''}
     ${body}
     <footer class="foot">${[Brand.get().short, Brand.get().signLine].filter(Boolean).join(' · ')} · Dados protegidos (LGPD) — uso restrito${Brand.get().legacy ? '' : html` · <a href="https://mentez.com.br" target="_blank" rel="noopener">Mentez</a>`}</footer>

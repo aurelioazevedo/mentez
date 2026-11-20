@@ -1451,6 +1451,20 @@ document.querySelectorAll('[data-logo-file]').forEach((inp) => inp.addEventListe
   } catch (e) { alert(`Não foi possível enviar a logo: ${e.message}`); }
 }));
 
+// ---------- Mentez: criar conta (sugere o endereço pelo nome do consultório e confere se está livre) ----------
+(() => {
+  const f = document.querySelector('[data-signup]'); if (!f) return;
+  const clinic = f.querySelector('[data-signup-clinic]'); const slug = f.querySelector('[data-signup-slug]'); const msg = f.querySelector('[data-signup-slug-msg]');
+  let touched = false; let timer = null;
+  const norm = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^(dra?|clinica|consultorio|psicologa?|psi)\.?\s+/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  const check = () => { clearTimeout(timer); timer = setTimeout(async () => {
+    const v = slug.value.trim(); if (!v) { msg.textContent = 'Letras minúsculas, números e hífen.'; msg.className = 'muted'; return; }
+    try { const d = await (await fetch(`/criar-conta/endereco?s=${encodeURIComponent(v)}`)).json(); msg.textContent = d.ok ? `✓ ${v}.${location.hostname.split('.').slice(1).join('.')} está livre` : d.reason; msg.className = d.ok ? 'small ok' : 'small bad'; slug.setCustomValidity(d.ok ? '' : d.reason || 'Endereço indisponível'); } catch (e) { /* rede */ }
+  }, 350); };
+  clinic.addEventListener('input', () => { if (!touched) { slug.value = norm(clinic.value); check(); } });
+  slug.addEventListener('input', () => { touched = true; slug.value = slug.value.toLowerCase().replace(/[^a-z0-9-]/g, ''); check(); });
+})();
+
 // ---------- Instalar como aplicativo (PWA) ----------
 // O botão fica sempre visível até instalar. Onde o navegador permite (Chrome, Edge, Android) instala com um toque;
 // nos outros, mostra o passo a passo daquele navegador.

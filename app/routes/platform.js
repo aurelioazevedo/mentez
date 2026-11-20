@@ -10,8 +10,17 @@ import { bare, html, raw, brDate, brDateTime } from '../lib/html.js';
 import { router, send, str, int, flash } from '../lib/router.js';
 import { parseCookies, checkOrigin } from '../lib/auth.js';
 import * as RL from '../lib/ratelimit.js';
+import * as Billing from '../lib/billing.js';
+import { mount as mountSignup } from './signup.js';
+import { money } from '../lib/html.js';
 
 export const handle = router();
+// Avisos do Asaas sobre as mensalidades das clínicas (autenticados pelo token cadastrado no webhook)
+handle.post('/webhooks/asaas', express.json({ limit: '200kb' }), async (req, res) => {
+  if (!(await Billing.webhookAuth(req.get('asaas-access-token')))) return res.sendStatus(401);
+  try { await Billing.handleEvent(req.body || {}); } catch (e) { console.error('webhook Mentez:', e.message); return res.sendStatus(500); }
+  res.json({ ok: true });
+});
 handle.use(express.urlencoded({ extended: false, limit: '50kb' }), checkOrigin, flash);
 handle.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); next(); });
 
@@ -36,7 +45,7 @@ async function ensureTables() {
   await T.pq(`CREATE TABLE IF NOT EXISTS platform_settings (k VARCHAR(60) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 let ready = null;
-handle.use((req, res, next) => { (ready ||= ensureTables()).then(() => next(), next); });
+handle.use((req, res, next) => { (ready ||= ensureTables().then(() => Billing.migrate())).then(() => next(), next); });
 handle.use((req, res, next) => {
   const s = unsign(parseCookies(req)[COOKIE]);
   if (!s) return next();
@@ -48,14 +57,20 @@ const log = (req, action, tenantId = null, detail = null) => T.pq('INSERT INTO p
 const MARK = raw('<svg viewBox="0 0 128 128" width="34" height="34" aria-hidden="true"><rect width="128" height="128" rx="32" fill="#071936"/><defs><linearGradient id="mzg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#07C6BC"/><stop offset="1" stop-color="#8065E8"/></linearGradient></defs><g transform="translate(0 -2)"><path d="M30 92 V58 a17 17 0 0 1 34 0 V92" fill="none" stroke="#F5F7FC" stroke-width="13" stroke-linecap="round"/><path d="M64 58 a17 17 0 0 1 34 0 V92" fill="none" stroke="url(#mzg)" stroke-width="13" stroke-linecap="round"/></g></svg>');
 function layout(req, title, body) {
   return bare(title, html`<div class="mzp">
-    <header class="mzp-top"><a class="mzp-brand" href="/">${MARK}<span><b>mentez</b><small>Painel</small></span></a>
-      ${req.admin ? html`<nav class="mzp-nav"><a href="/">Clínicas</a><a href="/clinicas/nova">Nova clínica</a><a href="/historico">Histórico</a></nav>
+    <header class="mzp-top"><a class="mzp-brand" href="/">${MARK}<span><b>mentez</b><small>${req.admin ? 'Painel' : 'Gestão para psicologia'}</small></span></a>
+      ${req.admin ? html`<nav class="mzp-nav"><a href="/">Clínicas</a><a href="/clinicas/nova">Nova clínica</a><a href="/planos">Planos</a><a href="/cobranca">Cobrança</a><a href="/historico">Histórico</a></nav>
         <form method="post" action="/sair" class="mzp-out"><span class="muted small">${req.admin.name}</span><button class="btn ghost btn-sm">Sair</button></form>` : ''}</header>
     <main class="mzp-main">${req.flash ? html`<div class="flash ${req.flash.type || 'ok'}">${req.flash.text}</div>` : ''}${body}</main>
-    <footer class="mzp-foot muted small">Mentez · Inteligência para cuidar de quem cuida · Os dados clínicos das clínicas não aparecem neste painel.</footer>
+    <footer class="mzp-foot muted small">Mentez · Inteligência para cuidar de quem cuida · <a href="/termos-de-uso">Termos de Uso</a> · <a href="/privacidade">Privacidade</a></footer>
   </div>`, 'bare mzp-body', req, { suffix: 'Painel Mentez' });
 }
-const need = (req, res, next) => (req.admin ? next() : res.redirect('/entrar'));
+const need = (req, res, next) => (req.admin ? next() : res.redirect('/inicio'));
+mountSignup(handle, layout);
+handle.get('/inicio', (req, res) => (req.admin ? res.redirect('/') : send(res, layout(req, 'Mentez', html`<section class="card mzp-auth mzp-choose"><h1>Bem-vindo à Mentez</h1>
+  <form method="get" action="/ir" class="stack"><label class="fld"><span>Entrar na minha clínica</span><span class="mzp-slug"><input name="c" required placeholder="suaclinica" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" autocomplete="off"><small>.${T.baseDomain()}</small></span></label><button class="btn">Ir para a minha clínica</button></form>
+  <p class="mzp-or">ou</p><a class="btn ghost" href="/criar-conta">Criar conta grátis</a>
+  <p class="muted small"><a href="/entrar">Equipe Mentez</a></p></section>`))));
+handle.get('/ir', (req, res) => { const c = str(req.query.c, 40).toLowerCase(); return T.SLUG_RE.test(c) ? res.redirect(`https://${c}.${T.baseDomain()}/login`) : res.redirect('/inicio'); });
 
 // ---------- primeiro acesso (convite gerado pela linha de comando) e login ----------
 handle.get('/primeiro-acesso', async (req, res) => {
@@ -160,6 +175,16 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
         </form>
       </section>
     </div>
+    <section class="card"><h2>Assinatura</h2>
+      ${(() => { const a = Billing.accessOf(t); return html`<p><b>${{ cortesia: 'Cortesia (sem cobrança)', teste: `Teste grátis · ${a.daysLeft} dia(s) restantes (até ${brDate(a.ends)})`, ativa: 'Em dia', atrasada: `Em aberto há ${a.late} dia(s)`, bloqueada: `Acesso suspenso (${a.reason})` }[a.state]}</b> · plano ${t.plan}${row.paid_until ? ` · pago até ${brDate(row.paid_until)}` : ''}${row.asaas_subscription ? ` · assinatura Asaas ${row.asaas_subscription}` : ''}${row.extra_pros ? ` · ${row.extra_pros} profissional(is) extra` : ''}</p>`; })()}
+      ${row.owner_crp ? html`<p class="small muted">Cadastro: ${row.owner_name || ''} · CRP ${row.owner_crp} · ${row.owner_phone || ''} · ${row.owner_email || ''} — confira o CRP no Cadastro Nacional do CFP.</p>` : ''}
+      <form method="post" action="/clinicas/${t.id}/assinatura" class="actions">
+        <select name="plan" aria-label="Plano">${(await Billing.plans()).map((p) => html`<option value="${p.key}" ${p.key === t.plan ? raw('selected') : ''}>${p.name}</option>`)}</select>
+        <button class="btn ghost btn-sm" name="acao" value="plano">Trocar plano</button>
+        <button class="btn ghost btn-sm" name="acao" value="cortesia" data-confirm="Marcar como cortesia? A clínica deixa de ser cobrada pela Mentez.">Cortesia</button>
+        <button class="btn ghost btn-sm" name="acao" value="teste7">Teste + 7 dias</button>
+      </form>
+    </section>
     <section class="card"><h2>Domínios próprios</h2>
       <p class="muted small">O endereço <b>${t.slug}.${T.baseDomain()}</b> sempre funciona. Para usar um domínio da clínica (ex.: app.clinica.com.br), a clínica cria no DNS dela um registro <b>A</b> apontando para o servidor da Mentez (ou <b>CNAME</b> para ${t.slug}.${T.baseDomain()}) e você cadastra aqui. O HTTPS é emitido na primeira visita.</p>
       ${domains.length ? html`<ul class="list">${domains.map((d) => html`<li><div class="maint-bk"><span><b>${d.domain}</b> ${d.is_primary ? html`<span class="badge b-realizada">principal</span>` : ''}<small>cadastrado em ${brDate(d.created_at)}</small></span>
@@ -203,6 +228,67 @@ handle.post('/clinicas/:id/dominio/remover', need, async (req, res, next) => {
   await T.pq('DELETE FROM tenant_domains WHERE tenant_id = ? AND domain = ?', [t.id, str(req.body.domain, 190)]); T.clearCache();
   await log(req, 'dominio-remover', t.id, req.body.domain);
   res.flash('Domínio removido.').redirect(`/clinicas/${t.id}`);
+});
+handle.post('/clinicas/:id/assinatura', need, async (req, res, next) => {
+  const t = await tenantOf(req); if (!t) return next();
+  const a = req.body.acao;
+  if (a === 'plano' && (await Billing.plans()).some((p) => p.key === req.body.plan)) await T.pq('UPDATE tenants SET plan = ? WHERE id = ?', [req.body.plan, t.id]);
+  else if (a === 'cortesia') await T.pq("UPDATE tenants SET billing_status = 'cortesia', overdue_since = NULL WHERE id = ?", [t.id]);
+  else if (a === 'teste7') await T.pq("UPDATE tenants SET billing_status = 'teste', trial_ends_at = DATE_ADD(GREATEST(COALESCE(trial_ends_at, NOW()), NOW()), INTERVAL 7 DAY) WHERE id = ?", [t.id]);
+  T.clearCache(); await log(req, `assinatura-${a}`, t.id, req.body.plan || null);
+  res.flash('Assinatura atualizada.').redirect(`/clinicas/${t.id}`);
+});
+// ---------- planos ----------
+handle.get('/planos', need, async (req, res) => {
+  const list = await Billing.plans(true);
+  send(res, layout(req, 'Planos', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Planos</h1><p class="muted">Preços e limites valem para novas assinaturas e mudanças de plano. Assinaturas existentes mantêm o valor até a clínica mudar de plano.</p></div></header>
+    ${list.map((p) => html`<form method="post" action="/planos/${p.key}" class="card form-grid">
+      <h2 class="span2">${p.name} <small class="muted">${p.key}${p.public ? '' : ' · interno'}</small></h2>
+      <label class="fld"><span>Nome</span><input name="name" value="${p.name}" maxlength="60" required></label>
+      <label class="fld"><span>Preço mensal (R$)</span><input name="price" value="${String(p.price).replace('.', ',')}" inputmode="decimal" required></label>
+      <label class="fld"><span>Profissionais incluídos</span><input type="number" name="max_pros" min="1" max="500" value="${p.maxPros}"></label>
+      <label class="fld"><span>Profissional a mais (R$/mês, 0 = não permite)</span><input name="extra" value="${String(p.extraPro).replace('.', ',')}" inputmode="decimal"></label>
+      <fieldset class="fld span2"><legend>Recursos</legend><div class="wl-chips">${Object.entries(Billing.FEATURES).map(([k, l]) => html`<label class="wl-chip"><input type="checkbox" name="f_${k}" value="1" ${p.features.includes(k) ? raw('checked') : ''}><span>${l}</span></label>`)}</div></fieldset>
+      <label class="check"><input type="checkbox" name="public" value="1" ${p.public ? raw('checked') : ''}> Aparece para as clínicas escolherem</label>
+      <div class="span2 actions"><button class="btn">Salvar ${p.name}</button></div></form>`)}`));
+});
+handle.post('/planos/:k', need, async (req, res) => {
+  const b = req.body; const num = (v) => Math.max(0, Number(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0);
+  await T.pq('UPDATE plans SET name = ?, price = ?, max_pros = ?, extra_pro_price = ?, features = ?, public = ? WHERE plan_key = ?',
+    [str(b.name, 60), num(b.price), Math.max(1, int(b.max_pros) || 1), num(b.extra), JSON.stringify(Object.keys(Billing.FEATURES).filter((k) => b[`f_${k}`])), b.public ? 1 : 0, req.params.k]);
+  Billing.clearPlans(); await log(req, 'plano-editar', null, req.params.k);
+  res.flash('Plano salvo.').redirect('/planos');
+});
+// ---------- cobrança (Asaas da Mentez) ----------
+handle.get('/cobranca', need, async (req, res) => {
+  const c = await Billing.config();
+  const url = `https://${req.get('host')}/webhooks/asaas`;
+  const ev = await T.pq('SELECT e.*, t.name tname FROM billing_events e LEFT JOIN tenants t ON t.id = e.tenant_id ORDER BY e.id DESC LIMIT 30');
+  send(res, layout(req, 'Cobrança', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Cobrança das clínicas</h1><p class="muted">Conta Asaas da Mentez, que cobra as mensalidades das clínicas (Pix, boleto ou cartão).</p></div></header>
+    <form method="post" class="card form-grid">
+      <label class="fld"><span>Ambiente</span><select name="env"><option value="sandbox" ${c.env === 'sandbox' ? raw('selected') : ''}>Testes (sandbox)</option><option value="producao" ${c.env === 'producao' ? raw('selected') : ''}>Produção</option></select></label>
+      <label class="fld"><span>Chave de API ${c.key ? html`<small class="muted">(cadastrada — preencha só para trocar)</small>` : ''}</span><input type="password" name="key" autocomplete="off" maxlength="300" placeholder="$aact_…"></label>
+      <p class="span2 muted small">No Asaas: Integrações → Chave de API. Para testar sem cobrar ninguém, crie uma conta em sandbox.asaas.com e use a chave de lá com o ambiente “Testes”.</p>
+      <div class="span2 actions"><button class="btn">Salvar</button></div></form>
+    ${c.key ? html`<section class="card"><h2>Conexão e avisos automáticos</h2>
+      <p class="small">Webhook: <code>${url}</code> · ${c.webhookAt ? html`registrado em ${brDateTime(c.webhookAt)}` : html`<b>ainda não registrado</b>`}</p>
+      <div class="actions"><form method="post" action="/cobranca/testar"><button class="btn ghost">Testar conexão</button></form><form method="post" action="/cobranca/webhook"><button class="btn ghost">Registrar o webhook no Asaas</button></form></div></section>` : ''}
+    <section class="card flush"><h2 class="pad">Últimos avisos do Asaas</h2>${ev.length ? html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Quando</th><th>Clínica</th><th>Evento</th><th>Situação</th><th>Valor</th><th>Vencimento</th></tr></thead><tbody>
+      ${ev.map((e) => html`<tr><td>${brDateTime(e.created_at)}</td><td>${e.tname || '—'}</td><td>${e.event}</td><td>${e.status || ''}</td><td>${e.value ? money(e.value) : ''}</td><td>${e.due_date ? brDate(e.due_date) : ''}</td></tr>`)}</tbody></table></div>` : html`<p class="pad muted">Nenhum aviso ainda.</p>`}</section>`));
+});
+handle.post('/cobranca', need, async (req, res) => {
+  const k = String(req.body.key || '').trim();
+  if (k && (k.length < 20 || /\s/.test(k))) return res.flash('Chave de API inválida (no Asaas ela começa com $aact_).', 'err').redirect('/cobranca');
+  await Billing.saveConfig(req.body); await log(req, 'cobranca-config', null, req.body.env);
+  res.flash('Configuração de cobrança salva.').redirect('/cobranca');
+});
+handle.post('/cobranca/testar', need, async (req, res) => {
+  try { res.flash(`Conexão com o Asaas funcionando: ${await Billing.testConnection(await Billing.config())}.`); } catch (e) { res.flash(e.message, 'err'); }
+  res.redirect('/cobranca');
+});
+handle.post('/cobranca/webhook', need, async (req, res) => {
+  try { await Billing.registerWebhook(await Billing.config(), `https://${req.get('host')}/webhooks/asaas`, req.admin.email); await log(req, 'cobranca-webhook'); res.flash('Webhook registrado no Asaas.'); } catch (e) { res.flash(e.message, 'err'); }
+  res.redirect('/cobranca');
 });
 handle.get('/historico', need, async (req, res) => {
   const rows = await T.pq('SELECT a.*, t.name tname FROM platform_audit a LEFT JOIN tenants t ON t.id = a.tenant_id ORDER BY a.id DESC LIMIT 200');

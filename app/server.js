@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { migrate } from './lib/db.js';
 import * as Platform from './routes/platform.js';
 import * as Brand from './lib/brand.js';
+import * as Billing from './lib/billing.js';
+import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
+import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
 import { loadUser, requireUser, checkOrigin } from './lib/auth.js';
 import { bare, html } from './lib/html.js';
@@ -75,6 +78,12 @@ app.set('trust proxy', 1);
 
 // ---- segurança + bloqueio de indexação em TODAS as respostas ----
 // A página de agendamento pode ser exibida dentro do site da clínica (seção “Agende”); o resto do sistema, nunca.
+// Endereços da plataforma (criar conta, entrar na minha clínica) enviam o formulário e redirecionam para o endereço da clínica
+function formAction(req) {
+  if (!Tenancy.multi() || !Tenancy.platformHosts().has(String(req.hostname || '').toLowerCase())) return "'self'";
+  const b = Tenancy.baseDomain();
+  return `'self' https://*.${b}${process.env.NODE_ENV === 'production' ? '' : ` http://*.${b}:*`}`;
+}
 app.use((req, res, next) => {
   const EMBED_ORIGINS = String(Tenancy.env('EMBED_ORIGINS') || '').trim(); // sites da clínica que podem exibir o agendamento
   const embeddable = req.path === '/agendar' || req.path.startsWith('/agendar/');
@@ -84,7 +93,7 @@ app.use((req, res, next) => {
     ...(embeddable ? {} : { 'X-Frame-Options': 'DENY' }),
     'Referrer-Policy': 'same-origin',
     'Permissions-Policy': 'camera=(self), microphone=(self), display-capture=(self), fullscreen=(self), geolocation=(), interest-cohort=()',
-    'Content-Security-Policy': `default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; form-action 'self'; frame-ancestors ${embeddable ? `'self' ${EMBED_ORIGINS}` : "'none'"}; base-uri 'none'`,
+    'Content-Security-Policy': `default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; form-action ${formAction(req)}; frame-ancestors ${embeddable ? `'self' ${EMBED_ORIGINS}` : "'none'"}; base-uri 'none'`,
   });
   if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000');
   next();
@@ -111,6 +120,8 @@ app.use(async (req, res, next) => {
   Tenancy.run(t, next); // tudo o que vem depois (banco, chaves, caches) é desta clínica
 });
 app.use(Brand.middleware); // identidade da clínica (nome, logo, cores) disponível para todas as páginas
+app.get('/_mentez/entrar', (req, res, next) => autoLogin(req, res).catch(next)); // entrada automática logo depois de criar a conta
+app.use(billingGate); // Mentez: teste grátis, mensalidade em dia ou acesso restrito à tela de assinatura
 app.get(/^\/marca\/(logo|logo-escuro)$/, (req, res, next) => { req.params.tipo = req.params[0]; logoRoute(req, res).catch(next); });
 // App instalável (PWA) e notificações push
 app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
@@ -163,6 +174,7 @@ app.get('/tarefas/lembretes/:token', (req, res, next) => waCron(req, res).catch(
 app.use(loadUser);
 app.use(authRoutes);
 app.use(requireUser);
+app.use((req, res, next) => planFeatures(req, res, next).catch(next)); // recursos que o plano da clínica não inclui
 // Canal ao vivo (SSE) e reserva por consulta periódica
 app.get('/live', (req, res, next) => Live.stream(req, res).catch(next));
 app.get('/live/since', (req, res, next) => Live.since(req, res).catch(next));
@@ -178,6 +190,7 @@ app.use('/conta', accountRoutes);
 // Endereços antigos (antes de Configurações) → novos
 app.get(/^\/usuarios\/(google|whatsapp|agente|acessos)(\/.*)?$/, (req, res) => res.redirect(301, req.originalUrl.replace(/^\/usuarios\//, '/configuracoes/')));
 app.use('/configuracoes/identidade', requirePerm('usuarios'), brandSettings);
+app.use('/configuracoes/assinatura', subscriptionSettings);
 app.use('/configuracoes/google', requirePerm('usuarios'), googleAdmin);
 app.use('/configuracoes/whatsapp', requirePerm('usuarios'), waAdmin);
 app.use('/configuracoes/agente', requirePerm('usuarios'), agentAdmin);
@@ -260,6 +273,7 @@ const every = (ms, fn, label, first = null) => {
 async function boot() {
   if (Tenancy.multi()) {
     await Tenancy.migratePlatform();
+    await Billing.migrate();
     await Tenancy.forEachTenant(() => migrate(), 'migração'); // cada clínica no seu banco, sempre no esquema atual
   } else await migrate();
 }
@@ -284,6 +298,7 @@ boot()
     every(Number(process.env.ENGAGE_TICK_MS) || 5 * 60e3, () => Engage.tick(), 'aniversário/pesquisa');
     every(Number(process.env.NOTIFY_TICK_MS) || 5 * 60e3, () => Notify.tick(), 'lembretes e-mail/SMS');
     every(Number(process.env.GATEWAY_TICK_MS) || 10 * 60e3, () => Gateway.tick(), 'cobrança online');
+    if (Tenancy.multi()) setInterval(() => Billing.tick().catch((e) => console.error('cobrança Mentez:', e.message)), Number(process.env.MENTEZ_BILLING_TICK_MS) || 3600e3).unref(); // conferência das mensalidades
   }));
 process.on('unhandledRejection', (e) => { console.error('unhandledRejection', e); Monitor.recordError(e, 'processo'); });
 

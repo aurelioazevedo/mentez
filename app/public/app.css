@@ -2077,3 +2077,25 @@ label.ask-opt:has(input:focus-visible) { outline: 2px solid var(--terracota); ou
 .mzp-slug { display: flex; align-items: center; gap: 6px; } .mzp-slug input { flex: 1; } .mzp-slug small { color: var(--muted); white-space: nowrap; }
 .inline-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; } .inline-form input { flex: 1; min-width: 200px; }
 @media (max-width: 640px) { .mzp-top { padding: 12px 16px; } .mzp-main { padding: 20px 16px; } }
+
+/* ===================== Mentez: criar conta, planos ===================== */
+.mzs { display: grid; grid-template-columns: 1.05fr 1fr; gap: 36px; align-items: start; max-width: 1080px; margin: 10px auto; }
+.mzs-intro h1 { font-size: clamp(30px, 4vw, 44px); line-height: 1.1; letter-spacing: -.02em; margin: 8px 0 14px; }
+.mzs-intro .muted { font-size: 17px; line-height: 1.55; }
+.mzs-list { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 10px; }
+.mzs-list li { padding-left: 30px; position: relative; } .mzs-list li::before { content: '✓'; position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--creme); color: var(--terracota); display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+.mzs-form .btn.big { width: 100%; padding: 13px; font-size: 16px; }
+.mzs-form [data-signup-slug-msg].ok { color: var(--ok-ink); } .mzs-form [data-signup-slug-msg].bad { color: var(--err); }
+@media (max-width: 860px) { .mzs { grid-template-columns: 1fr; gap: 18px; } }
+.mzp-choose .btn { width: 100%; } .mzp-or { text-align: center; color: var(--muted); margin: 6px 0; }
+.legal-mz { max-width: 820px; margin: 0 auto; } .legal-mz h2 { font-size: 17px; margin: 18px 0 6px; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.plan { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 20px; border: 1px solid var(--line); border-radius: var(--r); background: var(--card); box-shadow: var(--shadow); cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.plan input { position: absolute; opacity: 0; }
+.plan:has(input:checked) { border-color: var(--terracota); box-shadow: 0 0 0 2px color-mix(in srgb, var(--terracota) 30%, transparent), var(--shadow); }
+.plan:has(input:focus-visible) { outline: 2px solid var(--terracota); outline-offset: 2px; }
+.plan-n { font-size: 18px; color: var(--marrom-deep); } .plan-p { font-size: 28px; font-weight: 700; color: var(--marrom-deep); } .plan-p small { font-size: 13px; font-weight: 500; color: var(--muted); }
+.plan-l { font-size: 13px; color: var(--muted); }
+.plan ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; font-size: 13.5px; }
+.plan li.y::before { content: '✓ '; color: var(--ok-ink); font-weight: 700; } .plan li.n { color: var(--muted); text-decoration: line-through; opacity: .6; } .plan li.n::before { content: '– '; }
+.bill-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
