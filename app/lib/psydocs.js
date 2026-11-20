@@ -1,6 +1,7 @@
 // Documentos psicológicos (Resolução CFP nº 06/2019): declaração, atestado, relatório, laudo e parecer.
 // Gerados a partir da ficha, editáveis até a emissão; ao emitir ficam imutáveis (resumo SHA-256),
 // com assinatura eletrônica do profissional e código de verificação público (sem o conteúdo).
+import * as Brand from './brand.js';
 import * as RT from './richtext.js';
 import crypto from 'node:crypto';
 import { cpfFmt } from './br.js';
@@ -132,7 +133,7 @@ export async function docVars(patient, author, { apptId, purpose, requester } = 
   let cpf = ''; try { cpf = patient.cpf_enc ? decrypt(patient.cpf_enc) : ''; } catch { /* sem CPF */ }
   return {
     paciente: patient.social_name || patient.name, cpf: cpf ? cpfFmt(cpf) : '[CPF]', nascimento: patient.birth_date ? br(patient.birth_date) : '[data de nascimento]',
-    profissional: author ? proName(author) : '', crp: author?.crp || '[CRP]', data: longDate(todayLocal()), cidade: 'Goiânia',
+    profissional: author ? proName(author) : '', crp: author?.crp || '[CRP]', data: longDate(todayLocal()), cidade: Brand.get().city || '[cidade]',
     data_sessao: appt ? br(appt.starts_at) : '[data]', inicio: appt ? String(appt.starts_at).slice(11, 16) : '[início]', fim: fim || '[término]',
     finalidade: purpose || '[finalidade]', solicitante: requester || 'o(a) próprio(a) interessado(a)',
   };

@@ -1,7 +1,7 @@
 import * as Tenancy from '../lib/tenancy.js';
 import bcrypt from 'bcryptjs';
 import { q, one, audit } from '../lib/db.js';
-import { bare, html } from '../lib/html.js';
+import { bare, html, logoTag } from '../lib/html.js';
 import { router, send, str } from '../lib/router.js';
 import { startSession, startPending, pendingUser, endSession } from '../lib/auth.js';
 import { safeEqual, verifyTotp, decrypt } from '../lib/crypto.js';
@@ -12,7 +12,7 @@ const r = router();
 const shell = (title, inner, msg) => bare(title, html`
 <div class="auth">
   <div class="auth-card">
-    <img class="auth-logo logo-light" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><img class="auth-logo logo-dark" src="/static/img/logo-creme.png" alt="Lorrainy Mendes">
+    ${logoTag('auth-logo')}
     <p class="eyebrow">Sistema do consultório</p>
     <h1>${title}</h1>
     ${msg ? html`<div class="flash ${msg.type || 'err'}">${msg.text}</div>` : ''}

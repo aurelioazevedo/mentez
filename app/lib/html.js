@@ -1,4 +1,5 @@
 import * as Tenancy from './tenancy.js';
+import * as Brand from './brand.js';
 import { can, ROLES } from './perm.js';
 
 // Templates HTML seguros: tudo é escapado, exceto valores marcados com raw().
@@ -79,19 +80,33 @@ function head(title, theme = '', o = {}) {
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
 <meta name="googlebot" content="noindex, nofollow">
 <meta name="referrer" content="same-origin">
-<meta name="theme-color" content="#47291c">
+<meta name="theme-color" content="${Brand.get().legacy ? '#47291c' : '#071936'}">
 <meta name="color-scheme" content="${theme === 'dark' ? 'dark' : theme === 'auto' ? 'light dark' : 'light'}">
-<title>${title} · ${o.suffix || 'Sistema Lorrainy Mendes'}</title>
-<link rel="icon" href="/static/img/favicon.png">
+<title>${title} · ${o.suffix || Brand.get().appName}</title>
+<link rel="icon" href="${Brand.icon('favicon.png')}">
 <link rel="manifest" href="${o.manifest || '/manifest.webmanifest'}">
-<link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="${Brand.icon('apple-touch-icon.png')}">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="${o.appTitle || 'Consultório'}">
+<meta name="apple-mobile-web-app-title" content="${o.appTitle || (Brand.get().legacy ? 'Consultório' : Brand.get().short)}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+${Brand.get().legacy ? raw('<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">') : raw('<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">')}
 <link rel="stylesheet" href="/static/app.css?v=${VERSION}">
+${Brand.themeCss() ? raw(`<style>${Brand.themeCss()}</style>`) : ''}
 </head>`;
+}
+
+// Logo da clínica (ou o nome, se ainda não houver logo). cls: classes da imagem; width opcional.
+export function logoTag(cls = '', width = null, b = Brand.get()) {
+  if (!b.logoUrl) return html`<span class="brand-word ${cls}">${b.short}</span>`;
+  const w = width ? raw(` width="${width}"`) : '';
+  return html`<img class="${cls} logo-light" src="${b.logoUrl}" alt="${b.short}"${w}><img class="${cls} logo-dark" src="${b.logoDarkUrl}" alt="${b.short}"${w}>`;
+}
+function brandLink() {
+  const b = Brand.get();
+  if (b.legacy) return raw('<a class="brand" href="/"><img class="logo-light brand-full" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-full" src="/static/img/logo-creme.png" alt="Lorrainy Mendes"><img class="logo-light brand-mini" src="/static/img/simbolo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-mini" src="/static/img/simbolo-creme.png" alt="Lorrainy Mendes"><span>Sistema do consultório</span></a>');
+  const ini = initials(b.short);
+  return html`<a class="brand" href="/">${b.logoUrl ? html`<img class="logo-light brand-full" src="${b.logoUrl}" alt="${b.short}"><img class="logo-dark brand-full" src="${b.logoDarkUrl}" alt="${b.short}">` : html`<span class="brand-word brand-full">${b.short}</span>`}<span class="brand-mark brand-mini" aria-hidden="true">${ini}</span><span>Gestão do consultório · Mentez</span></a>`;
 }
 
 // Foto do usuário (ou iniciais) — usada na barra superior, na lateral e nas listas.
@@ -113,7 +128,7 @@ export function page(req, { title, active = '', body, flash = '', live = null })
   return html`${head(title, themeOf(req))}
 <body class="app${sideMin(req) ? ' side-min' : ''}" data-live="${live || (LIVE[active] ?? '*')}"${u && (u.role === 'admin' || u.role === 'psicologo') ? raw(' data-tele-poll="1"') : ''}>
 <aside class="side">
-  <a class="brand" href="/"><img class="logo-light brand-full" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-full" src="/static/img/logo-creme.png" alt="Lorrainy Mendes"><img class="logo-light brand-mini" src="/static/img/simbolo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-mini" src="/static/img/simbolo-creme.png" alt="Lorrainy Mendes"><span>Sistema do consultório</span></a>
+  ${brandLink()}
   <div class="side-card">
     <button type="button" class="side-toggle" data-side-toggle aria-expanded="${sideMin(req) ? 'false' : 'true'}" title="${sideMin(req) ? 'Expandir menu' : 'Recolher menu'}">${icon('recolher')}<span>Recolher menu</span></button>
     <nav>${nav.map(([href, label, ic]) => html`<a href="${href}" class="${active === ic ? 'on' : ''}" title="${label}">${icon(ic)}<span>${label}</span></a>`)}</nav>
@@ -147,11 +162,11 @@ export function page(req, { title, active = '', body, flash = '', live = null })
   <main class="main">
     ${f ? html`<div class="flash ${f.type || 'ok'}">${f.text || f}</div>` : ''}
     ${body}
-    <footer class="foot">Lorrainy Mendes · Psicóloga · CRP 09/23862 · Dados protegidos (LGPD) — uso restrito</footer>
+    <footer class="foot">${[Brand.get().short, Brand.get().signLine].filter(Boolean).join(' · ')} · Dados protegidos (LGPD) — uso restrito${Brand.get().legacy ? '' : html` · <a href="https://mentez.com.br" target="_blank" rel="noopener">Mentez</a>`}</footer>
   </main>
 </div>
 ${u ? html`<div class="inst-banner" data-install-banner hidden role="region" aria-label="Instalar aplicativo">
-  <img src="/static/img/app-192.png" alt="" width="44" height="44">
+  <img src="${Brand.icon('app-192.png')}" alt="" width="44" height="44">
   <div><b>Use o sistema como aplicativo</b><small>Abre direto pelo ícone, em tela cheia, e recebe notificações.</small></div>
   <button type="button" class="btn" data-install-go>Instalar</button><button type="button" class="btn ghost" data-install-later>Agora não</button>
 </div>

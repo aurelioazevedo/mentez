@@ -1437,6 +1437,20 @@ document.addEventListener('live:updated', initRecordForm);
   }
 })();
 
+// ---------- Identidade da clínica: envio da logo (arquivo direto, sem formulário de várias partes) ----------
+document.querySelectorAll('[data-logo-file]').forEach((inp) => inp.addEventListener('change', async () => {
+  const f = inp.files[0]; if (!f) return;
+  const form = inp.closest('[data-logo-form]');
+  if (!['image/png', 'image/jpeg'].includes(f.type)) { alert('Envie a logo em PNG ou JPG.'); return; }
+  if (f.size > 1024 * 1024) { alert('A logo precisa ter até 1 MB.'); return; }
+  try {
+    const r = await fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': f.type, Accept: 'application/json' }, body: f });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || `erro ${r.status}`);
+    location.reload();
+  } catch (e) { alert(`Não foi possível enviar a logo: ${e.message}`); }
+}));
+
 // ---------- Instalar como aplicativo (PWA) ----------
 // O botão fica sempre visível até instalar. Onde o navegador permite (Chrome, Edge, Android) instala com um toque;
 // nos outros, mostra o passo a passo daquele navegador.
@@ -1466,7 +1480,7 @@ document.addEventListener('live:updated', initRecordForm);
   }
   function steps() {
     const ol = dlg.querySelector('[data-install-steps]');
-    const name = portal ? '“Lorrainy Mendes”' : '“Consultório”';
+    const name = `“${document.querySelector('meta[name=apple-mobile-web-app-title]')?.content || (portal ? 'Portal do paciente' : 'Consultório')}”`;
     let items;
     if (ios) items = ['No Safari, toque em Compartilhar (o quadrado com a seta para cima ⬆️), na barra de baixo ou no topo.', 'Role a lista e toque em “Adicionar à Tela de Início”.', `Confirme em “Adicionar”. O ícone ${name} aparece na tela inicial.`];
     else if (macSafari) items = ['No Safari, abra o menu Arquivo (ou o botão Compartilhar).', 'Escolha “Adicionar ao Dock”.', 'Confirme em “Adicionar”.'];
@@ -1644,7 +1658,7 @@ document.querySelectorAll('[data-sms-provider]').forEach((box) => {
 document.querySelectorAll('[data-sms-count]').forEach((ta) => {
   const out = ta.parentElement.querySelector('[data-sms-len]');
   // estimativa: variáveis viram textos de tamanho típico; o link de confirmação tem ~55 caracteres
-  const SAMPLE = { nome: 'Marina', quando: 'amanha, quinta', data: '18/11/2026', data_curta: '18/11', hora: '19:00', dia_semana: 'quinta', modalidade: 'on-line', profissional: 'Dra. Lorrainy Mendes', link: '', confirmar: 'https://sistema.lorrainymendes.com.br/l/1234.abcdefghijkl', clinica: 'Consultorio Lorrainy Mendes' };
+  const SAMPLE = { nome: 'Marina', quando: 'amanha, quinta', data: '18/11/2026', data_curta: '18/11', hora: '19:00', dia_semana: 'quinta', modalidade: 'on-line', profissional: 'Dra. Ana Souza', link: '', confirmar: `${location.origin}/l/1234.abcdefghijkl`, clinica: document.querySelector('meta[name=apple-mobile-web-app-title]')?.content || 'Consultório' };
   const upd = () => {
     const t = ta.value.replace(/\{(\w+)\}/g, (m, k) => (k in SAMPLE ? SAMPLE[k] : m)).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const n = t.length;

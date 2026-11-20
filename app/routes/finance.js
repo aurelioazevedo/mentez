@@ -1,7 +1,8 @@
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { docFmt } from '../lib/br.js';
-import { page, bare, html, raw, money, brDate, brDateTime, label } from '../lib/html.js';
+import { page, bare, html, raw, money, brDate, brDateTime, label, logoTag } from '../lib/html.js';
 import { paymentCard as gatewayCard } from './gateway.js';
 import { paymentCard as nfseCard } from './nfse.js';
 import * as Fiscal from '../lib/fiscal.js';
@@ -455,7 +456,7 @@ async function settlementView(req, res, next) {
     ${s.tot?.rent ? html`<tr><td>—</td><td colspan="2">Aluguel de sala do mês</td><td>—</td><td>—</td><td>${money(s.tot.rent)}</td><td>− ${money(s.tot.rent)}</td></tr>` : ''}</tbody></table></div>`;
   if (req.query.imprimir) {
     return send(res, bare(`Acerto ${ym}`, html`<div class="print-bar"><button class="btn" data-print>Imprimir / salvar em PDF</button></div>
-    <article class="letter"><header class="lh"><img src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><div><b>Extrato de acerto</b><span>${monthName(ym)}</span></div></header>
+    <article class="letter"><header class="lh">${logoTag('')}<div><b>Extrato de acerto</b><span>${monthName(ym)}</span></div></header>
       <h1>${proName(u)}</h1><p class="muted">${Fin.ruleText(s.rule || {})}${s.closed ? ` · fechado em ${brDate(s.closed.closed_at)}` : ' · prévia (acerto ainda aberto)'}</p>
       ${table}<p class="settle-verdict">${verdict}</p></article>`, 'bare print', req));
   }
@@ -711,7 +712,7 @@ r.post('/config/clinica', async (req, res, next) => {
   const b = req.body;
   const pixType = KEY_TYPES[b.pix_type] ? b.pix_type : null;
   if (pixType && !normalizeKey(pixType, b.pix_key)) return res.flash(`Chave Pix inválida para o tipo “${KEY_TYPES[pixType]}”.`, 'err').redirect('/financeiro/config');
-  await Fin.saveClinic({ name: str(b.name, 160), doc: str(b.doc, 20), address: str(b.address, 200), city: str(b.city, 80) || 'Goiânia', phone: str(b.phone, 40), email: str(b.email, 120), pix_type: pixType, pix_key: pixType ? str(b.pix_key, 140) : '' });
+  await Fin.saveClinic({ name: str(b.name, 160), doc: str(b.doc, 20), address: str(b.address, 200), city: str(b.city, 80), phone: str(b.phone, 40), email: str(b.email, 120), pix_type: pixType, pix_key: pixType ? str(b.pix_key, 140) : '' });
   await audit(req, 'financeiro-clinica');
   res.flash('Dados da clínica salvos.').redirect('/financeiro/config');
 });
@@ -1111,13 +1112,13 @@ export async function receiptPage(x, req) {
   return bare('Recibo', html`
   <div class="print-bar"><button class="btn" data-print>Imprimir / salvar em PDF</button></div>
   <article class="letter receipt">
-    <header class="lh"><img src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><div><b>${signer.name}</b><span>${signer.line}</span></div></header>
+    <header class="lh">${logoTag('')}<div><b>${signer.name}</b><span>${signer.line}</span></div></header>
     <h1>Recibo <span class="amount">${money(x.amount)}</span></h1>
     <p class="receipt-text">Recebi de <b>${x.name}</b>${cpf ? html`, CPF ${Fiscal.cpfFmt(cpf)},` : ''} a importância de <b>${money(x.amount)}</b> (${extenso(x.amount)}), referente a <b>${x.description}</b>, paga em ${brDate(x.paid_at)} via ${label(x.method || 'outro').toLowerCase()}.</p>
     <p class="receipt-text">Para clareza, firmo o presente.</p>
-    <footer class="lf"><p>${(byPro && fp?.saved && fp.city) || c.city || 'Goiânia'}, ${longDate(dt(x.paid_at))}.</p>
+    <footer class="lf"><p>${(byPro && fp?.saved && fp.city) || c.city || ''}${((byPro && fp?.saved && fp.city) || c.city) ? ', ' : ''}${longDate(dt(x.paid_at))}.</p>
       <div class="sign">${signer.name}<br>${signer.line}${signer.line ? html`<br>` : ''}<small>${signer.doc}</small></div>
-      <p class="lf-contact">${[(byPro && fp?.saved && fp.address) || c.address, c.phone, c.email, 'lorrainymendes.com.br'].filter(Boolean).join(' · ')}</p></footer>
+      <p class="lf-contact">${[(byPro && fp?.saved && fp.address) || c.address, c.phone, c.email, Brand.get().site].filter(Boolean).join(' · ')}</p></footer>
   </article>`, 'bare print', req);
 }
 

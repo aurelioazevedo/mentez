@@ -1,7 +1,7 @@
 // Aniversários e pesquisa de satisfação: Configurações, página pública da pesquisa e acompanhamento.
 import { q, one, audit } from '../lib/db.js';
 import { botFields } from '../lib/ratelimit.js';
-import { page, bare, html, raw, brDate } from '../lib/html.js';
+import { page, bare, html, raw, brDate, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import * as E from '../lib/engage.js';
 import * as WA from '../lib/whatsapp.js';
@@ -80,7 +80,7 @@ async function surveyPage(req, res, { s, done = null, preview = false, msg = nul
   const showReview = done != null && c.reviewOn && c.reviewUrl && done >= c.reviewMin;
   res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
   send(res, bare('Pesquisa de satisfação', html`<main class="legal survey-pub">
-    <img class="legal-logo-img" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" width="150">
+    ${logoTag('legal-logo-img', 150)}
     ${msg ? html`<div class="flash ${msg.kind}">${msg.text}</div>` : ''}
     ${done != null ? html`<h1>Obrigado, ${nome}!</h1><p class="lead">${c.thanksText}</p>
       ${showReview ? html`<section class="card survey-review"><p>Que bom que você está gostando! Se quiser, conte sua experiência no Google — isso ajuda outras pessoas a encontrarem cuidado.</p><a class="btn" href="${preview ? '#' : `/s/${req.params.tok}/avaliar`}" rel="noopener">Avaliar no Google</a></section>` : ''}`
@@ -127,7 +127,7 @@ publicSurvey.post('/:tok/parar', async (req, res) => {
   if (!s) return invalid(req, res);
   await q('UPDATE patients SET survey_optin = 0 WHERE id = ?', [s.patient_id]);
   res.set('Cache-Control', 'no-store');
-  send(res, bare('Pesquisa de satisfação', html`<main class="legal survey-pub"><img class="legal-logo-img" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" width="150"><h1>Tudo certo</h1><p class="lead">Você não vai mais receber pesquisas de satisfação. Obrigado!</p></main>`, 'bare legal-page', req));
+  send(res, bare('Pesquisa de satisfação', html`<main class="legal survey-pub">${logoTag('legal-logo-img', 150)}<h1>Tudo certo</h1><p class="lead">Você não vai mais receber pesquisas de satisfação. Obrigado!</p></main>`, 'bare legal-page', req));
 });
 
 // ---------- marcar comentário como tratado (Relatórios → Satisfação) ----------

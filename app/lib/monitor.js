@@ -2,6 +2,7 @@
 // Os alertas saem por uma SEGUNDA instância do WhatsApp (“instância de alerta”), para continuarem chegando
 // mesmo quando a instância principal do consultório cai. Também vão por notificação (push) aos usuários master.
 // A queda do próprio sistema é vigiada por fora, pelo servidor do WhatsApp (Evolution), que consulta /saude.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, db, getSetting, setSetting } from './db.js';
@@ -54,7 +55,7 @@ async function deliver(text, { viaMain = false } = {}) {
   if (masters.length) { notify(masters, { title: '🚨 Alerta do sistema', body: text.replace(/\*/g, '').slice(0, 180), url: '/configuracoes/monitoramento', tag: 'monitor' }); sent.push('push'); }
   return [...new Set(sent)];
 }
-const head = (t) => `🚨 *Sistema Lorrainy Mendes*\n${t}\n_${nowLocal().slice(0, 16).split(' ').reverse().join(' ').replace(/^(\d\d:\d\d) (\d{4})-(\d\d)-(\d\d)$/, '$4/$3 $1')}_`;
+const head = (t) => `🚨 *${Brand.get().appName}*\n${t}\n_${nowLocal().slice(0, 16).split(' ').reverse().join(' ').replace(/^(\d\d:\d\d) (\d{4})-(\d\d)-(\d\d)$/, '$4/$3 $1')}_`;
 async function raise(key, text) {
   const st = await state();
   if (st[key]?.alerted) return false; // já avisado; espera normalizar
@@ -67,7 +68,7 @@ async function raise(key, text) {
 async function clear(key, text) {
   const st = await state();
   if (!st[key]?.alerted) return;
-  const ch = await deliver(`✅ *Sistema Lorrainy Mendes*\n${text}`, { viaMain: key === 'wa_alerta' });
+  const ch = await deliver(`✅ *${Brand.get().appName}*\n${text}`, { viaMain: key === 'wa_alerta' });
   delete st[key];
   await setSetting('monitor_state', JSON.stringify(st));
   await q("INSERT INTO monitor_alerts (alert_key, kind, message, channel) VALUES (?, 'normalizado', ?, ?)", [key, text.slice(0, 500), ch.join(', ') || 'nenhum canal']);

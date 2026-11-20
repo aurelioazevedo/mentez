@@ -1,10 +1,11 @@
 // Documentos psicológicos: criação a partir da ficha, emissão com assinatura eletrônica e código de verificação,
 // impressão/PDF, envio ao paciente por link e página pública de verificação de autenticidade.
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import QRCode from 'qrcode';
 import { q, one, audit } from '../lib/db.js';
-import { page, bare, html, raw, brDate, brDateTime } from '../lib/html.js';
+import { page, bare, html, raw, brDate, brDateTime, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import { canSeePatient, forbidden, isClinician, proName } from '../lib/perm.js';
 import * as Agent from '../lib/agent.js';
@@ -39,11 +40,11 @@ export async function letter(d, base, { signature } = {}) {
   const url = d.verify_code ? `${base}/v/${d.verify_code}` : null;
   const qr = url ? await QRCode.toDataURL(url, { width: 220, margin: 1, errorCorrectionLevel: 'M' }) : null;
   return html`<article class="psy-doc ${d.status === 'cancelado' ? 'is-cancelled' : ''}">
-    <header class="psy-doc-h"><img src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" class="psy-logo"></header>
+    <header class="psy-doc-h">${logoTag('psy-logo')}</header>
     ${d.status === 'cancelado' ? html`<p class="psy-cancel">DOCUMENTO CANCELADO${d.cancel_reason ? ` — ${d.cancel_reason}` : ''}</p>` : d.status === 'rascunho' ? html`<p class="psy-draft">RASCUNHO — ainda não emitido</p>` : ''}
     <h1 class="psy-title">${d.title}</h1>
     <div class="psy-body">${d.body}</div>
-    <p class="psy-place">Goiânia, ${d.signed_at ? brDate(d.signed_at) : brDate(nowLocal())}.</p>
+    <p class="psy-place">${Brand.get().city ? `${Brand.get().city}, ` : ''}${d.signed_at ? brDate(d.signed_at) : brDate(nowLocal())}.</p>
     <div class="psy-sign">
       ${signature ? html`<img src="${signature}" alt="Assinatura" class="psy-sig-img">` : html`<span class="psy-sig-line"></span>`}
       <b>${d.signer_name || d.author_name || ''}</b><span>Psicóloga(o) · CRP ${d.signer_crp || '—'}</span>
@@ -210,7 +211,7 @@ r.get('/:id/pdf', async (req, res, next) => {
 });
 // Certificado em nuvem: vai à certificadora para a aprovação no celular (ou assina direto, se a sessão de assinatura ainda vale)
 async function cloudSign(req, d, provider, token) {
-  const { pdf, info } = await Cloud.signPdf({ provider, token, pdf: await D.basePdf(d, baseOf(req)), reason: `${D.KINDS[d.kind]?.label || 'Documento'} · código ${d.verify_code}`, location: 'Goiânia - GO' });
+  const { pdf, info } = await Cloud.signPdf({ provider, token, pdf: await D.basePdf(d, baseOf(req)), reason: `${D.KINDS[d.kind]?.label || 'Documento'} · código ${d.verify_code}`, location: Brand.get().place || 'Brasil' });
   const v = await ICP.verifyPdf(pdf);
   if (!v.ok) throw new Error(`a conferência falhou: ${v.problems.join('; ')}`);
   const want = await expectedCpf(req.user.id);
@@ -246,7 +247,7 @@ r.post('/:id/assinar', async (req, res, next) => {
   if (!d) return next();
   if (d.status !== 'emitido' || d.author_id !== req.user.id) return res.flash('Só quem emitiu o documento pode assiná-lo, depois de emitido.', 'err').redirect(`/documentos/${d.id}`);
   try {
-    const { pdf, info } = await ICP.signWithA1(req.user.id, await D.basePdf(d, baseOf(req)), { pass: String(req.body.senha || ''), reason: `${D.KINDS[d.kind]?.label || 'Documento'} · código ${d.verify_code}`, location: 'Goiânia - GO' });
+    const { pdf, info } = await ICP.signWithA1(req.user.id, await D.basePdf(d, baseOf(req)), { pass: String(req.body.senha || ''), reason: `${D.KINDS[d.kind]?.label || 'Documento'} · código ${d.verify_code}`, location: Brand.get().place || 'Brasil' });
     const v = await ICP.verifyPdf(pdf);
     if (!v.ok) throw new Error(`a conferência falhou: ${v.problems.join('; ')}`);
     await D.saveSigned(d.id, pdf, { name: info.name, cpf: info.cpf, issuer: info.issuer }, 'a1');
@@ -367,7 +368,7 @@ export async function verifyPage(req, res) {
   const initials = n.length ? `${n[0][0]}.${n.length > 1 ? ` ${n[n.length - 1][0]}.` : ''}` : '';
   res.set('Cache-Control', 'no-store');
   res.send(String(bare('Verificação de documento', html`<main class="legal psy-verify-page">
-    <img class="legal-logo-img" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" width="150">
+    ${logoTag('legal-logo-img', 150)}
     <h1>Verificação de documento</h1>
     ${!d ? html`<div class="flash err">Código não encontrado. Confira se foi digitado corretamente.</div>`
     : html`<div class="flash ${d.status === 'emitido' ? 'ok' : 'err'}">${d.status === 'emitido' ? 'Documento autêntico, emitido por este consultório.' : `Este documento foi CANCELADO${d.cancel_reason ? ` (${d.cancel_reason})` : ''}.`}</div>

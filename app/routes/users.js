@@ -1,3 +1,5 @@
+import * as Brand from '../lib/brand.js';
+import * as Tenancy from '../lib/tenancy.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { q, one, audit } from '../lib/db.js';
@@ -97,7 +99,7 @@ function showPassword(req, res, u, pwd, title) {
       <p><b>${u.name}</b> · ${u.email} · ${roleBadge(u.role)}</p>
       <p>Senha provisória (aparece só agora):</p>
       <div class="copy"><input readonly value="${pwd}" id="pwd" class="mono"><button class="btn ghost" data-copy="#pwd">Copiar</button></div>
-      <p class="muted small">Entregue pessoalmente ou por um canal privado. No primeiro acesso em <b>sistema.lorrainymendes.com.br</b> o sistema pedirá uma nova senha. Recomende ativar a verificação em duas etapas em “Conta”.</p>
+      <p class="muted small">Entregue pessoalmente ou por um canal privado. No primeiro acesso em <b>${new URL(Tenancy.env('PUBLIC_URL') || 'https://' + req.get('host')).hostname}</b> o sistema pedirá uma nova senha. Recomende ativar a verificação em duas etapas em “Conta”.</p>
       <div class="actions"><a class="btn" href="/usuarios/${u.id}">Ver usuário</a><a class="btn ghost" href="/usuarios">Voltar à lista</a></div>
     </section>`,
   }));

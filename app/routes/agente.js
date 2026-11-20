@@ -1,3 +1,4 @@
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
@@ -102,7 +103,7 @@ admin.get('/', async (req, res) => {
           <small class="muted">Custo por conversa típica (≈10 mensagens): Haiku ~US$ 0,01 · Sonnet ~US$ 0,15 · Opus ~US$ 0,30.</small></label>
         <label class="fld span2"><span>Nome do atendente</span><input name="assistantName" maxlength="80" value="${c.assistantName}"></label>
         <label class="fld check span2"><input type="checkbox" ${chk('answerNew', c.answerNew)}><span>Atender também quem ainda não é paciente (novos contatos)</span></label>
-        <p class="span2 small">Para os botões de WhatsApp do <b>site</b> levarem ao atendente (ou à Dra. Lorrainy): <a class="link" href="/configuracoes/whatsapp#site">Configurações → WhatsApp → WhatsApp do site</a>.</p>
+        <p class="span2 small">Para os botões de WhatsApp do <b>site</b> levarem ao atendente (ou ao WhatsApp do profissional): <a class="link" href="/configuracoes/whatsapp#site">Configurações → WhatsApp → WhatsApp do site</a>.</p>
         <label class="fld check"><input type="checkbox" ${chk('canBook', c.canBook)}><span>Pode agendar</span></label>
         <label class="fld check"><input type="checkbox" ${chk('canReschedule', c.canReschedule)}><span>Pode remarcar</span></label>
         <label class="fld check"><input type="checkbox" ${chk('canCancel', c.canCancel)}><span>Pode cancelar</span></label>

@@ -1,6 +1,7 @@
 // Integração com o Google Agenda (uma conexão OAuth por profissional).
 // O sistema é a fonte da verdade: as sessões são enviadas para a agenda Google
 // do(a) profissional responsável pelo paciente. Nenhum dado clínico é enviado.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
@@ -146,11 +147,11 @@ function titleFor(a, owner) {
 const rfc = (dt) => dt.replace(' ', 'T');
 
 function eventBody(a, owner, wantMeet) {
-  const base = Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br';
+  const base = Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br'; // PUBLIC_URL sempre definido na Mentez
   const ev = {
     summary: titleFor(a, owner),
     description: `Sessão de psicoterapia ${a.modality === 'online' ? 'on-line' : 'presencial'} · ${a.duration_min} min\n${base}/agenda/${a.id}\n\nEvento criado pelo sistema do consultório. Altere a sessão pelo sistema.`,
-    location: a.modality === 'online' ? (a.meeting_link || 'On-line') : 'Presencial · Goiânia',
+    location: a.modality === 'online' ? (a.meeting_link || 'On-line') : `Presencial${Brand.get().city ? ` · ${Brand.get().city}` : ''}`,
     start: { dateTime: rfc(a.starts_at), timeZone: TZ },
     end: { dateTime: rfc(addMinutes(a.starts_at, a.duration_min)), timeZone: TZ },
     colorId: COLORS[a.status] || '6',
@@ -286,15 +287,15 @@ function fold(line) {
 export async function icsFeed(user) {
   const rows = await q(`SELECT a.*, p.name, p.social_name FROM appointments a JOIN patients p ON p.id = a.patient_id
     WHERE p.owner_id = ? AND a.status <> 'cancelada' AND a.starts_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND a.starts_at < DATE_ADD(NOW(), INTERVAL 180 DAY) ORDER BY a.starts_at`, [user.id]);
-  const base = Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br';
+  const base = Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br'; // PUBLIC_URL sempre definido na Mentez
   const host = base.replace(/^https?:\/\//, '');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Lorrainy Mendes//Sistema do consultorio//PT-BR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', `PRODID:-//${Brand.get().short}//Sistema do consultorio//PT-BR`, 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     `X-WR-CALNAME:${icsEsc(`Sessões · ${user.name}`)}`, 'X-WR-TIMEZONE:America/Sao_Paulo', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
   for (const a of rows) {
     lines.push('BEGIN:VEVENT', `UID:sessao-${a.id}@${host}`, `DTSTAMP:${stamp}`, `DTSTART:${icsUtc(a.starts_at)}`, `DTEND:${icsUtc(addMinutes(a.starts_at, a.duration_min))}`,
       `SUMMARY:${icsEsc(titleFor(a, user))}`, `DESCRIPTION:${icsEsc(`Sessão ${a.modality === 'online' ? 'on-line' : 'presencial'} · ${base}/agenda/${a.id}`)}`,
-      `LOCATION:${icsEsc(a.modality === 'online' ? (a.meeting_link || 'On-line') : 'Presencial · Goiânia')}`, 'CLASS:PRIVATE', 'TRANSP:OPAQUE', 'END:VEVENT');
+      `LOCATION:${icsEsc(a.modality === 'online' ? (a.meeting_link || 'On-line') : `Presencial${Brand.get().city ? ` · ${Brand.get().city}` : ''}`)}`, 'CLASS:PRIVATE', 'TRANSP:OPAQUE', 'END:VEVENT');
   }
   lines.push('END:VCALENDAR');
   return lines.map(fold).join('\r\n') + '\r\n';

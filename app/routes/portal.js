@@ -1,4 +1,5 @@
 // Portal do paciente (/paciente): entrada pelo WhatsApp e área pessoal instalável no celular.
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import path from 'node:path';
 import { botFields } from '../lib/ratelimit.js';
@@ -6,7 +7,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { q, one, audit } from '../lib/db.js';
-import { page, bare, html, raw, icon, brDate, brDateTime, money, label, waLink } from '../lib/html.js';
+import { page, bare, html, raw, icon, brDate, brDateTime, money, label, waLink, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import { parseCookies } from '../lib/auth.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
@@ -40,12 +41,12 @@ function setCookie(res, token, maxAge) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   res.append('Set-Cookie', `${P.COOKIE}=${token}; Path=${BASE}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`);
 }
-const O = { manifest: `${BASE}/manifest.webmanifest`, appTitle: 'Lorrainy Mendes', suffix: 'Portal do paciente' };
+const O = { manifest: `${BASE}/manifest.webmanifest`, get appTitle() { return Brand.get().short; }, suffix: 'Portal do paciente' };
 const clinicWa = async () => { const c = await Fin.clinic(); return { phone: c.phone, link: waLink(c.phone, 'Olá! Sou paciente e preciso de ajuda.') }; };
 
 // Tela sem login (entrada)
 const gate = (req, title, inner) => bare(title, html`<main class="pp-gate">
-  <img class="pp-logo logo-light" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga"><img class="pp-logo logo-dark" src="/static/img/logo-creme.png" alt="Lorrainy Mendes — Psicóloga">
+  ${logoTag('pp-logo')}
   ${inner}
   <p class="pp-foot muted small">Área pessoal e sigilosa do paciente · <a href="/privacidade">Privacidade</a></p>
 </main>`, 'bare pp-bg', req, O);
@@ -57,7 +58,7 @@ async function shell(req, title, tab, inner) {
   const tabs = [['inicio', 'Início', 'home', ''], ['sessoes', 'Sessões', 'agenda', '/sessoes'], c.showPayments && ['pagamentos', 'Pagamentos', 'financeiro', '/pagamentos'], c.showTerms && ['termos', 'Termos', 'termos', '/termos'], c.showExercises && ['exercicios', 'Exercícios', 'exercicios', '/exercicios']].filter(Boolean);
   return bare(title, html`<div class="pp-app">
   <header class="pp-top">
-    <img class="pp-mark logo-light" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><img class="pp-mark logo-dark" src="/static/img/logo-creme.png" alt="Lorrainy Mendes">
+    ${logoTag('pp-mark')}
     <div class="pp-who"><b>${p.social_name || p.name}</b>${others.length ? html`<a class="link small" href="${BASE}/quem">trocar</a>` : ''}</div>
     <button type="button" class="tinstall" data-install hidden title="Instalar o portal no celular">${icon('baixar')}<span class="ti-short">Instalar</span></button>
     <form method="post" action="${BASE}/sair"><button class="pp-out" title="Sair deste aparelho" aria-label="Sair">${icon('sair')}</button></form>
@@ -66,21 +67,18 @@ async function shell(req, title, tab, inner) {
   <nav class="pp-tabs" aria-label="Seções">${tabs.map(([k, l, ic, href]) => html`<a href="${BASE}${href}" class="${tab === k ? 'on' : ''}" ${tab === k ? raw('aria-current="page"') : ''}>${icon(ic)}<span>${l}</span></a>`)}</nav>
 </div>
 <div class="inst-banner" data-install-banner hidden role="region" aria-label="Instalar o portal">
-  <img src="/static/img/app-192.png" alt="" width="44" height="44">
+  <img src="${Brand.icon('app-192.png')}" alt="" width="44" height="44">
   <div><b>Instale o portal no seu celular</b><small>Acesse suas sessões e pagamentos direto pelo ícone.</small></div>
   <button type="button" class="btn" data-install-go>Instalar</button><button type="button" class="btn ghost" data-install-later>Agora não</button>
 </div>
 <dialog class="inst-dlg" data-install-dlg><form method="dialog"><h2>Instalar o portal</h2><ol data-install-steps></ol>
-  <p class="muted small">Depois é só abrir pelo ícone “Lorrainy Mendes”.</p><div class="actions"><button class="btn">Entendi</button></div></form></dialog>`, 'bare pp-bg', req, O);
+  <p class="muted small">Depois é só abrir pelo ícone “${Brand.get().short}”.</p><div class="actions"><button class="btn">Entendi</button></div></form></dialog>`, 'bare pp-bg', req, O);
 }
 
 // ---------- público ----------
 r.get('/manifest.webmanifest', (req, res) => {
-  res.type('application/manifest+json').set('Cache-Control', 'public, max-age=3600').send(JSON.stringify({
-    id: `${BASE}/`, name: 'Lorrainy Mendes · Portal do paciente', short_name: 'Lorrainy Mendes', description: 'Suas sessões, pagamentos, termos e exercícios.',
-    start_url: BASE, scope: `${BASE}/`, display: 'standalone', background_color: '#f6f0e8', theme_color: '#47291c', lang: 'pt-BR',
-    icons: [{ src: '/static/img/app-192.png', sizes: '192x192', type: 'image/png' }, { src: '/static/img/app-512.png', sizes: '512x512', type: 'image/png' }, { src: '/static/img/app-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
-  }));
+  const m = Brand.manifest({ start: BASE, scope: `${BASE}/`, suffix: 'Portal do paciente' });
+  res.type('application/manifest+json').set('Cache-Control', 'public, max-age=3600').send(JSON.stringify({ ...m, id: `${BASE}/`, description: 'Suas sessões, pagamentos, termos e exercícios.' }));
 });
 r.use(async (req, res, next) => { req.ppc = await P.config(); next(); });
 const off = async (req, res) => { const w = await clinicWa(); return send(res.status(503), gate(req, 'Portal indisponível', html`<section class="pp-card"><h1>Portal do paciente</h1><p>O portal está indisponível no momento. Para falar com o consultório, use o WhatsApp.</p>${w.link ? html`<a class="btn" href="${w.link}" target="_blank" rel="noopener">Falar pelo WhatsApp</a>` : ''}</section>`)); };

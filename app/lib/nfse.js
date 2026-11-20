@@ -1,6 +1,7 @@
 // Nota fiscal de serviço (NFS-e) pelo Asaas, em nome de quem emite o recebimento:
 // a clínica (CNPJ da clínica, uid = null) ou o(a) profissional que recebe direto e tem CNPJ próprio (uid = id do usuário).
 // Fica pronta e desligada até haver CNPJ; com ela ligada, as notas saem sozinhas ao receber, em lote no mês ou uma a uma.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import { q, one, getSetting, setSetting } from './db.js';
 import { ISSUER_SQL } from './fin.js';
@@ -16,7 +17,7 @@ export const REGIMES = { simples: 'Simples Nacional', mei: 'MEI', presumido: 'Lu
 export const STATUS = { pendente: 'Na fila', agendada: 'Enviada à prefeitura', emitida: 'Emitida', erro: 'Com erro', cancelando: 'Cancelando', cancelada: 'Cancelada' };
 const MAP = { SCHEDULED: 'agendada', SYNCHRONIZED: 'agendada', AUTHORIZATION_PENDING: 'agendada', AUTHORIZED: 'emitida', PROCESSING_CANCELLATION: 'cancelando', CANCELED: 'cancelada', CANCELLATION_DENIED: 'emitida', ERROR: 'erro' };
 const DEFAULTS = {
-  enabled: false, keySource: 'cobranca', env: 'sandbox', cnpj: '', razao: '', im: '', regime: 'simples', city: 'Goiânia',
+  enabled: false, keySource: 'cobranca', env: 'sandbox', cnpj: '', razao: '', im: '', regime: 'simples', city: '',
   serviceCode: '4.16', serviceName: 'Psicologia e psicanálise', municipalServiceId: '', cnae: '8650-0/03', issRate: 0, retainIss: false,
   mode: 'auto', description: 'Serviços de psicologia — atendimento psicológico ({data}).', observations: '', sendToPatient: true, startDate: '',
 };
@@ -58,7 +59,7 @@ export async function saveConfig(b, cur, uid = null) {
   const next = {
     ...cur, enabled: !!b.enabled, keySource: uid || b.keySource === 'propria' ? 'propria' : 'cobranca', env: b.env === 'producao' ? 'producao' : 'sandbox',
     cnpj: String(b.cnpj || '').replace(/\D/g, '').slice(0, 14), razao: String(b.razao || '').trim().slice(0, 160), im: String(b.im || '').trim().slice(0, 30),
-    regime: REGIMES[b.regime] ? b.regime : 'simples', city: String(b.city || 'Goiânia').trim().slice(0, 60),
+    regime: REGIMES[b.regime] ? b.regime : 'simples', city: String(b.city || Brand.get().city || '').trim().slice(0, 60),
     serviceCode: String(b.serviceCode || '').trim().slice(0, 20), serviceName: String(b.serviceName || '').trim().slice(0, 160), municipalServiceId: String(b.municipalServiceId || '').trim().slice(0, 40),
     cnae: String(b.cnae || '').trim().slice(0, 12), issRate: Math.min(5, Math.max(0, Number(String(b.issRate || 0).replace(',', '.')) || 0)), retainIss: !!b.retainIss,
     mode: MODES[b.mode] ? b.mode : 'auto', description: String(b.description || '').trim().slice(0, 500) || DEFAULTS.description, observations: String(b.observations || '').trim().slice(0, 500),

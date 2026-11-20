@@ -1,6 +1,7 @@
 // Backup do sistema no Google Drive: manual e automático (diário, semanal, mensal),
 // com as partes num único .zip ("juntos") ou um arquivo por parte ("separados").
 // Formato: SQL comum (um comando por linha) — restaurável pelo próprio sistema ou pelo phpMyAdmin.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
@@ -16,7 +17,7 @@ const OAUTH = process.env.GOOGLE_OAUTH_BASE || 'https://oauth2.googleapis.com';
 const API = process.env.GOOGLE_API_BASE || 'https://www.googleapis.com';
 const AUTH = process.env.GOOGLE_AUTH_BASE || 'https://accounts.google.com';
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'; // só os arquivos criados pelo sistema
-const FOLDER = 'Backups — Sistema Lorrainy Mendes';
+const folderName = () => `Backups — ${Brand.get().appName}`;
 
 export const PARTS = {
   banco: { label: 'Banco de dados', desc: 'Pacientes, agenda, prontuários (criptografados), financeiro, CRM, usuários e configurações.' },
@@ -102,7 +103,7 @@ async function folder() {
   if (c.folderId) {
     try { const f = await drive('GET', `/drive/v3/files/${c.folderId}`, { query: { fields: 'id,trashed' } }); if (f && !f.trashed) return c.folderId; } catch { /* recria */ }
   }
-  const f = await drive('POST', '/drive/v3/files', { body: { name: FOLDER, mimeType: 'application/vnd.google-apps.folder' }, query: { fields: 'id' } });
+  const f = await drive('POST', '/drive/v3/files', { body: { name: folderName(), mimeType: 'application/vnd.google-apps.folder' }, query: { fields: 'id' } });
   await saveConfig({ folderId: f.id });
   return f.id;
 }
@@ -126,7 +127,7 @@ const deleteFile = (id) => drive('DELETE', `/drive/v3/files/${encodeURIComponent
 // ---------- geração ----------
 const line = (s) => `${s.replace(/\r?\n/g, ' ')};\n`;
 async function dumpTables(tables) {
-  const out = [`-- Backup do Sistema Lorrainy Mendes · ${nowLocal()}`, '-- Restaure pelo próprio sistema (Configurações → Backup) ou pelo phpMyAdmin.', '-- Campos sensíveis (prontuário, CPF, mensagens) seguem criptografados: só o sistema original consegue lê-los.', 'SET NAMES utf8mb4;', 'SET FOREIGN_KEY_CHECKS=0;'].map((x) => (x.startsWith('--') ? `${x}\n` : `${x}\n`));
+  const out = [`-- Backup do ${Brand.get().appName} · ${nowLocal()}`, '-- Restaure pelo próprio sistema (Configurações → Backup) ou pelo phpMyAdmin.', '-- Campos sensíveis (prontuário, CPF, mensagens) seguem criptografados: só o sistema original consegue lê-los.', 'SET NAMES utf8mb4;', 'SET FOREIGN_KEY_CHECKS=0;'].map((x) => (x.startsWith('--') ? `${x}\n` : `${x}\n`));
   let rows = 0;
   for (const t of tables) {
     const id = mysql.escapeId(t);
@@ -149,7 +150,7 @@ async function attachmentsFolder(zip) {
   for (const f of files) zip.addFile(`arquivos/${f.entry_id ? `conta-${f.entry_id}` : `recebimento-${f.payment_id}`}/${f.id}-${safeName(f.name)}`, f.data);
   return files.length;
 }
-const README = (parts, when) => `Backup do Sistema do Consultório — Lorrainy Mendes
+const README = (parts, when) => `Backup — ${Brand.get().appName}
 Gerado em: ${when}
 Partes: ${parts.map((p) => PARTS[p].label).join(', ')}
 

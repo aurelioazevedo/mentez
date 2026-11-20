@@ -1,3 +1,4 @@
+import * as Brand from '../lib/brand.js';
 import express from 'express';
 import * as Notify from '../lib/notify.js';
 import { apptCard as notifyCard } from './notify.js';
@@ -42,7 +43,7 @@ function reminder(a) {
   const first = nm(a).split(' ')[0];
   const when = `${weekday(a.starts_at)}, ${brDate(a.starts_at)}, às ${a.starts_at.slice(11, 16)}`;
   const where = a.modality === 'online' ? `on-line${a.meeting_link ? ` (link: ${a.meeting_link})` : ''}` : 'presencial';
-  return waLink(a.phone, `Olá, ${first}! Passando para lembrar da nossa sessão ${where} na ${when}. Pode me confirmar, por favor? — Lorrainy Mendes, Psicóloga`);
+  return waLink(a.phone, `Olá, ${first}! Passando para lembrar da nossa sessão ${where} na ${when}. Pode me confirmar, por favor? — ${Brand.get().proName || Brand.get().short}${Brand.get().proRole ? `, ${Brand.get().proRole}` : ''}`);
 }
 
 // ---------- visões: dia / semana / mês ----------

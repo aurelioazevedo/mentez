@@ -1,4 +1,5 @@
 // Relacionamento com o paciente: mensagem de aniversário e pesquisa de satisfação (NPS) após a sessão.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
@@ -39,7 +40,7 @@ export async function saveConfig(part, b) {
   return next;
 }
 async function clinicName() {
-  try { const f = JSON.parse((await getSetting('fin_clinic')) || '{}'); return f.name || 'Consultório Lorrainy Mendes'; } catch { return 'Consultório Lorrainy Mendes'; }
+  return (await Brand.load()).name;
 }
 const firstName = (p) => WA.firstName(p);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

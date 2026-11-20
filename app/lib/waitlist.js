@@ -2,6 +2,7 @@
 // o atendente virtual oferece a vaga pelo WhatsApp a quem está aguardando, com preferência de dia,
 // período, profissional e modalidade. Quem responder “SIM” primeiro fica com o horário.
 // É diferente da fila da Recepção (pacientes que já chegaram ao consultório).
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import { q, one, getSetting, setSetting } from './db.js';
 import { nowLocal, todayLocal, addDays, addMinutes } from './time.js';
@@ -262,7 +263,7 @@ async function sendOffer(c, slot, w) {
   const minutes = Math.max(5, Math.round((expMs - Date.now()) / 60e3));
   const exp = addMinutes(nowLocal(), minutes);
   const text = WA.render(c.msg || DEFAULT_MSG, {
-    nome: firstName(w.display), profissional: pro ? proName(pro) : 'a Dra. Lorrainy Mendes', quando: quandoTxt(slot.starts_at), data: brDate(slot.starts_at),
+    nome: firstName(w.display), profissional: pro ? proName(pro) : (Brand.get().proName ? `a ${Brand.get().proName}` : 'a equipe'), quando: quandoTxt(slot.starts_at), data: brDate(slot.starts_at),
     hora: slot.starts_at.slice(11, 16), dia_semana: weekday(slot.starts_at.slice(0, 10)), modalidade: modality === 'online' ? 'on-line' : 'presencial', minutos: minutes,
     troca: w.move_appt_id && w.move_starts ? `\nSe aceitar, ele substitui a sua sessão de ${whenTxt(w.move_starts)}.` : '',
   });

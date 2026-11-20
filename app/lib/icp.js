@@ -3,6 +3,7 @@
 //  • Fora do sistema (nuvem — VIDaaS, BirdID… —, token A3 ou assinador do ITI): o PDF assinado volta ao sistema, que confere
 //    a integridade, a assinatura e a cadeia até a raiz da ICP-Brasil antes de guardar.
 // As raízes da ICP-Brasil são baixadas do site oficial do ITI (acraiz.icpbrasil.gov.br) e guardadas no banco.
+import * as Brand from './brand.js';
 import crypto from 'node:crypto';
 import forge from 'node-forge';
 import { SignPdf } from '@signpdf/signpdf';
@@ -165,7 +166,7 @@ export async function signWithA1(userId, pdfBuf, { pass, reason, location, conta
   const info = certInfo(leafDer);
   if (info.validTo < new Date()) throw new Error(`O certificado venceu em ${info.validTo.toLocaleDateString('pt-BR')}. Envie o novo em Conta → Certificado digital.`);
   const doc = await PDFDocument.load(pdfBuf);
-  pdflibAddPlaceholder({ pdfDoc: doc, reason: reason || 'Documento psicológico', contactInfo: contact || '', name: info.name, location: location || 'Goiânia - GO', signatureLength: 16384 });
+  pdflibAddPlaceholder({ pdfDoc: doc, reason: reason || 'Documento psicológico', contactInfo: contact || '', name: info.name, location: location || Brand.get().place || 'Brasil', signatureLength: 16384 });
   const withPh = Buffer.from(await doc.save({ useObjectStreams: false }));
   const signed = await new SignPdf().sign(withPh, new P12Signer(pfx, { passphrase: pw }));
   return { pdf: Buffer.from(signed), info };

@@ -1,12 +1,14 @@
 // Link do WhatsApp do site: o site aponta para /wa no sistema, que decide o destino —
 // o número do atendente virtual (automatizado) ou o WhatsApp da Dra. Lorrainy.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import { q, getSetting, setSetting } from './db.js';
 import * as WA from './whatsapp.js';
 import * as Agent from './agent.js';
 
-export const DEFAULT_DOCTOR = '5562984454631';
-const DEFAULTS = { mode: 'doutora', doctorPhone: DEFAULT_DOCTOR, assistantPhone: null, fallback: true };
+// WhatsApp do(a) profissional: o da ficha de identidade da clínica
+export const defaultDoctor = () => Brand.get().wa;
+const DEFAULTS = { mode: 'doutora', doctorPhone: null, assistantPhone: null, fallback: true }; // sem número salvo: o WhatsApp da ficha da clínica
 
 const S = Tenancy.scoped({ cache: null, numCache: null }); // caches com um valor por clínica
 export async function config() {
@@ -50,7 +52,7 @@ const withTimeout = (p, ms) => Promise.race([p, new Promise((ok) => setTimeout((
 // Decide o destino de um clique. Retorna { target, phone, reason }.
 export async function route() {
   const c = await config();
-  const doctor = { target: 'doutora', phone: c.doctorPhone || DEFAULT_DOCTOR };
+  const doctor = { target: 'doutora', phone: c.doctorPhone || defaultDoctor() };
   if (c.mode !== 'assistente') return { ...doctor, reason: 'configurado' };
   const phone = await assistantNumber();
   if (!phone) return { ...doctor, reason: 'sem-numero' };

@@ -1,4 +1,5 @@
 // LGPD e CFP: prazos de guarda, limpeza automática de contatos antigos do CRM, anonimização e exportação dos dados do paciente.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import * as RT from './richtext.js';
 import AdmZip from 'adm-zip';
@@ -115,7 +116,7 @@ export async function exportPatient(id, { withRecords }) {
     z.addFile('exercicios.json', Buffer.from(JSON.stringify(asg.map((a) => ({ exercicio: a.exercise_key, situacao: a.status, enviado_em: a.created_at, respondido_em: a.responded_at, resposta: a.response_enc ? JSON.parse(decrypt(a.response_enc) || 'null') : null })), null, 2)));
   }
   z.addFile('LEIA-ME.txt', Buffer.from(`Cópia dos dados pessoais — ${p.social_name || p.name}
-Gerada em ${when} pelo Sistema do Consultório Lorrainy Mendes (CRP 09/23862), em atenção ao direito de acesso
+Gerada em ${when} pelo ${Brand.get().appName}${Brand.get().crp ? ` (CRP ${Brand.get().crp})` : ''}, em atenção ao direito de acesso
 e portabilidade previsto na LGPD (Lei 13.709/2018, art. 18).
 
 Arquivos:

@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { migrate } from './lib/db.js';
 import * as Platform from './routes/platform.js';
+import * as Brand from './lib/brand.js';
+import { settings as brandSettings, logoRoute } from './routes/brand.js';
 import { loadUser, requireUser, checkOrigin } from './lib/auth.js';
 import { bare, html } from './lib/html.js';
 import { flash } from './lib/router.js';
@@ -108,10 +110,12 @@ app.use(async (req, res, next) => {
   if (t.status !== 'ativa') return res.status(403).send(String(bare('Acesso suspenso', html`<div class="center-card"><h1>Acesso temporariamente suspenso</h1><p>O acesso a esta clínica está suspenso. Fale com a administração da clínica.</p></div>`)));
   Tenancy.run(t, next); // tudo o que vem depois (banco, chaves, caches) é desta clínica
 });
+app.use(Brand.middleware); // identidade da clínica (nome, logo, cores) disponível para todas as páginas
+app.get(/^\/marca\/(logo|logo-escuro)$/, (req, res, next) => { req.params.tipo = req.params[0]; logoRoute(req, res).catch(next); });
 // App instalável (PWA) e notificações push
 app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
-app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'manifest.webmanifest')));
-app.get('/favicon.ico', (_req, res) => res.redirect(301, '/static/img/favicon.png'));
+app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').send(JSON.stringify(Brand.manifest()))); // nome e ícones da clínica
+app.get('/favicon.ico', (_req, res) => res.redirect(302, Brand.icon('favicon.png')));
 
 app.use(express.urlencoded({ extended: true, limit: '400kb', parameterLimit: 3000 }));
 app.use(checkOrigin);
@@ -173,6 +177,7 @@ app.use('/conta', googleAccount);
 app.use('/conta', accountRoutes);
 // Endereços antigos (antes de Configurações) → novos
 app.get(/^\/usuarios\/(google|whatsapp|agente|acessos)(\/.*)?$/, (req, res) => res.redirect(301, req.originalUrl.replace(/^\/usuarios\//, '/configuracoes/')));
+app.use('/configuracoes/identidade', requirePerm('usuarios'), brandSettings);
 app.use('/configuracoes/google', requirePerm('usuarios'), googleAdmin);
 app.use('/configuracoes/whatsapp', requirePerm('usuarios'), waAdmin);
 app.use('/configuracoes/agente', requirePerm('usuarios'), agentAdmin);
@@ -248,7 +253,7 @@ app.use((err, req, res, _next) => {
 const port = Number(process.env.PORT || 3000);
 // Repete uma tarefa automática para cada clínica ativa (ou para a clínica única, sem a plataforma)
 const every = (ms, fn, label, first = null) => {
-  const go = () => Tenancy.forEachTenant(() => Promise.resolve(fn()).catch((e) => console.error(`${label}:`, e.message)), label);
+  const go = () => Tenancy.forEachTenant(() => Brand.load().then(() => fn()).catch((e) => console.error(`${label}:`, e.message)), label);
   if (first !== null) setTimeout(go, first).unref();
   setInterval(go, ms).unref();
 };

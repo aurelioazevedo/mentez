@@ -1,4 +1,5 @@
 // PDF do documento psicológico (mesmo timbre da impressão), gerado no servidor para receber a assinatura digital.
+import * as Brand from './brand.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,7 +44,7 @@ function wrap(font, size, text, width) {
 }
 
 // d: documento (psy_docs com signer_*); base: endereço público (verificação)
-export async function buildPdf(d, { base, signaturePng = null, city = 'Goiânia' } = {}) {
+export async function buildPdf(d, { base, signaturePng = null, city = Brand.get().city } = {}) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(d.title || 'Documento psicológico'); pdf.setAuthor(d.signer_name || ''); pdf.setCreator('Sistema do consultório');
   pdf.setSubject(`psydoc:${d.id}:${d.hash || ''}`); // identifica o documento quando o PDF assinado volta ao sistema
@@ -54,7 +55,9 @@ export async function buildPdf(d, { base, signaturePng = null, city = 'Goiânia'
   let pg = pdf.addPage([W, H]); let y = H - M;
   const newPage = () => { pg = pdf.addPage([W, H]); y = H - M; };
   const need = (h) => { if (y - h < M + 40) newPage(); };
-  try { const logo = await pdf.embedPng(fs.readFileSync(LOGO)); const s = 150 / logo.width; pg.drawImage(logo, { x: (W - 150) / 2, y: y - logo.height * s, width: 150, height: logo.height * s }); y -= logo.height * s + 26; } catch { y -= 10; }
+  // Logo: a enviada pela clínica (PNG ou JPG); no sistema da Dra. Lorrainy, a dela; sem logo, só o texto do documento
+  const lf = await Brand.logoFile();
+  if (lf || Brand.get().legacy) try { const logo = lf ? (lf.mime === 'image/png' ? await pdf.embedPng(lf.buf) : await pdf.embedJpg(lf.buf)) : await pdf.embedPng(fs.readFileSync(LOGO)); const s = 150 / logo.width; pg.drawImage(logo, { x: (W - 150) / 2, y: y - logo.height * s, width: 150, height: logo.height * s }); y -= logo.height * s + 26; } catch { y -= 10; }
   if (d.status === 'cancelado') { pg.drawText('DOCUMENTO CANCELADO', { x: M, y, size: 12, font: bold, color: rgb(0.7, 0.1, 0.1) }); y -= 22; }
   const title = clean(bold, d.title || '');
   for (const l of wrap(bold, 15, title, TW)) { pg.drawText(l, { x: (W - bold.widthOfTextAtSize(l, 15)) / 2, y, size: 15, font: bold, color: INK }); y -= 22; }

@@ -1,6 +1,7 @@
 // Integração com o WhatsApp via Evolution API (instância própria do consultório).
 // Envia lembretes, links e confirmações; recebe respostas “1/2” por webhook.
 // Nenhum conteúdo clínico é enviado. O texto das mensagens fica criptografado no registro.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
@@ -261,7 +262,7 @@ export async function apptVars(a) {
   const quando = date === today ? `hoje, ${dia}` : date === addDays(today, 1) ? `amanhã, ${dia}` : `${['sábado', 'domingo'].includes(dia) ? 'no' : 'na'} ${dia}`;
   return {
     nome: firstName(a), data: brDate(date), hora: a.starts_at.slice(11, 16), dia_semana: weekday(date), quando,
-    modalidade: a.modality === 'online' ? 'on-line' : 'presencial', profissional: prof ? proName(prof) : 'Dra. Lorrainy Mendes',
+    modalidade: a.modality === 'online' ? 'on-line' : 'presencial', profissional: prof ? proName(prof) : Brand.get().who,
     link: a.modality === 'online' && a.meeting_link ? `\n\nLink da chamada: ${a.meeting_link}` : '',
   };
 }
@@ -446,7 +447,7 @@ export async function processDueReminders({ maxPerRun = 25, delayMs = null } = {
 
 export function startScheduler() {
   if (process.env.WA_SCHEDULER_OFF) return;
-  const tick = () => Tenancy.forEachTenant(() => processDueReminders().catch((e) => console.error('wa tick', e.message)), 'lembretes WhatsApp');
+  const tick = () => Tenancy.forEachTenant(() => Brand.load().then(() => processDueReminders()).catch((e) => console.error('wa tick', e.message)), 'lembretes WhatsApp');
   setTimeout(tick, 30e3);
   setInterval(tick, 5 * 60e3).unref();
 }

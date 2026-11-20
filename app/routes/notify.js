@@ -1,6 +1,7 @@
 // Lembretes por e-mail e SMS: Configurações, link público de confirmação e envio manual na sessão.
+import * as Brand from '../lib/brand.js';
 import { q, one, audit } from '../lib/db.js';
-import { page, bare, html, raw, brDate, brDateTime, weekday } from '../lib/html.js';
+import { page, bare, html, raw, brDate, brDateTime, weekday, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import * as N from '../lib/notify.js';
 import * as WA from '../lib/whatsapp.js';
@@ -29,8 +30,8 @@ settings.get('/', async (req, res) => {
       <label class="fld check"><input type="checkbox" name="emailOn" value="1" ${chk(c.emailOn)}><span><b>Enviar lembretes por e-mail</b></span></label>
       <div class="form-grid">
         <label class="fld"><span>Antecedência</span><select name="emailHours">${[12, 24, 36, 48, 72].map((h) => html`<option value="${h}" ${sel(c.emailHours, h)}>${h} horas antes</option>`)}</select></label>
-        <label class="fld"><span>E-mail remetente</span><input name="fromEmail" type="email" value="${c.fromEmail}" maxlength="190" placeholder="contato@lorrainymendes.com.br"></label>
-        <label class="fld"><span>Nome do remetente</span><input name="fromName" value="${c.fromName}" maxlength="80" placeholder="Consultório Lorrainy Mendes"></label>
+        <label class="fld"><span>E-mail remetente</span><input name="fromEmail" type="email" value="${c.fromEmail}" maxlength="190" placeholder="${Brand.get().email || 'contato@suaclinica.com.br'}"></label>
+        <label class="fld"><span>Nome do remetente</span><input name="fromName" value="${c.fromName}" maxlength="80" placeholder="${Brand.get().name}"></label>
         <label class="fld"><span>Responder para <small class="muted">(opcional)</small></span><input name="replyTo" type="email" value="${c.replyTo}" maxlength="190"></label>
         <label class="fld"><span>Servidor SMTP</span><input name="smtpHost" value="${c.smtpHost}" maxlength="120" placeholder="smtp.hostinger.com"></label>
         <label class="fld"><span>Porta</span><input name="smtpPort" inputmode="numeric" value="${c.smtpPort}" maxlength="5"></label>
@@ -50,7 +51,7 @@ settings.get('/', async (req, res) => {
       <div class="form-grid">
         <label class="fld"><span>Antecedência</span><select name="smsHours">${[1, 2, 3, 4, 6, 12, 24].map((h) => html`<option value="${h}" ${sel(c.smsHours, h)}>${h} hora(s) antes</option>`)}</select></label>
         <label class="fld" data-sms-only="zenvia"><span>Token da API Zenvia ${c.zenviaToken ? html`<small class="muted">(cadastrado — preencha só para trocar)</small>` : ''}</span><input name="zenviaToken" type="password" maxlength="300" autocomplete="off"></label>
-        <label class="fld" data-sms-only="zenvia"><span>Remetente Zenvia <small class="muted">(identificador da conta SMS)</small></span><input name="zenviaFrom" value="${c.zenviaFrom}" maxlength="60" placeholder="ex.: lorrainymendes"></label>
+        <label class="fld" data-sms-only="zenvia"><span>Remetente Zenvia <small class="muted">(identificador da conta SMS)</small></span><input name="zenviaFrom" value="${c.zenviaFrom}" maxlength="60" placeholder="ex.: suaclinica"></label>
         <label class="fld" data-sms-only="twilio"><span>Account SID</span><input name="twilioSid" value="${c.twilioSid}" maxlength="64" autocomplete="off" placeholder="AC…"></label>
         <label class="fld" data-sms-only="twilio"><span>Auth Token ${c.twilioToken ? html`<small class="muted">(cadastrado — preencha só para trocar)</small>` : ''}</span><input name="twilioToken" type="password" maxlength="200" autocomplete="off"></label>
         <label class="fld" data-sms-only="twilio"><span>Número remetente Twilio</span><input name="twilioFrom" value="${c.twilioFrom}" maxlength="30" placeholder="+1…"></label>
@@ -66,7 +67,7 @@ settings.get('/', async (req, res) => {
       ${rec.length ? html`<table class="tbl small"><thead><tr><th>Quando</th><th>Canal</th><th>Para</th><th>Situação</th></tr></thead><tbody>${rec.map((r) => html`<tr><td>${brDateTime(r.created_at)}</td><td>${r.channel === 'email' ? 'E-mail' : 'SMS'}${r.kind === 'teste' ? ' (teste)' : ''}</td><td>${r.name ? (r.social_name || r.name) : r.dest}</td><td>${r.status === 'enviado' ? '✓ enviado' : html`<span class="err-txt">erro: ${r.error}</span>`}</td></tr>`)}</tbody></table>` : ''}
     </section>
     <details class="card tv-tips"><summary>Como configurar o e-mail da clínica (Hostinger)</summary><ul>
-      <li>Use uma caixa de e-mail do domínio, por exemplo <b>contato@lorrainymendes.com.br</b> (hPanel → E-mails → Contas de e-mail).</li>
+      <li>Use uma caixa de e-mail do domínio, por exemplo <b>contato@suaclinica.com.br</b> (hPanel → E-mails → Contas de e-mail).</li>
       <li>Servidor <b>smtp.hostinger.com</b>, porta <b>465</b>, segurança <b>SSL</b>. Usuário é o próprio e-mail e a senha é a da caixa.</li>
       <li>Salve e clique em <b>Enviar e-mail de teste</b>. Se cair no spam, marque como “não é spam” e confira no hPanel se o domínio tem SPF e DKIM ativos.</li>
     </ul></details>
@@ -128,7 +129,7 @@ async function view(req, res, a, msg = null) {
   const ask = req.query.remarcar === '1' && open && a.wa_reply !== 'remarcar';
   res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
   send(res, bare('Sua sessão', html`<main class="legal remind-pub">
-    <img class="legal-logo-img" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" width="150">
+    ${logoTag('legal-logo-img', 150)}
     <h1>Olá, ${v.nome}!</h1>
     <section class="card remind-when"><p class="eyebrow">Sua sessão ${v.modalidade}</p><p class="remind-dt">${(([w]) => w.charAt(0).toUpperCase() + w.slice(1))([weekday(a.starts_at.slice(0, 10))])}, ${brDate(a.starts_at).slice(0, 5)} às ${v.hora}</p><p class="muted">com ${v.profissional}</p></section>
     ${msg ? html`<div class="flash ${msg.kind}">${msg.text}</div>` : ''}

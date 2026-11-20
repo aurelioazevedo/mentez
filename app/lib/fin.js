@@ -1,4 +1,5 @@
 // Financeiro: repasse por profissional, quem recebeu, pacotes, contas a pagar/receber e acerto mensal.
+import * as Brand from './brand.js';
 import { q, one, getSetting, setSetting } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
 import { todayLocal, addDays, addMonths } from './time.js';
@@ -13,7 +14,8 @@ const lastDay = (ym) => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slic
 export async function clinic() {
   let c = {};
   try { c = JSON.parse((await getSetting('fin_clinic')) || '{}'); } catch { /* padrão */ }
-  return { name: c.name || 'Consultório Lorrainy Mendes', doc: c.doc_enc ? decrypt(c.doc_enc) : '', address: c.address || '', city: c.city || 'Goiânia', phone: c.phone || '(62) 98445-4631', email: c.email || 'contato@lorrainymendes.com.br', pix_type: c.pix_type || null, pix_key: c.pix_key || '' };
+  const b = await Brand.load();
+  return { name: c.name || b.name, doc: c.doc_enc ? decrypt(c.doc_enc) : '', address: c.address || '', city: c.city || b.city, phone: c.phone || b.phone, email: c.email || b.email, pix_type: c.pix_type || null, pix_key: c.pix_key || '' };
 }
 export async function saveClinic({ name, doc, address, city, phone, email, pix_type, pix_key }) {
   await setSetting('fin_clinic', JSON.stringify({ name, doc_enc: doc ? encrypt(doc) : null, address, city, phone, email, pix_type: pix_type || null, pix_key: pix_key || '' }));

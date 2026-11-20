@@ -1,3 +1,4 @@
+import * as Brand from '../lib/brand.js';
 import { one } from '../lib/db.js';
 import { page, html, raw, brDateTime } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
@@ -60,10 +61,16 @@ r.get('/', async (req, res) => {
   const tvc = await TV.config(); const tvScreens = await TV.screens(); const bkc = await BK.config(); const sai = await SessionAI.config(); const ptl = await Portal.config(); const rtc = await Rental.config(); const gwc = await Gateway.config(); const ntc = await Notify.config(); const egc = await Engage.config(); const tlc = await Tele.config(); const nfc = await Nfse.config(); const nfr = await Nfse.readiness(nfc); const icc = IcpCloud.available(await IcpCloud.config()); const insOn = await Ins.list(true);
   const mc = await Monitor.config();
 
+  const br = await Brand.load();
   const items = [
     {
+      key: 'identidade', href: '/configuracoes/identidade', title: 'Identidade da clínica',
+      desc: 'Nome, profissional responsável e CRP, contatos, cidade, site, logo e cor. Aparecem nas telas, documentos, recibos, mensagens e no portal do paciente.',
+      status: br.logo && br.phone && br.city ? ['realizada', br.short] : ['falta', br.legacy ? br.short : 'Complete a ficha'],
+    },
+    {
       key: 'whatsapp', href: '/configuracoes/whatsapp', title: 'WhatsApp',
-      desc: 'Conexão do aparelho (QR code), WhatsApp do site (atendente ou Dra. Lorrainy), lembretes e textos das mensagens.',
+      desc: 'Conexão do aparelho (QR code), WhatsApp do site (atendente ou profissional), lembretes e textos das mensagens.',
       status: !wac ? ['cancelada', 'Não configurado'] : !wac.enabled ? ['cancelada', 'Pausado'] : waState === 'open' ? ['realizada', `Conectado · ${wac.instance}`] : ['falta', waState === 'connecting' ? 'Conectando… (leia o QR Code)' : 'Desconectado'],
     },
     {

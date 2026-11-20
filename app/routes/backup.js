@@ -1,4 +1,5 @@
 // Configurações → Backup (somente usuário master): Google Drive, backup manual, agendamentos, histórico e restauração.
+import * as Brand from '../lib/brand.js';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { one, audit } from '../lib/db.js';
@@ -34,7 +35,7 @@ r.get('/', async (req, res) => {
 
     <section class="card bk-drive"><h2>Google Drive</h2>
       ${BK.connected(c) ? html`<p><span class="badge b-realizada">Conectado</span> ${c.email || ''}</p>
-        <p class="muted small">Os arquivos ficam na pasta <b>“Backups — Sistema Lorrainy Mendes”</b>. O sistema só enxerga os arquivos que ele mesmo criou no seu Drive.</p>
+        <p class="muted small">Os arquivos ficam na pasta <b>“Backups — ${Brand.get().appName}”</b>. O sistema só enxerga os arquivos que ele mesmo criou no seu Drive.</p>
         <div class="actions">${BK.folderUrl(c) ? html`<a class="btn ghost" href="${BK.folderUrl(c)}" target="_blank" rel="noopener">Abrir pasta no Drive</a>` : ''}
           <form method="post" action="${BACK}/desconectar" data-confirm="Desconectar o Google Drive? Os backups automáticos param até conectar de novo. Os arquivos já salvos continuam no Drive."><button class="btn ghost danger-text">Desconectar</button></form></div>`
       : gOk ? html`<p class="muted">Conecte a conta Google onde os backups serão guardados.</p><a class="btn" href="${BACK}/conectar">Conectar Google Drive</a>

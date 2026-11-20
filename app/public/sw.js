@@ -9,8 +9,8 @@ self.addEventListener('push', (event) => {
   const title = d.title || 'Sistema do consultório';
   event.waitUntil(self.registration.showNotification(title, {
     body: d.body || '',
-    icon: '/static/img/app-192.png',
-    badge: '/static/img/badge-96.png',
+    icon: d.icon || '/static/img/app-192.png',
+    badge: d.badge || '/static/img/badge-96.png',
     tag: d.tag || undefined,
     renotify: !!d.tag,
     data: { url: d.url || '/' },

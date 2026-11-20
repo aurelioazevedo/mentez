@@ -1,3 +1,4 @@
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDateTime } from '../lib/html.js';
@@ -193,9 +194,9 @@ admin.get('/', async (req, res) => {
       </section>
       <section class="card"><h2>Como obter (uma vez, ~10 min)</h2>
         <ol class="bullets small">
-          <li>Acesse <b>console.cloud.google.com</b> com a conta Google do consultório e crie um projeto (ex.: “Sistema Lorrainy Mendes”).</li>
+          <li>Acesse <b>console.cloud.google.com</b> com a conta Google do consultório e crie um projeto (ex.: “${Brand.get().appName}”).</li>
           <li>Em <b>APIs e serviços → Biblioteca</b>, ative a <b>Google Calendar API</b>.</li>
-          <li>Em <b>Tela de consentimento OAuth</b>: tipo <b>Externo</b>, nome do app “Sistema Lorrainy Mendes”, seu e-mail de suporte. Em escopos, adicione <code>calendar.events</code> e <code>calendar.calendarlist.readonly</code>. Depois clique em <b>Publicar app</b> (status “Em produção”) — no modo teste o acesso expira a cada 7 dias.</li>
+          <li>Em <b>Tela de consentimento OAuth</b>: tipo <b>Externo</b>, nome do app “${Brand.get().appName}”, seu e-mail de suporte. Em escopos, adicione <code>calendar.events</code> e <code>calendar.calendarlist.readonly</code>. Depois clique em <b>Publicar app</b> (status “Em produção”) — no modo teste o acesso expira a cada 7 dias.</li>
           <li>Em <b>Credenciais → Criar credenciais → ID do cliente OAuth</b>: tipo <b>Aplicativo da Web</b>; em “URIs de redirecionamento autorizados” cole exatamente:
             <div class="copy"><input readonly value="${redirect}" id="redir"><button class="btn ghost" type="button" data-copy="#redir">Copiar</button></div></li>
           <li>Copie o <b>ID do cliente</b> e a <b>chave secreta</b> para o formulário ao lado.</li>
@@ -207,7 +208,7 @@ admin.get('/', async (req, res) => {
             <li>É o mesmo cliente cujo ID está salvo aqui (${cfg ? cfg.clientId.slice(0, 18) + '…' : '—'}) e do tipo <b>Aplicativo da Web</b>.</li>
             <li>Depois de salvar no Google, aguarde de 5 a 10 minutos antes de tentar de novo.</li>
           </ul></div>
-        <p class="muted small">Ao conectar, o Google pode mostrar “O Google não verificou este app”: clique em <b>Avançado → Acessar Sistema Lorrainy Mendes</b>. Isso é esperado para apps de uso interno (até 100 usuários).</p>
+        <p class="muted small">Ao conectar, o Google pode mostrar “O Google não verificou este app”: clique em <b>Avançado → Acessar ${Brand.get().appName}</b>. Isso é esperado para apps de uso interno (até 100 usuários).</p>
       </section>
     </div>
     <section class="card flush"><h2 class="pad-h">Profissionais</h2>

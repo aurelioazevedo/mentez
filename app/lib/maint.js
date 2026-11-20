@@ -1,6 +1,7 @@
 // Manutenção de dados (somente usuário master): limpar módulos, excluir usuários,
 // cópia de segurança/restauração e dados de demonstração para apresentações.
 // Nunca toca em `settings` (chaves das IAs, WhatsApp, Google, textos) nem nas etapas do CRM e categorias.
+import * as Brand from './brand.js';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
@@ -277,7 +278,7 @@ export async function loadDemo({ withProfessionals = true, actor }) {
     const r = await q('INSERT INTO crm_cards (phone_key, phone, name, stage_id, position, responsible_id, tags, value, source, last_message_at, last_direction, demo) VALUES (?,?,?,?,?,?,?,?,\'whatsapp\',?,?,1)',
       [pkey, phone, name, stages[key] || firstStage, i, i % 3 === 0 ? actor.id : null, tag || null, key === 'perdido' ? null : pick([720, 800, 880, 1000]), when, key === 'humano' || key === 'novo' ? 'in' : 'out']);
     cards++;
-    const convo = [['in', `Olá, boa tarde! ${i % 2 ? 'Encontrei vocês pelo Instagram.' : 'Recebi a indicação de uma amiga.'}`], ['out', 'Olá! Que bom ter você por aqui 😊 Sou a assistente virtual do consultório da Dra. Lorrainy Mendes. Como posso ajudar?'], ['in', last]];
+    const convo = [['in', `Olá, boa tarde! ${i % 2 ? 'Encontrei vocês pelo Instagram.' : 'Recebi a indicação de uma amiga.'}`], ['out', `Olá! Que bom ter você por aqui 😊 Sou a assistente virtual de ${Brand.get().who}. Como posso ajudar?`], ['in', last]];
     if (key === 'agendado') convo.push(['out', 'Sessão agendada! Você receberá um lembrete um dia antes. Até lá! 🌿']);
     let t = Date.parse(`${when.replace(' ', 'T')}Z`) - convo.length * 120e3;
     for (const [dir, text] of convo) {

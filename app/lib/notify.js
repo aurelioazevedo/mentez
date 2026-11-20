@@ -1,6 +1,7 @@
 // Lembretes de sessão por e-mail e SMS (além do WhatsApp).
 // E-mail: SMTP (por padrão o e-mail da clínica na Hostinger). SMS: Zenvia ou Twilio.
 // Cada lembrete leva um link seguro para o paciente confirmar a presença ou pedir para remarcar.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
@@ -19,7 +20,7 @@ export const DEFAULT_TEMPLATES = {
   sms: '{clinica}: sua sessao e {quando}, {data_curta} as {hora}. Confirme ou remarque: {confirmar}',
 };
 const DEFAULTS = {
-  emailOn: false, smtpHost: 'smtp.hostinger.com', smtpPort: 465, smtpSecure: 'ssl', smtpUser: 'contato@lorrainymendes.com.br', fromEmail: 'contato@lorrainymendes.com.br', fromName: 'Consultório Lorrainy Mendes', replyTo: '', emailHours: 24,
+  emailOn: false, smtpHost: 'smtp.hostinger.com', smtpPort: 465, smtpSecure: 'ssl', smtpUser: '', fromEmail: '', fromName: '', // vazios: vêm da identidade da clínica replyTo: '', emailHours: 24,
   smsOn: false, smsProvider: 'zenvia', zenviaFrom: '', twilioSid: '', twilioFrom: '', smsHours: 3,
   mode: 'sempre', templates: { ...DEFAULT_TEMPLATES },
 };
@@ -30,6 +31,8 @@ export async function config() {
   try { c = JSON.parse((await getSetting('notify_cfg')) || '{}'); } catch { /* padrão */ }
   const dec = (v) => { try { return v ? decrypt(v) : ''; } catch { return ''; } };
   const out = { ...DEFAULTS, ...c, templates: { ...DEFAULT_TEMPLATES, ...(c.templates || {}) } };
+  const b = await Brand.load();
+  out.fromName = out.fromName || b.name; out.fromEmail = out.fromEmail || b.email; out.smtpUser = out.smtpUser || b.email;
   out.smtpPass = dec(c.smtp_pass_enc); out.zenviaToken = dec(c.zenvia_token_enc); out.twilioToken = dec(c.twilio_token_enc);
   delete out.smtp_pass_enc; delete out.zenvia_token_enc; delete out.twilio_token_enc;
   if (!PROVIDERS[out.smsProvider]) out.smsProvider = 'zenvia';
@@ -43,7 +46,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function checkInput(b) {
   if (b.emailOn) {
     if (!String(b.smtpHost || '').trim()) return 'Informe o servidor SMTP do e-mail.';
-    if (!EMAIL_RE.test(String(b.fromEmail || '').trim())) return 'Informe o e-mail remetente (ex.: contato@lorrainymendes.com.br).';
+    if (!EMAIL_RE.test(String(b.fromEmail || '').trim())) return 'Informe o e-mail remetente (ex.: contato@suaclinica.com.br).';
   }
   if (b.replyTo && !EMAIL_RE.test(String(b.replyTo).trim())) return 'O e-mail de resposta parece inválido.';
   return null;
@@ -87,7 +90,7 @@ export function smsNumber(phone) {
 }
 async function clinicName(c) {
   if (c.fromName) return c.fromName;
-  try { const f = JSON.parse((await getSetting('fin_clinic')) || '{}'); return f.name || 'Consultório Lorrainy Mendes'; } catch { return 'Consultório Lorrainy Mendes'; }
+  return (await Brand.load()).name;
 }
 function transport(c) {
   return nodemailer.createTransport({
@@ -112,7 +115,7 @@ function ics(a, clinic) {
   const st = String(a.starts_at).replace(' ', 'T');
   const start = new Date(`${st}-03:00`); const end = new Date(start.getTime() + (Number(a.duration_min) || 50) * 60e3);
   const f = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Lorrainy Mendes//Lembretes//PT-BR', 'METHOD:PUBLISH', 'BEGIN:VEVENT', `UID:sessao-${a.id}@lorrainymendes.com.br`,
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', `PRODID:-//${Brand.get().short}//Lembretes//PT-BR`, 'METHOD:PUBLISH', 'BEGIN:VEVENT', `UID:sessao-${a.id}@${new URL(publicBase()).hostname}`,
     `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:Sessão ${a.modality === 'online' ? 'on-line' : 'presencial'} — ${clinic.replace(/[,;]/g, ' ')}`,
     ...(a.meeting_link ? [`LOCATION:${a.meeting_link}`] : []), 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Sessão em 1 hora', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
 }

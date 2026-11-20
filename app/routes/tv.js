@@ -1,11 +1,12 @@
 // Painel de chamadas: página pública da TV (/tv, sem login, conectada por código) e Configurações → Painel de chamadas.
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
 import * as Media from '../lib/tvmedia.js';
 import * as Sp from '../lib/tvsponsors.js';
 import * as WA from '../lib/whatsapp.js';
-import { page, bare, html, raw, brDate, brDateTime, money, VERSION } from '../lib/html.js';
+import { page, bare, html, raw, brDate, brDateTime, money, VERSION, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import { proName } from '../lib/perm.js';
 import * as TV from '../lib/tv.js';
@@ -574,9 +575,9 @@ export async function publicReport(req, res) {
   const r = await Sp.report(x.id, ym);
   res.set('Cache-Control', 'no-store');
   res.send(String(bare(`Relatório — ${x.name}`, html`<main class="tvr-public">
-    <header class="tvr-pub-h"><img src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicologia" class="tvr-logo"><div><p class="eyebrow">Relatório de divulgação na TV da recepção</p><h1>${x.name}</h1><p class="muted">${Sp.monthLabel(ym)}</p></div></header>
+    <header class="tvr-pub-h">${logoTag('tvr-logo')}<div><p class="eyebrow">Relatório de divulgação na TV da recepção</p><h1>${x.name}</h1><p class="muted">${Sp.monthLabel(ym)}</p></div></header>
     <form method="get" class="tvr-month no-print"><label>Mês <select name="mes" data-autosubmit>${months.map((m) => html`<option value="${m}" ${m === ym ? raw('selected') : ''}>${Sp.monthLabel(m)}</option>`)}</select></label><noscript><button>Ver</button></noscript> <button type="button" class="btn ghost" data-print>Imprimir / salvar PDF</button></form>
     ${reportBody(x, r)}
-    <p class="muted small">Gerado em ${brDateTime(new Date(Date.now() - 3 * 3600e3).toISOString().replace('T', ' ').slice(0, 19))} · Lorrainy Mendes — Psicologia</p>
+    <p class="muted small">Gerado em ${brDateTime(new Date(Date.now() - 3 * 3600e3).toISOString().replace('T', ' ').slice(0, 19))} · ${Brand.get().name}</p>
   </main>`, 'bare tvr-page')));
 }

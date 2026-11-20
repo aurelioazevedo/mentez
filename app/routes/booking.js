@@ -1,20 +1,21 @@
 // Agendamento online: página pública (/agendar) e Configurações → Agendamento online.
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import QRCode from 'qrcode';
 import { botFields } from '../lib/ratelimit.js';
 import { q, one, audit } from '../lib/db.js';
-import { page, bare, html, raw, brDate, weekday, VERSION } from '../lib/html.js';
+import { page, bare, html, raw, brDate, weekday, VERSION, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import { proName } from '../lib/perm.js';
 import { addDays, todayLocal, longDate } from '../lib/time.js';
 import * as BK from '../lib/booking.js';
 
-const CONTACT = html`<p class="muted small bk-contact">Dúvidas: WhatsApp (62) 98445-4631 · <a href="/privacidade">Política de Privacidade</a></p>`;
+const CONTACT = html`<p class="muted small bk-contact">${Brand.get().phone ? `Dúvidas: WhatsApp ${Brand.get().phone} · ` : ''}<a href="/privacidade">Política de Privacidade</a></p>`;
 // embed=1: exibida dentro do site (sem logo/rodapé; o site ajusta a altura pelo tamanho que a página informa)
 const shell = (req, title, body) => (req.embed
-  ? bare(title, html`<main class="bkp bkp-embed">${body}<p class="bkp-embed-f">Dúvidas? <a href="https://wa.me/5562984454631" target="_blank" rel="noopener">Fale no WhatsApp</a> · seus dados são protegidos (LGPD)</p></main><script src="/static/embed.js?v=${VERSION}"></script>`, 'bare bkp-page bkp-embed-page', req)
+  ? bare(title, html`<main class="bkp bkp-embed">${body}<p class="bkp-embed-f">Dúvidas? <a href="https://wa.me/${Brand.get().wa}" target="_blank" rel="noopener">Fale no WhatsApp</a> · seus dados são protegidos (LGPD)</p></main><script src="/static/embed.js?v=${VERSION}"></script>`, 'bare bkp-page bkp-embed-page', req)
   : bare(title, html`<main class="legal bkp">
-  <a href="/agendar"><img class="legal-logo-img" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" width="150"></a>
+  <a href="/agendar">${logoTag('legal-logo-img', 150)}</a>
   ${body}${CONTACT}</main>`, 'bare legal-page bkp-page', req));
 const qs = (o) => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 
@@ -45,7 +46,7 @@ publicBooking.get('/', async (req, res) => {
     ${req.query.aviso ? html`<div class="flash warn">Você já é paciente desta profissional: escolha um horário na agenda dela.</div>` : ''}
     <ol class="bk-steps"><li class="on">Horário</li><li>Seus dados</li><li>Código</li></ol>
     ${pros.length > 1 ? html`<section class="bk-block"><h2>Com quem?</h2><div class="bk-opts">${pros.map((u) => html`<a class="bk-opt ${prof?.id === u.id ? 'on' : ''}" href="/agendar?${qs({ prof: u.id, mod: u.mods.includes(mod) ? mod : null })}"><b>${u.display}</b><small>${u.crp ? `CRP ${u.crp} · ` : ''}${u.mods.map((m) => (m === 'online' ? 'on-line' : 'presencial')).join(' e ')}</small></a>`)}</div></section>` : html`<p><b>${prof.display}</b>${prof.crp ? html` <small class="muted">· CRP ${prof.crp}</small>` : ''}</p>`}
-    ${modsOf.length > 1 ? html`<section class="bk-block"><h2>Como prefere?</h2><div class="bk-opts">${[['online', 'On-line', 'por videochamada'], ['presencial', 'Presencial', 'no consultório, em Goiânia']].filter(([k]) => modsOf.includes(k)).map(([k, l, d]) => html`<a class="bk-opt ${mod === k ? 'on' : ''}" href="/agendar?${qs({ prof: prof?.id, mod: k })}"><b>${l}</b><small>${d}</small></a>`)}</div></section>` : ''}
+    ${modsOf.length > 1 ? html`<section class="bk-block"><h2>Como prefere?</h2><div class="bk-opts">${[['online', 'On-line', 'por videochamada'], ['presencial', 'Presencial', (Brand.get().city ? `no consultório, em ${Brand.get().city}` : 'no consultório')]].filter(([k]) => modsOf.includes(k)).map(([k, l, d]) => html`<a class="bk-opt ${mod === k ? 'on' : ''}" href="/agendar?${qs({ prof: prof?.id, mod: k })}"><b>${l}</b><small>${d}</small></a>`)}</div></section>` : ''}
     ${prof && mod ? html`<section class="bk-block"><h2>Escolha o horário <small class="muted">(sessões de ${g ? g.duration : c.durationEff} min)</small></h2>
       ${days.length ? html`<div class="bk-days">${days.map((d) => html`<div class="bk-day"><b>${d.label}</b><div class="bk-times">${d.times.map((t) => html`<a class="bk-time" href="/agendar/dados?${qs({ prof: prof.id, mod, t: `${d.day} ${t}` })}">${t}</a>`)}</div></div>`)}</div>`
       : html`<p class="muted">Não há horários livres nestes dias.</p>`}

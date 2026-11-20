@@ -1,5 +1,6 @@
 // Notificações push (Web Push) para os aparelhos dos profissionais.
 // As mensagens são curtas e não levam informação clínica.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import webpush from 'web-push';
 import { q, getSetting } from './db.js';
@@ -40,11 +41,11 @@ export async function sendToUser(userId, payload) {
   const subs = await q('SELECT * FROM push_subscriptions WHERE user_id = ?', [userId]);
   if (!subs.length) return 0;
   const k = await keys();
-  const opts = { vapidDetails: { subject: 'mailto:contato@lorrainymendes.com.br', publicKey: k.publicKey, privateKey: k.privateKey }, TTL: 6 * 3600, urgency: 'high', timeout: 10000 };
+  const opts = { vapidDetails: { subject: `mailto:${(await Brand.load()).email || 'contato@mentez.com.br'}`, publicKey: k.publicKey, privateKey: k.privateKey }, TTL: 6 * 3600, urgency: 'high', timeout: 10000 };
   let ok = 0;
   for (const s of subs) {
     try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), opts);
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify({ icon: Brand.icon('app-192.png'), badge: Brand.icon('badge-96.png'), ...payload }), opts);
       await q('UPDATE push_subscriptions SET last_used_at = NOW() WHERE id = ?', [s.id]);
       ok++;
     } catch (e) {

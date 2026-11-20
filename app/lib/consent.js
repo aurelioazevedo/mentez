@@ -1,5 +1,6 @@
 // Termos digitais: o paciente lê e aceita por um link. Guarda o texto exato aceito (com resumo criptográfico),
 // data/hora, IP, navegador e quem assinou (o próprio paciente ou o responsável legal).
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one } from './db.js';
@@ -85,10 +86,10 @@ async function vars(patient) {
   const pro = patient.owner_id ? await one('SELECT name, title, crp FROM users WHERE id = ?', [patient.owner_id]) : null;
   const clinic = await Fin.clinic(); const pol = await Fin.policy();
   return {
-    paciente: patient.social_name || patient.name, profissional: pro ? proName(pro) : 'Dra. Lorrainy Mendes', crp: pro?.crp || '09/23862',
+    paciente: patient.social_name || patient.name, profissional: pro ? proName(pro) : Brand.get().who, crp: pro?.crp || Brand.get().crp,
     valor_sessao: patient.session_fee ? Fin.brl(patient.session_fee) : 'combinado com o(a) profissional', politica_faltas: Fin.policyText(pol),
     modalidade: { online: 'on-line', presencial: 'presencial', hibrido: 'presencial e on-line' }[patient.modality] || 'presencial',
-    data: `Goiânia, ${longDate(todayLocal())}.`, clinica: clinic.name || 'Lorrainy Mendes — Psicologia',
+    data: `${Brand.get().city ? `${Brand.get().city}, ` : ''}${longDate(todayLocal())}.`, clinica: clinic.name || Brand.get().name,
   };
 }
 const fill = (text, v) => String(text).replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined ? v[k] : m));

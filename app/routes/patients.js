@@ -1,3 +1,4 @@
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
@@ -5,7 +6,7 @@ import { cpfValid, cpfFmt, docFmt, docValid, phoneFmt } from '../lib/br.js';
 import { patientTab as insuranceTab } from './insurance.js';
 import { attendanceBanner } from './recepcao.js';
 import { patientTab as scalesTab } from './scales.js';
-import { page, bare, html, raw, money, badge, brDate, brDateTime, label, waLink } from '../lib/html.js';
+import { page, bare, html, raw, money, badge, brDate, brDateTime, label, waLink, logoTag } from '../lib/html.js';
 import { router, send, int, str, dec } from '../lib/router.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
 import { todayLocal, nowLocal, isYmd, longDate } from '../lib/time.js';
@@ -478,7 +479,7 @@ r.get('/:id/prontuario', async (req, res, next) => {
   send(res, bare(`Prontuário · ${nm(p)}`, html`
   <div class="print-bar"><button class="btn" data-print>Imprimir / salvar em PDF</button></div>
   <article class="letter">
-    <header class="lh"><img src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><div><b>${me?.name || 'Lorrainy Mendes'}</b><span>${me?.title === 'Dr.' ? 'Psicólogo' : 'Psicóloga'}${me?.crp ? ` · CRP ${me.crp}` : ''}</span></div></header>
+    <header class="lh">${logoTag('')}<div><b>${me?.name || Brand.get().short}</b><span>${me?.title === 'Dr.' ? 'Psicólogo' : 'Psicóloga'}${me?.crp ? ` · CRP ${me.crp}` : ''}</span></div></header>
     <h1>Prontuário psicológico</h1>
     <p class="confid">Documento sigiloso — Código de Ética Profissional do Psicólogo, art. 9º.</p>
     <dl class="dl compact"><dt>Paciente</dt><dd>${p.name}${p.social_name ? ` (nome social: ${p.social_name})` : ''}</dd><dt>Nascimento</dt><dd>${brDate(p.birth_date)}</dd><dt>Início</dt><dd>${brDate(p.created_at)}</dd><dt>Modalidade</dt><dd>${label(p.modality)}</dd></dl>
@@ -486,8 +487,8 @@ r.get('/:id/prontuario', async (req, res, next) => {
       ${rec.demand ? html`<p><b>Demanda trazida:</b> ${rec.demand}</p>` : ''}
       <div class="rt">${raw(rec.html)}</div>
       ${rec.hypothesis || rec.cid10.length || rec.cid11.length ? html`<p><b>Hipótese diagnóstica:</b> ${rec.hypothesis || '—'}${rec.cid10.length ? ` · CID-10: ${rec.cid10.map((c) => `${c}${CID.nameOf('cid10', c) ? ` (${CID.nameOf('cid10', c)})` : ''}`).join(', ')}` : ''}${rec.cid11.length ? ` · CID-11: ${rec.cid11.map((c) => `${c}${CID.nameOf('cid11', c) ? ` (${CID.nameOf('cid11', c)})` : ''}`).join(', ')}` : ''}</p>` : ''}</section>`)}
-    <footer class="lf"><p>Goiânia, ${longDate(todayLocal())}.</p><div class="sign">${me?.name || ''}<br>${me?.title === 'Dr.' ? 'Psicólogo' : 'Psicóloga'}${me?.crp ? ` · CRP ${me.crp}` : ''}</div>
-    <p class="lf-contact">(62) 98445-4631 · contato@lorrainymendes.com.br · lorrainymendes.com.br</p></footer>
+    <footer class="lf"><p>${Brand.get().city ? `${Brand.get().city}, ` : ''}${longDate(todayLocal())}.</p><div class="sign">${me?.name || ''}<br>${me?.title === 'Dr.' ? 'Psicólogo' : 'Psicóloga'}${me?.crp ? ` · CRP ${me.crp}` : ''}</div>
+    <p class="lf-contact">${[Brand.get().phone, Brand.get().email, Brand.get().site].filter(Boolean).join(' · ')}</p></footer>
   </article>`, 'bare print'));
 });
 

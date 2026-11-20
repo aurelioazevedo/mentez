@@ -2,6 +2,7 @@
 // O agente conversa, informa, vende os e-books e — somente pelas ferramentas abaixo,
 // validadas no banco — consulta horários, agenda, remarca e cancela sessões, ou
 // transfere para atendimento humano. Nunca faz orientação clínica.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { q, one, getSetting, setSetting } from './db.js';
@@ -152,24 +153,33 @@ const EBOOKS = [
   ['Pack com os 5 e-books', 'R$ 97,00 (em vez de R$ 139,50 — economia de R$ 42,50)', 'https://pay.hotmart.com/F108410945Q', 'https://lorrainymendes.com.br/ebooks/'],
 ];
 
-function systemPrompt(c) {
-  return `Você é ${c.assistantName}, atendente virtual no WhatsApp do consultório da Dra. Lorrainy Mendes, psicóloga (CRP 09/23862). Você conversa com pacientes e com pessoas interessadas em atendimento ou nos e-books.
-
-## Sobre o consultório
-- Psicoterapia com a Terapia Cognitivo-Comportamental (TCC), para adultos.
+// Apresentação e dados fixos do consultório: os da Dra. Lorrainy no sistema dela; na Mentez, os da ficha de identidade
+// (o restante vem de “Informações definidas pelo consultório”, editável em Configurações → Atendente virtual).
+function aboutClinic(b) {
+  if (b.legacy) return `- Psicoterapia com a Terapia Cognitivo-Comportamental (TCC), para adultos.
 - Sessões de 40 minutos, on-line (por videochamada) ou presenciais em Goiânia (GO).
 - Formação: Psicologia pelo IPOG; especialização em TCC pelo IPOG em andamento.
-- Site: https://lorrainymendes.com.br · Instagram: @psilorrainymendes
+- Site: https://lorrainymendes.com.br · Instagram: @psilorrainymendes`;
+  return [b.place ? `- Atendimento on-line (por videochamada) e presencial em ${b.place}.` : '- Atendimento on-line (por videochamada) e presencial.',
+    b.siteUrl || b.instagram ? `- ${[b.siteUrl && `Site: ${b.siteUrl}`, b.instagram && `Instagram: ${b.instagram}`].filter(Boolean).join(' · ')}` : ''].filter(Boolean).join('\n');
+}
+function systemPrompt(c) {
+  const b = Brand.get();
+  const who = b.legacy ? 'do consultório da Dra. Lorrainy Mendes, psicóloga (CRP 09/23862)' : `de ${b.name}${b.proName ? ` (${b.proName}${b.crp ? `, CRP ${b.crp}` : ''})` : ''}`;
+  return `Você é ${c.assistantName}, atendente virtual no WhatsApp ${who}. Você conversa com pacientes e com pessoas interessadas em atendimento${b.legacy ? ' ou nos e-books' : ''}.
+
+## Sobre o consultório
+${aboutClinic(b)}
 - Todas as dúvidas são tiradas aqui mesmo, pelo WhatsApp. Nunca peça para a pessoa mandar e-mail nem procurar outro canal; se você não souber responder, use transferir_para_humano para a equipe continuar por aqui.
 ${c.clinicInfo ? `\n## Informações definidas pelo consultório (use-as como fonte oficial)\n${c.clinicInfo}\n` : ''}
-## E-books (vendidos pela Hotmart, acesso imediato após a compra)
+${b.legacy ? `## E-books (vendidos pela Hotmart, acesso imediato após a compra)
 ${EBOOKS.map(([t, p, pay, page]) => `- ${t}: ${p}. Compra: ${pay} · Página: ${page}`).join('\n')}
 Os e-books são materiais psicoeducativos de apoio; não substituem psicoterapia.
-
+` : ''}
 ## O que você faz
-1. Responde dúvidas sobre o atendimento, a TCC, modalidades, horários e os e-books.
+1. Responde dúvidas sobre o atendimento, modalidades e horários${b.legacy ? ', a TCC e os e-books' : ''}.
 2. Agenda, remarca e cancela sessões — sempre usando as ferramentas. Nunca diga que agendou, remarcou ou cancelou sem a ferramenta ter confirmado o sucesso.
-3. Vende quando fizer sentido: se a pessoa demonstra interesse em comprar, em um tema (ansiedade, depressão, término de relacionamento, TDAH, bipolaridade) ou pede material, apresente o e-book adequado com o preço e o link de compra; mencione o pack quando houver interesse em mais de um. Para quem busca atendimento, conduza com naturalidade ao agendamento da primeira sessão. Seja acolhedor(a), nunca insistente: uma oferta clara por vez, sem pressão, sem urgência falsa.
+3. ${b.legacy ? '' : 'Para quem busca atendimento, conduza com naturalidade ao agendamento da primeira sessão. '}${b.legacy ? 'Vende quando fizer sentido: se a pessoa demonstra interesse em comprar, em um tema (ansiedade, depressão, término de relacionamento, TDAH, bipolaridade) ou pede material, apresente o e-book adequado com o preço e o link de compra; mencione o pack quando houver interesse em mais de um. Para quem busca atendimento, conduza com naturalidade ao agendamento da primeira sessão. Seja acolhedor(a), nunca insistente: uma oferta clara por vez, sem pressão, sem urgência falsa.' : 'Seja acolhedor(a), nunca insistente: uma oferta clara por vez, sem pressão, sem urgência falsa.'}
 
 ## Como agendar
 - Use consultar_horarios para obter horários livres e ofereça de 2 a 4 opções concretas (dia da semana, data e hora). Nunca invente horários.
@@ -194,7 +204,7 @@ ${c.waitlistOn ? `- Lista de espera: se nenhum horário livre servir para a pess
 - Português do Brasil, caloroso, respeitoso e objetivo, como numa conversa de WhatsApp: mensagens curtas (até ~5 linhas), sem listas longas, no máximo um emoji quando combinar.
 - Use *asteriscos* para negrito (formato do WhatsApp). Não use títulos nem Markdown de links: escreva o link puro.
 - Trate a pessoa pelo primeiro nome quando souber.
-- Ao falar de qualquer psicólogo(a) do consultório, use sempre o tratamento Dr. ou Dra. antes do nome, exatamente como aparece nas ferramentas e no contexto (ex.: “Dra. Lorrainy Mendes”, “a Dra. Lorrainy”). Nunca chame um(a) psicólogo(a) só pelo nome.
+- Ao falar de qualquer psicólogo(a) do consultório, use sempre o tratamento Dr. ou Dra. antes do nome, exatamente como aparece nas ferramentas e no contexto (ex.: “${b.proName || 'Dra. Ana Souza'}”). Nunca chame um(a) psicólogo(a) só pelo nome.
 - O bloco "Contexto atual" enviado pelo sistema traz data, hora, quem é o contato e as sessões dele: use-o, mas nunca o copie para a pessoa.`;
 }
 
@@ -617,7 +627,7 @@ export function afterChange(c, apptId, ownerId, title, p, start, sendPro) {
 // ---------- contexto por turno (vai como mensagem de sistema, não no prompt fixo) ----------
 async function contextMessage(c, conv, extra) {
   const now = nowLocal();
-  const lines = [`Contexto atual (sistema): agora é ${weekday(now.slice(0, 10))}, ${brDate(now)} ${now.slice(11, 16)} (horário de Goiânia).`];
+  const lines = [`Contexto atual (sistema): agora é ${weekday(now.slice(0, 10))}, ${brDate(now)} ${now.slice(11, 16)} (horário de Brasília).`];
   if (conv.patient_id) {
     const p = await one('SELECT name, social_name FROM patients WHERE id = ?', [conv.patient_id]);
     const next = await q("SELECT id, starts_at, modality, status FROM appointments WHERE patient_id = ? AND starts_at >= NOW() AND status IN ('agendada','confirmada') ORDER BY starts_at LIMIT 3", [conv.patient_id]);

@@ -1,7 +1,8 @@
 // Termos digitais: página pública de leitura/aceite (/t/:token), envio, comprovante e modelos editáveis.
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
-import { page, bare, html, raw, brDate, brDateTime } from '../lib/html.js';
+import { page, bare, html, raw, brDate, brDateTime, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import { decrypt } from '../lib/crypto.js';
 import { canSeePatient, forbidden } from '../lib/perm.js';
@@ -20,7 +21,7 @@ export async function publicView(req, res) {
   const done = l.status !== 'pendente';
   res.set('Cache-Control', 'no-store');
   send(res, bare('Termos para leitura e aceite', html`<main class="legal consent-pub">
-    <img class="legal-logo-img" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" width="150">
+    ${logoTag('legal-logo-img', 150)}
     <h1>Documentos para leitura</h1>
     <p class="muted">Para: <b>${p ? (p.social_name || p.name) : 'paciente'}</b></p>
     ${l.expired ? html`<div class="flash err">Este link expirou. Peça um novo link ao consultório.</div>` : ''}
@@ -36,7 +37,7 @@ export async function publicView(req, res) {
       <p class="muted small">Ao confirmar, registramos data, hora, endereço IP e o texto exato aceito, como comprovante.</p>
       <div class="actions"><button class="btn" name="decisao" value="aceito">Confirmar aceite</button><button class="btn ghost" name="decisao" value="recusado" formnovalidate>Não concordo</button></div>
     </form>` : ''}
-    <p class="muted small">Dúvidas: WhatsApp (62) 98445-4631 · contato@lorrainymendes.com.br · <a href="/privacidade">Política de Privacidade</a></p>
+    <p class="muted small">Dúvidas: ${[Brand.get().phone && `WhatsApp ${Brand.get().phone}`, Brand.get().email].filter(Boolean).join(' · ')} · <a href="/privacidade">Política de Privacidade</a></p>
   </main>`, 'bare legal-page', req));
 }
 export async function publicDecide(req, res) {
@@ -112,7 +113,7 @@ settings.get('/', async (req, res) => {
     title: 'Termos e documentos', active: 'config',
     body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Termos e documentos</h1><p class="muted">Textos que o paciente lê e aceita pelo link. Ao salvar uma alteração, a versão aumenta; os aceites antigos guardam o texto da época.</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
-    <div class="flash warn">Os modelos abaixo são um ponto de partida. Revise o texto com a Dra. Lorrainy (e, se possível, com assessoria jurídica) antes de enviar aos pacientes.</div>
+    <div class="flash warn">Os modelos abaixo são um ponto de partida. Revise o texto com o(a) profissional responsável (e, se possível, com assessoria jurídica) antes de enviar aos pacientes.</div>
     <p class="muted small">Campos automáticos: ${Object.entries(C.VARS).map(([k, l]) => html`<code>{${k}}</code> ${l} · `)}</p>
     ${Object.entries(t).map(([k, d]) => html`<form method="post" action="/configuracoes/termos/${k}" class="card stack">
       <h2>${C.KINDS[k]} <small class="muted">versão ${d.version}${d.isDefault ? ' · modelo padrão' : ` · atualizado ${brDate(d.updated_at)}`}</small></h2>

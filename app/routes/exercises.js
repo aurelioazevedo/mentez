@@ -1,9 +1,10 @@
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { q, one, audit } from '../lib/db.js';
-import { page, bare, html, raw, badge, brDate, brDateTime, waLink } from '../lib/html.js';
+import { page, bare, html, raw, badge, brDate, brDateTime, waLink, logoTag } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import { encrypt, decrypt, randomToken, sha256 } from '../lib/crypto.js';
 import { nowLocal, todayLocal, addDays } from '../lib/time.js';
@@ -91,7 +92,7 @@ async function showLink(req, res, id, token, sent = null) {
   const s = await one('SELECT s.*, p.name, p.social_name, p.phone FROM assignments s JOIN patients p ON p.id = s.patient_id WHERE s.id = ?', [id]);
   const ex = byKey(s.exercise_key);
   const link = `${baseUrl(req)}/p/${token}`;
-  const wa = waLink(s.phone, `Olá, ${nm(s).split(' ')[0]}! Conforme combinamos na sessão, segue o exercício “${ex.title}”. É só abrir o link: ${link}\n\nO link é pessoal, não compartilhe. — Dra. Lorrainy Mendes, Psicóloga`);
+  const wa = waLink(s.phone, `Olá, ${nm(s).split(' ')[0]}! Conforme combinamos na sessão, segue o exercício “${ex.title}”. É só abrir o link: ${link}\n\nO link é pessoal, não compartilhe. — ${Brand.get().proName || Brand.get().short}${Brand.get().proRole ? `, ${Brand.get().proRole}` : ''}`);
   send(res, page(req, {
     title: 'Link gerado', active: 'exercicios',
     body: html`<header class="ph"><div><p class="eyebrow">${nm(s)}</p><h1>Link do exercício</h1></div></header>
@@ -165,7 +166,7 @@ async function byToken(token) {
 
 const portalShell = (title, inner) => bare(title, html`
   <div class="portal">
-    <header class="portal-h"><img class="logo-light" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark" src="/static/img/logo-creme.png" alt="Lorrainy Mendes"><span>Psicóloga · CRP 09/23862</span></header>
+    <header class="portal-h">${logoTag('')}<span>${Brand.get().signLine}</span></header>
     ${inner}
     <footer class="portal-f">Este link é pessoal e sigiloso. Suas respostas são vistas apenas pela sua psicóloga.<br>Em caso de crise: CVV 188 · SAMU 192</footer>
   </div>`, 'bare portal-bg');

@@ -1,7 +1,7 @@
 // Escalas (PHQ-9, GAD-7): aba na ficha do paciente, aplicação na sessão, envio por link/WhatsApp/portal e página do paciente.
 import { q, one, audit } from '../lib/db.js';
 import { botFields } from '../lib/ratelimit.js';
-import { page, bare, html, raw, brDate, brDateTime } from '../lib/html.js';
+import { page, bare, html, raw, brDate, brDateTime, logoTag } from '../lib/html.js';
 import { router, send, int } from '../lib/router.js';
 import { canSeePatient, forbidden } from '../lib/perm.js';
 import * as S from '../lib/scales.js';
@@ -172,7 +172,7 @@ staff.post('/:id/visto', async (req, res, next) => {
 export const publicScale = router();
 async function shellPub(req, title, inner) {
   const clinic = await Fin.clinic();
-  return bare(title, html`<main class="legal scale-pub"><img class="legal-logo-img" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga" width="150">${inner}
+  return bare(title, html`<main class="legal scale-pub">${logoTag('legal-logo-img', 150)}${inner}
     <p class="muted small">Dúvidas: WhatsApp ${clinic.phone} · Em caso de crise: CVV 188 (24 h) · SAMU 192</p></main>`, 'bare legal-page', req);
 }
 const loadPub = async (tok) => { const id = S.idOfToken(tok); return id ? one('SELECT s.*, p.name, p.social_name FROM scale_apps s JOIN patients p ON p.id = s.patient_id WHERE s.id = ?', [id]) : null; };

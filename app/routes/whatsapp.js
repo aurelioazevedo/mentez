@@ -1,3 +1,4 @@
+import * as Brand from '../lib/brand.js';
 import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDateTime, label } from '../lib/html.js';
@@ -35,17 +36,17 @@ admin.get('/', async (req, res) => {
           <label class="sw-mode"><input type="radio" name="mode" value="assistente" ${sw.mode === 'assistente' ? raw('checked') : ''}>
             <span><b>🤖 Automatizado — atendente virtual</b><small>Quem clica fala com o atendente virtual no número ${fmtBR(swNum)}${c?.instance ? ` (instância “${c.instance}”)` : ''}: ele tira dúvidas, agenda, remarca e transfere para a equipe quando precisa.</small></span></label>
           <label class="sw-mode"><input type="radio" name="mode" value="doutora" ${sw.mode !== 'assistente' ? raw('checked') : ''}>
-            <span><b>👩‍⚕️ WhatsApp da Dra. Lorrainy Mendes</b><small>Quem clica abre conversa direto com a Dra. Lorrainy, sem automação.</small></span></label>
+            <span><b>👩‍⚕️ WhatsApp ${Brand.get().proName ? `da(o) ${Brand.get().proName}` : 'do profissional'}</b><small>Quem clica abre conversa direto com o(a) profissional, sem automação.</small></span></label>
         </div>
-        <label class="fld"><span>WhatsApp da Dra. Lorrainy (com DDD)</span><input name="doctorPhone" required inputmode="tel" value="${fmtBR(sw.doctorPhone)}"></label>
-        <label class="fld check"><input type="checkbox" name="fallback" value="1" ${sw.fallback ? raw('checked') : ''}><span>Se o atendente virtual estiver desligado, sem créditos ou com o WhatsApp desconectado, mandar para o WhatsApp da Dra. Lorrainy (recomendado)</span></label>
+        <label class="fld"><span>WhatsApp do(a) profissional (com DDD)</span><input name="doctorPhone" required inputmode="tel" value="${fmtBR(sw.doctorPhone)}"></label>
+        <label class="fld check"><input type="checkbox" name="fallback" value="1" ${sw.fallback ? raw('checked') : ''}><span>Se o atendente virtual estiver desligado, sem créditos ou com o WhatsApp desconectado, mandar para o WhatsApp do(a) profissional (recomendado)</span></label>
         <div class="actions"><button class="btn">Salvar</button></div>
       </form>
-      <div class="sw-now ${swRoute.target}">Agora, quem clica no site vai para: <b>${swRoute.target === 'assistente' ? `atendente virtual · ${fmtBR(swRoute.phone)}` : `Dra. Lorrainy · ${fmtBR(swRoute.phone)}`}</b>
+      <div class="sw-now ${swRoute.target}">Agora, quem clica no site vai para: <b>${swRoute.target === 'assistente' ? `atendente virtual · ${fmtBR(swRoute.phone)}` : `profissional · ${fmtBR(swRoute.phone)}`}</b>
         ${sw.mode === 'assistente' && swRoute.target === 'doutora' ? html`<br><small>Reserva ativada: ${SiteWA.REASONS[swRoute.reason] || swRoute.reason}.</small>` : ''}</div>
       <p class="small"><b>Link para usar em outros lugares</b> (bio, anúncios, QR code) — troque <code>o=site</code> pela origem para contar os cliques:</p>
       <div class="copy"><input readonly value="${siteLink}" id="sitelink"><button class="btn ghost" type="button" data-copy="#sitelink">Copiar</button><a class="btn ghost" href="/wa?o=teste" target="_blank" rel="noopener">Testar</a></div>
-      ${swStats.length ? html`<h3 class="small">Cliques nos últimos 30 dias</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Origem</th><th>Atendente virtual</th><th>Dra. Lorrainy</th><th>Total</th></tr></thead>
+      ${swStats.length ? html`<h3 class="small">Cliques nos últimos 30 dias</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Origem</th><th>Atendente virtual</th><th>Profissional</th><th>Total</th></tr></thead>
         <tbody>${swStats.map((r) => html`<tr><td>${r.origin}</td><td>${Number(r.assistente)}</td><td>${Number(r.doutora)}</td><td><b>${Number(r.total)}</b></td></tr>`)}</tbody></table></div>`
       : html`<p class="muted small">Nenhum clique registrado ainda.</p>`}
     </section>`;
@@ -100,7 +101,7 @@ admin.get('/', async (req, res) => {
     ${siteCard}
     <form method="post" action="/configuracoes/whatsapp" class="card form-grid">
       <h2 class="span2">Conexão com a Evolution API</h2>
-      <label class="fld"><span>Endereço da Evolution</span><input name="url" type="url" required value="${c?.url || 'https://evolution.lorrainymendes.com.br'}"></label>
+      <label class="fld"><span>Endereço da Evolution</span><input name="url" type="url" required value="${c?.url || ''}" placeholder="https://evolution.suaclinica.com.br"></label>
       <label class="fld"><span>Nome da instância</span><input name="instance" required value="${c?.instance || ''}" placeholder="ex.: teste-consultorio"></label>
       <label class="fld span2"><span>Chave da API (AUTHENTICATION_API_KEY)</span><input type="password" name="apiKey" ${c?.apiKey ? '' : raw('required')} autocomplete="off" placeholder="${c?.apiKey ? 'deixe em branco para manter a atual' : 'cole a chave da Evolution'}"></label>
       <label class="fld check span2"><input type="checkbox" name="enabled" value="1" ${!c || c.enabled ? raw('checked') : ''}><span><b>Envios pelo WhatsApp ativados</b> (desmarque para pausar tudo)</span></label>
@@ -243,20 +244,20 @@ admin.post('/desconectar', async (req, res) => {
 admin.post('/site', async (req, res) => {
   const b = req.body;
   const phone = W.normalizePhone(str(b.doctorPhone, 40));
-  if (!phone) { res.flash('WhatsApp da Dra. Lorrainy inválido.', 'err'); return res.redirect('/configuracoes/whatsapp#site'); }
+  if (!phone) { res.flash('WhatsApp do(a) profissional inválido.', 'err'); return res.redirect('/configuracoes/whatsapp#site'); }
   const mode = b.mode === 'assistente' ? 'assistente' : 'doutora';
   await SiteWA.saveConfig({ mode, doctorPhone: phone, fallback: !!b.fallback });
   if (mode === 'assistente') await SiteWA.assistantNumber(true);
   await audit(req, 'whatsapp-configurar', `site → ${mode}`);
   const r = await SiteWA.route();
   res.flash(mode === 'assistente' && r.target !== 'assistente'
-    ? `Salvo. Atenção: por enquanto os cliques vão para a Dra. Lorrainy (${SiteWA.REASONS[r.reason] || r.reason}).`
-    : `Salvo. Os botões do site agora levam ${r.target === 'assistente' ? 'ao atendente virtual' : 'ao WhatsApp da Dra. Lorrainy'}.`, mode === 'assistente' && r.target !== 'assistente' ? 'warn' : 'ok');
+    ? `Salvo. Atenção: por enquanto os cliques vão para o WhatsApp do(a) profissional (${SiteWA.REASONS[r.reason] || r.reason}).`
+    : `Salvo. Os botões do site agora levam ${r.target === 'assistente' ? 'ao atendente virtual' : 'ao WhatsApp do(a) profissional'}.`, mode === 'assistente' && r.target !== 'assistente' ? 'warn' : 'ok');
   res.redirect('/configuracoes/whatsapp#site');
 });
 
 admin.post('/teste', async (req, res) => {
-  const r = await W.send({ phone: str(req.body.phone, 40), text: '✅ Mensagem de teste do sistema do consultório Lorrainy Mendes. A integração com o WhatsApp está funcionando.', kind: 'teste', user_id: req.user.id });
+  const r = await W.send({ phone: str(req.body.phone, 40), text: `✅ Mensagem de teste do ${Brand.get().appName}. A integração com o WhatsApp está funcionando.`, kind: 'teste', user_id: req.user.id });
   res.flash(r.ok ? 'Mensagem de teste enviada.' : `Falhou: ${r.error}`, r.ok ? 'ok' : 'err').redirect('/configuracoes/whatsapp');
 });
 
@@ -286,7 +287,7 @@ export async function siteLink(req, res) {
   const origin = SiteWA.cleanOrigin(req.query.o);
   const text = SiteWA.cleanText(req.query.text ?? req.query.t);
   let r;
-  try { r = await SiteWA.route(); } catch { r = { target: 'doutora', phone: (await SiteWA.config().catch(() => ({})))?.doctorPhone || SiteWA.DEFAULT_DOCTOR, reason: 'erro' }; }
+  try { r = await SiteWA.route(); } catch { r = { target: 'doutora', phone: (await SiteWA.config().catch(() => ({})))?.doctorPhone || SiteWA.defaultDoctor(), reason: 'erro' }; }
   if (origin !== 'teste') SiteWA.logClick(origin, r);
   res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
   res.redirect(302, `https://wa.me/${r.phone}${text ? `?text=${encodeURIComponent(text)}` : ''}`);

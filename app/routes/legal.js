@@ -1,16 +1,28 @@
 // Páginas públicas exigidas pelo Google (tela de consentimento OAuth): Política de Privacidade e Termos de Uso.
+import * as Brand from '../lib/brand.js';
 import { bare, html } from '../lib/html.js';
 import { send } from '../lib/router.js';
+import * as Tenancy from '../lib/tenancy.js';
 
-const wrap = (req, title, body) => bare(title, html`<main class="legal"><a class="legal-logo" href="https://lorrainymendes.com.br"><img src="/static/img/logo-terracota.png" alt="Lorrainy Mendes — Psicóloga"></a>${body}
-  <p class="muted small">Última atualização: novembro de 2026 · Dúvidas: <a href="mailto:contato@lorrainymendes.com.br">contato@lorrainymendes.com.br</a> · WhatsApp (62) 98445-4631</p></main>`, 'bare legal-page', req);
+// Dados da clínica para os textos (endereço do sistema, responsável, CRP, cidade, contatos)
+function who() {
+  const b = Brand.get();
+  const host = (() => { try { return new URL(Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br').hostname; } catch { return ''; } })();
+  const resp = b.proName ? `${b.proName.replace(/^Dra?\.\s*/, '')}${b.proRole ? `, ${b.proRole.toLowerCase()}` : ''}${b.crp ? `, CRP ${b.crp}` : ''}` : b.name;
+  return { b, host, resp };
+}
+
+const wrap = (req, title, body) => { const { b } = who(); return bare(title, html`<main class="legal">${b.logoUrl ? html`<a class="legal-logo" href="${b.siteUrl || '/'}"><img src="${b.logoUrl}" alt="${b.short}"></a>` : html`<p class="legal-logo brand-word">${b.short}</p>`}${body}
+  <p class="muted small">Última atualização: novembro de 2026${b.email ? html` · Dúvidas: <a href="mailto:${b.email}">${b.email}</a>` : ''}${b.phone ? ` · WhatsApp ${b.phone}` : ''}</p></main>`, 'bare legal-page', req); };
 
 export function privacidade(req, res) {
+  const { b, host, resp } = who();
   send(res, wrap(req, 'Política de Privacidade', html`
   <h1>Política de Privacidade</h1>
-  <p>Esta política explica como o <b>Sistema do Consultório Lorrainy Mendes</b> (sistema.lorrainymendes.com.br), usado pelo consultório da psicóloga Lorrainy Mendes (CRP 09/23862) e pelos profissionais autorizados, trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018 — LGPD) e o Código de Ética Profissional do Psicólogo.</p>
+  <p>Esta política explica como o <b>${b.appName}</b> (${host}), usado por ${b.name} e pelos profissionais autorizados, trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018 — LGPD) e o Código de Ética Profissional do Psicólogo.</p>
   <h2>1. Quem é o responsável</h2>
-  <p>A controladora dos dados é Lorrainy Mendes, psicóloga, CRP 09/23862, Goiânia/GO. Contato do encarregado: contato@lorrainymendes.com.br.</p>
+  <p>A controladora dos dados é ${resp}${b.placeSlash ? `, ${b.placeSlash}` : ''}.${b.email ? ` Contato do encarregado: ${b.email}.` : ''}</p>
+  ${b.legacy ? '' : html`<p>O sistema é fornecido pela <b>Mentez</b> (mentez.com.br), que atua como <b>operadora</b>: trata os dados apenas para prestar o serviço, conforme as instruções da clínica e o contrato, com os dados de cada clínica separados e criptografados.</p>`}
   <h2>2. Quais dados tratamos</h2>
   <ul><li><b>Pacientes:</b> nome, contato (telefone, e-mail), data de nascimento, CPF quando necessário para recibos, agenda de sessões, registros de prontuário, pagamentos e mensagens trocadas pelo WhatsApp do consultório.</li>
   <li><b>Profissionais e equipe:</b> nome, e-mail, registro profissional, foto de perfil opcional e registros de acesso ao sistema.</li>
@@ -26,13 +38,14 @@ export function privacidade(req, res) {
   <h2>7. Por quanto tempo</h2>
   <p>Prontuários são mantidos pelo prazo mínimo exigido pelo Conselho Federal de Psicologia (5 anos). Demais dados, enquanto forem necessários às finalidades acima ou por obrigação legal.</p>
   <h2>8. Seus direitos</h2>
-  <p>Você pode pedir confirmação, acesso, correção, anonimização, portabilidade ou eliminação dos seus dados, e revogar consentimentos, pelo e-mail contato@lorrainymendes.com.br. Respondemos no prazo legal.</p>`));
+  <p>Você pode pedir confirmação, acesso, correção, anonimização, portabilidade ou eliminação dos seus dados, e revogar consentimentos, ${b.email ? `pelo e-mail ${b.email}` : 'diretamente com o consultório'}. Respondemos no prazo legal.</p>`));
 }
 
 export function termos(req, res) {
+  const { b, host, resp } = who();
   send(res, wrap(req, 'Termos de Uso', html`
   <h1>Termos de Uso</h1>
-  <p>O <b>Sistema do Consultório Lorrainy Mendes</b> (sistema.lorrainymendes.com.br) é uma ferramenta de uso interno e restrito do consultório da psicóloga Lorrainy Mendes (CRP 09/23862) e dos profissionais e colaboradores por ela autorizados.</p>
+  <p>O <b>${b.appName}</b> (${host}) é uma ferramenta de uso interno e restrito de ${b.name} (${resp}) e dos profissionais e colaboradores autorizados.${b.legacy ? '' : ' O sistema é fornecido pela Mentez (mentez.com.br).'}</p>
   <h2>1. Acesso</h2>
   <p>O acesso é pessoal e intransferível, feito com usuário e senha fornecidos pelo consultório. Cada pessoa vê apenas o que sua função permite, e todos os acessos ficam registrados.</p>
   <h2>2. Responsabilidades de quem usa</h2>

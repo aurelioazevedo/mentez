@@ -1,6 +1,7 @@
 // Marketing → Reativação: pacientes que pararam de vir (sem sessão há X semanas e sem nada marcado)
 // recebem um convite gentil para retomar, pelo WhatsApp ou e-mail, com link para agendar e para não receber mais.
 // Só para quem autorizou o contato; respeita um intervalo entre convites e mede quem voltou.
+import * as Brand from './brand.js';
 import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
@@ -56,7 +57,7 @@ export async function candidates({ weeks, includeAlta, cooldownDays, scope = { s
     ORDER BY last_at DESC LIMIT ?`, [...scope.params, ...(ownerId ? [ownerId] : []), now, now, cooldownDays, now, weeks, limit]);
 }
 export const channelOf = (p, c) => (p.whatsapp_optin && p.phone ? 'whatsapp' : c.email && p.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email) && p.email_optin !== 0 ? 'email' : null);
-async function clinicName() { try { return JSON.parse((await getSetting('fin_clinic')) || '{}').name || 'Consultório Lorrainy Mendes'; } catch { return 'Consultório Lorrainy Mendes'; } }
+async function clinicName() { return (await Brand.load()).name; }
 export async function render(p, c = null) {
   c = c || await config();
   return WA.render(withOptOut(c.text), { nome: WA.firstName(p), clinica: await clinicName(), link: bookUrl(p.owner_id), sair: optOutUrl(p.id) });
