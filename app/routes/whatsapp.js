@@ -1,3 +1,4 @@
+import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDateTime, label } from '../lib/html.js';
 import { router, send, str, int } from '../lib/router.js';
@@ -5,7 +6,7 @@ import { safeEqual } from '../lib/crypto.js';
 import * as W from '../lib/whatsapp.js';
 import * as SiteWA from '../lib/sitewa.js';
 
-const base = (req) => (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+const base = (req) => (Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
 const KIND = { aniversario: 'Aniversário', pesquisa: 'Pesquisa de satisfação', lembrete: 'Lembrete', aviso: 'Aviso (2h antes)', confirmacao: 'Confirmação', remarcacao: 'Remarcação', exercicio: 'Exercício', pagamento: 'Pagamento', cobranca: 'Cobrança', lista_espera: 'Lista de espera', teste: 'Teste', recebida: 'Recebida' };
 
 // =====================================================================

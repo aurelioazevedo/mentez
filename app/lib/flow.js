@@ -1,5 +1,6 @@
 // Fluxo do atendimento: Agendado → Aguardando → Em atendimento → Finalizado → Pagamento registrado.
 // Configurável em Configurações → Recepção e atendimento.
+import * as Tenancy from './tenancy.js';
 import { q, one, getSetting, setSetting } from './db.js';
 import * as Fin from './fin.js';
 import * as CRM from './crm.js';
@@ -66,9 +67,9 @@ export async function setStatus(apptId, status, userId) {
 }
 
 // Lembrete automático de pagamento: sessões finalizadas há N horas ainda sem pagamento (uma vez por cobrança).
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function autoReminders() {
-  if (running) return; running = true;
+  if (RUNNING.on) return; RUNNING.on = true;
   try {
     const c = await config();
     if (c.reminder !== 'auto') return;
@@ -85,7 +86,7 @@ export async function autoReminders() {
       if (!out.ok) await Fin.logPay(r.id, 'lembrete', null, `Automático — não enviado: ${out.error}`);
       await new Promise((ok) => setTimeout(ok, Number(process.env.WA_BULK_GAP_MS || 5000)));
     }
-  } catch (e) { console.error('lembrete automático', e.message); } finally { running = false; }
+  } catch (e) { console.error('lembrete automático', e.message); } finally { RUNNING.on = false; }
 }
 
 // Indicadores do dia (para a recepção e o painel)

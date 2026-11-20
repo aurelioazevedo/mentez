@@ -1,3 +1,4 @@
+import * as Tenancy from './tenancy.js';
 import { can, ROLES } from './perm.js';
 
 // Templates HTML seguros: tudo é escapado, exceto valores marcados com raw().
@@ -45,7 +46,8 @@ const ICON = {
 export const icon = (n) => raw(`<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`);
 
 // Módulos que podem ser ligados/desligados (o próprio módulo atualiza ao carregar a configuração)
-export const FEATURES = { locacao: false };
+// Módulos ligáveis do menu (um conjunto por clínica)
+export const FEATURES = Tenancy.scoped({ locacao: false });
 const NAV = [
   ['/', 'Início', 'home', ['agenda', 'cadastro']],
   ['/agenda', 'Agenda', 'agenda', ['agenda']],

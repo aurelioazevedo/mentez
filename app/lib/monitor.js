@@ -2,6 +2,7 @@
 // Os alertas saem por uma SEGUNDA instância do WhatsApp (“instância de alerta”), para continuarem chegando
 // mesmo quando a instância principal do consultório cai. Também vão por notificação (push) aos usuários master.
 // A queda do próprio sistema é vigiada por fora, pelo servidor do WhatsApp (Evolution), que consulta /saude.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, db, getSetting, setSetting } from './db.js';
 import * as WA from './whatsapp.js';
@@ -79,9 +80,10 @@ export async function sendTest(userName) {
 }
 
 // ---------- verificações (a cada poucos minutos, um processo por vez) ----------
-let running = false; const waDown = { n: 0 };
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
+const WD = Tenancy.scoped({ n: 0 }); // falhas seguidas do WhatsApp, por clínica
 export async function tick() {
-  if (running) return; running = true;
+  if (RUNNING.on) return; RUNNING.on = true;
   let conn;
   try {
     const c = await config();
@@ -93,8 +95,8 @@ export async function tick() {
     // 1) WhatsApp principal
     if (c.checks.whatsapp && WA.ready(w)) {
       const st = await WA.connectionState(w, true);
-      if (st !== 'open') { waDown.n++; if (waDown.n >= 2) await raise('wa_principal', `📵 O WhatsApp do consultório (${w.instance}) está *desconectado* (${st}). Lembretes, confirmações e atendente virtual estão parados.\nReconecte em Configurações → WhatsApp (ler o QR code).`); }
-      else { waDown.n = 0; await clear('wa_principal', `O WhatsApp do consultório (${w.instance}) voltou a funcionar.`); }
+      if (st !== 'open') { WD.n++; if (WD.n >= 2) await raise('wa_principal', `📵 O WhatsApp do consultório (${w.instance}) está *desconectado* (${st}). Lembretes, confirmações e atendente virtual estão parados.\nReconecte em Configurações → WhatsApp (ler o QR code).`); }
+      else { WD.n = 0; await clear('wa_principal', `O WhatsApp do consultório (${w.instance}) voltou a funcionar.`); }
     }
     // 1b) a própria instância de alerta
     if (c.instance && w?.url) {
@@ -133,7 +135,7 @@ export async function tick() {
     }
   } catch (e) { console.error('monitor', e.message); } finally {
     if (conn) { await conn.query("SELECT RELEASE_LOCK('lm_monitor')").catch(() => {}); conn.release(); }
-    running = false;
+    RUNNING.on = false;
   }
 }
 

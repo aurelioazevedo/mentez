@@ -1,6 +1,7 @@
 // Integração com o WhatsApp via Evolution API (instância própria do consultório).
 // Envia lembretes, links e confirmações; recebe respostas “1/2” por webhook.
 // Nenhum conteúdo clínico é enviado. O texto das mensagens fica criptografado no registro.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -36,9 +37,9 @@ export const TEMPLATE_LABELS = {
 export const PLACEHOLDERS = '{nome} {data} {hora} {dia_semana} {quando} {modalidade} {profissional} {link} {datas_extra} {recado} {paciente} {autor} {exercicio} {valor} {descricao} {vencimento} {pix}';
 
 // ---------- configuração ----------
-let cache = null;
+const S = Tenancy.scoped({ cache: null, stateCache: null }); // caches com um valor por clínica
 export async function config() {
-  if (cache && cache.at > Date.now() - 30e3) return cache.v;
+  if (S.cache && S.cache.at > Date.now() - 30e3) return S.cache.v;
   const raw = await getSetting('wa_config');
   let c = null;
   if (raw) {
@@ -54,7 +55,7 @@ export async function config() {
     c.windowStart = Number.isFinite(Number(c.windowStart)) ? Number(c.windowStart) : 8;
     c.windowEnd = Number.isFinite(Number(c.windowEnd)) ? Number(c.windowEnd) : 20;
   }
-  cache = { at: Date.now(), v: c };
+  S.cache = { at: Date.now(), v: c };
   return c;
 }
 export async function saveConfig(patch) {
@@ -65,10 +66,10 @@ export async function saveConfig(patch) {
   if (!next.webhookSecret) next.webhookSecret = crypto.randomBytes(24).toString('base64url');
   if (!next.cronToken) next.cronToken = crypto.randomBytes(24).toString('base64url');
   await setSetting('wa_config', JSON.stringify(next));
-  cache = null;
+  S.cache = null;
   return config();
 }
-export async function clearConfig() { await setSetting('wa_config', null); cache = null; }
+export async function clearConfig() { await setSetting('wa_config', null); S.cache = null; }
 export const ready = (c) => !!(c && c.enabled && c.url && c.apiKey && c.instance);
 
 // ---------- Evolution API ----------
@@ -97,7 +98,7 @@ export async function downloadMedia(msgKey, c = null) {
 // para servir pelo próprio sistema (a CSP só permite imagens do próprio domínio).
 const PIC_TTL_H = 72; const NOPIC_TTL_H = 24;
 const IMG_SIG = { 'image/jpeg': [0xff, 0xd8, 0xff], 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
-const picInflight = new Map();
+const picInflight = new Tenancy.TMap();  // separado por clínica
 export async function profilePhoto(phone) {
   const key = phoneKey(phone);
   if (!key) return null;
@@ -129,12 +130,11 @@ async function fetchPhoto(phone, key) {
   } catch { return undefined; }
 }
 
-let stateCache = null;
 export async function connectionState(c, fresh = false) {
-  if (!fresh && stateCache && stateCache.at > Date.now() - 120e3 && stateCache.key === c.url + c.instance) return stateCache.v;
+  if (!fresh && S.stateCache && S.stateCache.at > Date.now() - 120e3 && S.stateCache.key === c.url + c.instance) return S.stateCache.v;
   let v;
   try { v = (await evo(c, 'GET', `/instance/connectionState/${inst(c)}`)).instance?.state || 'desconhecido'; } catch (e) { v = `erro: ${e.message}`; }
-  stateCache = { at: Date.now(), key: c.url + c.instance, v };
+  S.stateCache = { at: Date.now(), key: c.url + c.instance, v };
   return v;
 }
 
@@ -153,7 +153,7 @@ export async function listInstances(c) {
 // QR code (base64 data URL) e/ou código de pareamento para conectar o aparelho.
 export async function connectInstance(c, number = null) {
   const r = await evo(c, 'GET', `/instance/connect/${inst(c)}${number ? `?number=${encodeURIComponent(number)}` : ''}`);
-  stateCache = null;
+  S.stateCache = null;
   const qr = r?.base64 || r?.qrcode?.base64 || null;
   return { qr: qr && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(qr) ? qr : null, pairingCode: r?.pairingCode || r?.qrcode?.pairingCode || null, state: r?.instance?.state || null };
 }
@@ -167,11 +167,11 @@ export async function instanceState(c, instance) {
   try { return (await evo(c, 'GET', `/instance/connectionState/${encodeURIComponent(instance)}`)).instance?.state || 'desconhecido'; } catch (e) { return `erro: ${e.message}`; }
 }
 export async function createInstance(c, name) {
-  stateCache = null;
+  S.stateCache = null;
   return evo(c, 'POST', '/instance/create', { instanceName: name, integration: 'WHATSAPP-BAILEYS', qrcode: true });
 }
 export async function logoutInstance(c) {
-  stateCache = null;
+  S.stateCache = null;
   return evo(c, 'DELETE', `/instance/logout/${inst(c)}`);
 }
 
@@ -383,13 +383,13 @@ export async function sendPayment(paymentId, userId) {
 }
 
 // ---------- lembretes automáticos ----------
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const AVISO_START = 6; const AVISO_END = 22; // o aviso curto pode sair entre 6h e 22h (sessões cedo/tarde)
 
 export async function processDueReminders({ maxPerRun = 25, delayMs = null } = {}) {
-  if (running) return { skipped: true };
-  running = true;
+  if (RUNNING.on) return { skipped: true };
+  RUNNING.on = true;
   const out = { sent: 0, failed: 0, notices: 0 };
   try {
     const c = await config();
@@ -441,12 +441,12 @@ export async function processDueReminders({ maxPerRun = 25, delayMs = null } = {
   } catch (e) {
     console.error('wa reminders', e.message);
     return { ...out, error: e.message };
-  } finally { running = false; }
+  } finally { RUNNING.on = false; }
 }
 
 export function startScheduler() {
   if (process.env.WA_SCHEDULER_OFF) return;
-  const tick = () => processDueReminders().catch((e) => console.error('wa tick', e.message));
+  const tick = () => Tenancy.forEachTenant(() => processDueReminders().catch((e) => console.error('wa tick', e.message)), 'lembretes WhatsApp');
   setTimeout(tick, 30e3);
   setInterval(tick, 5 * 60e3).unref();
 }

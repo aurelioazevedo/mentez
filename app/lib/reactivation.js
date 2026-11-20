@@ -1,6 +1,7 @@
 // Marketing → Reativação: pacientes que pararam de vir (sem sessão há X semanas e sem nada marcado)
 // recebem um convite gentil para retomar, pelo WhatsApp ou e-mail, com link para agendar e para não receber mais.
 // Só para quem autorizou o contato; respeita um intervalo entre convites e mede quem voltou.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
 import { nowLocal, todayLocal } from './time.js';
@@ -30,7 +31,7 @@ export async function saveConfig(b) {
 export const withOptOut = (t) => (t.includes('{sair}') ? t : `${t}\n\nSe preferir não receber este tipo de mensagem: {sair}`);
 
 // ---------- link para não receber mais ----------
-const sig = (id) => crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev').update(`reativacao:${id}`).digest('base64url').slice(0, 12);
+const sig = (id) => crypto.createHmac('sha256', Tenancy.env('SESSION_SECRET') || 'dev').update(`reativacao:${id}`).digest('base64url').slice(0, 12);
 export const optOutToken = (pid) => `${pid}.${sig(pid)}`;
 export function idOfToken(t) {
   const m = /^(\d{1,10})\.([\w-]{12})$/.exec(String(t || ''));
@@ -103,10 +104,10 @@ export async function stats({ scope = { sql: ' ', params: [] }, days = 90 } = {}
 }
 
 // ---------- envio automático (uma vez por dia, no horário escolhido) ----------
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick() {
-  if (running) return { skipped: true };
-  running = true;
+  if (RUNNING.on) return { skipped: true };
+  RUNNING.on = true;
   try {
     const c = await config();
     if (!c.auto) return { off: true };
@@ -122,5 +123,5 @@ export async function tick() {
       if (r.ok) { sent++; left--; }
     }
     return { sent };
-  } finally { running = false; }
+  } finally { RUNNING.on = false; }
 }

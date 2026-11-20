@@ -1,4 +1,5 @@
 // IA na sessão: endpoints do gravador (prontuário do paciente) e a configuração.
+import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDateTime } from '../lib/html.js';
@@ -109,7 +110,7 @@ r.post('/autorizacao/:pid', json, async (req, res, next) => {
   let msg = ''; let ok = true;
   if (acao === 'papel') { await S.markPaper(p.id); await audit(req, 'sessao-ia-autorizacao-papel', `patient:${p.id}`); msg = 'Autorização em papel registrada.'; }
   else if (acao === 'enviar') {
-    const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    const base = (Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
     const out = await Consent.sendLink(p, ['gravacao_ia'], req.user.id, { base });
     await audit(req, 'termos-enviar', `patient:${p.id} gravacao_ia wa:${out.wa?.ok ? 1 : 0} email:${out.email?.ok ? 1 : 0}`);
     ok = !!(out.wa?.ok || out.email?.ok);

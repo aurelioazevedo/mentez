@@ -1,6 +1,7 @@
 // Lembretes de sessão por e-mail e SMS (além do WhatsApp).
 // E-mail: SMTP (por padrão o e-mail da clínica na Hostinger). SMS: Zenvia ou Twilio.
 // Cada lembrete leva um link seguro para o paciente confirmar a presença ou pedir para remarcar.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { q, one, getSetting, setSetting } from './db.js';
@@ -65,7 +66,7 @@ export async function saveConfig(b, cur) {
 
 // ---------- link seguro de confirmação ----------
 function sigOf(id) {
-  const s = process.env.SESSION_SECRET || 'dev';
+  const s = Tenancy.env('SESSION_SECRET') || 'dev';
   return crypto.createHmac('sha256', s).update(`lembrete:${id}`).digest('base64url').slice(0, 12);
 }
 export const tokenOf = (id) => `${id}.${sigOf(id)}`;
@@ -75,7 +76,7 @@ export function idOfToken(tok) {
   const good = sigOf(m[1]);
   return crypto.timingSafeEqual(Buffer.from(m[2]), Buffer.from(good)) ? Number(m[1]) : null;
 }
-export const publicBase = () => (process.env.PUBLIC_URL || 'https://sistema.lorrainymendes.com.br').replace(/\/+$/, '');
+export const publicBase = () => (Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br').replace(/\/+$/, '');
 export const confirmUrl = (id) => `${publicBase()}/l/${tokenOf(id)}`;
 
 // ---------- envio ----------
@@ -227,10 +228,10 @@ async function whatsappReaches(a, wac) {
   const last = await one("SELECT status FROM wa_messages WHERE appointment_id = ? AND kind = 'lembrete' ORDER BY id DESC LIMIT 1", [a.id]);
   return last ? last.status !== 'erro' : null;
 }
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick({ max = 25 } = {}) {
-  if (running) return { skipped: true };
-  running = true;
+  if (RUNNING.on) return { skipped: true };
+  RUNNING.on = true;
   const out = { email: 0, sms: 0, failed: 0 };
   try {
     const c = await config();
@@ -262,7 +263,7 @@ export async function tick({ max = 25 } = {}) {
       }
     }
     return out;
-  } catch (e) { console.error('lembretes e-mail/SMS', e.message); return { ...out, error: e.message }; } finally { running = false; }
+  } catch (e) { console.error('lembretes e-mail/SMS', e.message); return { ...out, error: e.message }; } finally { RUNNING.on = false; }
 }
 
 export async function historyOf(apptId) {

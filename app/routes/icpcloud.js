@@ -1,11 +1,12 @@
 // Configurações → Assinatura digital (certificados em nuvem) e o retorno da aprovação na certificadora.
+import * as Tenancy from '../lib/tenancy.js';
 import { audit } from '../lib/db.js';
 import { page, html, raw } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
 import * as Cloud from '../lib/icpcloud.js';
 
 const chk = (v) => (v ? raw('checked') : '');
-export const baseOf = (req) => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+export const baseOf = (req) => Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`;
 export const redirectUri = (req) => `${baseOf(req)}/assinatura/retorno`;
 
 export const settings = router();

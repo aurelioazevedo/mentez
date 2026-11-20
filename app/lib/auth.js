@@ -1,3 +1,4 @@
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { one } from './db.js';
 
@@ -5,7 +6,7 @@ const COOKIE = 'lm_sess';
 const PENDING = 'lm_mfa';
 
 function secret() {
-  const s = process.env.SESSION_SECRET;
+  const s = Tenancy.env('SESSION_SECRET');
   if (!s || s.length < 32) throw new Error('SESSION_SECRET ausente ou curta demais.');
   return s;
 }

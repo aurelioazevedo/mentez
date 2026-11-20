@@ -2,6 +2,7 @@
 // o atendente virtual oferece a vaga pelo WhatsApp a quem está aguardando, com preferência de dia,
 // período, profissional e modalidade. Quem responder “SIM” primeiro fica com o horário.
 // É diferente da fila da Recepção (pacientes que já chegaram ao consultório).
+import * as Tenancy from './tenancy.js';
 import { q, one, getSetting, setSetting } from './db.js';
 import { nowLocal, todayLocal, addDays, addMinutes } from './time.js';
 import { brDate, weekday } from './html.js';
@@ -390,16 +391,16 @@ export async function contextFor(phone) {
 }
 
 // ---------- rotina (a cada minuto) ----------
-let ticking = false;
+const TICKING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick() {
-  if (ticking) return; ticking = true;
+  if (TICKING.on) return; TICKING.on = true;
   try {
     await q("UPDATE waitlist_offers SET status = 'expirada' WHERE status = 'enviada' AND expires_at <= NOW()");
     await q("UPDATE waitlist SET status = 'expirado', closed_at = NOW() WHERE status = 'aguardando' AND until_date IS NOT NULL AND until_date < CURDATE()");
     await q("UPDATE waitlist_slots SET status = 'encerrada', reason = 'o horário passou', closed_at = NOW() WHERE status = 'aberta' AND starts_at <= NOW()");
     const open = await q("SELECT id FROM waitlist_slots WHERE status = 'aberta' ORDER BY starts_at LIMIT 30");
     for (const s of open) await processSlot(s.id).catch((e) => console.error('lista de espera', e.message));
-  } catch (e) { console.error('lista de espera (rotina)', e.message); } finally { ticking = false; }
+  } catch (e) { console.error('lista de espera (rotina)', e.message); } finally { TICKING.on = false; }
 }
 
 // Números para a tela e para o painel

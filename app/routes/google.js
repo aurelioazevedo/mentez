@@ -1,3 +1,4 @@
+import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDateTime } from '../lib/html.js';
 import { router, send, str } from '../lib/router.js';
@@ -5,7 +6,7 @@ import { encrypt, randomToken, sha256 } from '../lib/crypto.js';
 import { isClinician, ROLES } from '../lib/perm.js';
 import * as G from '../lib/google.js';
 
-const base = (req) => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+const base = (req) => Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`;
 
 // =====================================================================
 // Cartão “Google Agenda” na página Conta (perfis clínicos)

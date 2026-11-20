@@ -1,6 +1,7 @@
 // Backup do sistema no Google Drive: manual e automático (diário, semanal, mensal),
 // com as partes num único .zip ("juntos") ou um arquivo por parte ("separados").
 // Formato: SQL comum (um comando por linha) — restaurável pelo próprio sistema ou pelo phpMyAdmin.
+import * as Tenancy from './tenancy.js';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import mysql from 'mysql2';
@@ -57,7 +58,7 @@ export async function connect(req, code) {
   if (!t.refresh_token) throw new Error('O Google não enviou a autorização permanente. Remova o acesso em myaccount.google.com/permissions e conecte de novo.');
   let email = null;
   if (t.id_token) { try { email = JSON.parse(Buffer.from(t.id_token.split('.')[1], 'base64url').toString()).email; } catch { /* ignore */ } }
-  tok = { token: t.access_token, exp: Date.now() + (t.expires_in || 3600) * 1000 };
+  S.tok = { token: t.access_token, exp: Date.now() + (t.expires_in || 3600) * 1000 };
   await saveConfig({ refresh_enc: encrypt(t.refresh_token), email, folderId: null, error: null });
   await folder();
   return email;
@@ -65,18 +66,18 @@ export async function connect(req, code) {
 export async function disconnect() {
   const c = await config();
   if (c.refresh_enc) await fetch(`${OAUTH}/revoke?token=${encodeURIComponent(decrypt(c.refresh_enc))}`, { method: 'POST', signal: AbortSignal.timeout(8000) }).catch(() => {});
-  tok = null;
+  S.tok = null;
   await saveConfig({ refresh_enc: null, email: null, folderId: null, error: null });
 }
-let tok = null;
+const S = Tenancy.scoped({ tok: null }); // caches com um valor por clínica
 async function token() {
-  if (tok && tok.exp > Date.now() + 60e3) return tok.token;
+  if (S.tok && S.tok.exp > Date.now() + 60e3) return S.tok.token;
   const c = await config();
   if (!c.refresh_enc) throw new Error('Google Drive não conectado.');
   try {
     const t = await tokenReq({ grant_type: 'refresh_token', refresh_token: decrypt(c.refresh_enc) });
-    tok = { token: t.access_token, exp: Date.now() + (t.expires_in || 3600) * 1000 };
-    return tok.token;
+    S.tok = { token: t.access_token, exp: Date.now() + (t.expires_in || 3600) * 1000 };
+    return S.tok.token;
   } catch (e) {
     if (e.code === 'invalid_grant') await saveConfig({ error: 'O acesso ao Google Drive expirou ou foi revogado. Conecte novamente.' });
     throw e;
@@ -88,7 +89,7 @@ async function drive(method, path, { query, body, raw, headers = {}, timeout = 3
       method, headers: { Authorization: `Bearer ${await token()}`, ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
       body: body ? JSON.stringify(body) : raw, signal: AbortSignal.timeout(timeout),
     });
-    if (res.status === 401 && i === 0) { tok = null; continue; }
+    if (res.status === 401 && i === 0) { S.tok = null; continue; }
     if (raw === undefined && method === 'GET' && query?.alt === 'media') { if (!res.ok) throw new Error(`Google Drive respondeu ${res.status}`); return Buffer.from(await res.arrayBuffer()); }
     if (res.status === 204) return null;
     const d = await res.json().catch(() => ({}));
@@ -240,9 +241,9 @@ function due(kind, c, last) {
   if (kind === 'mensal') return Number(today.slice(8)) >= Number(c.mensal.day) && lastDay < `${today.slice(0, 7)}-01`;
   return false;
 }
-let ticking = false;
+const TICKING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick() {
-  if (ticking) return; ticking = true;
+  if (TICKING.on) return; TICKING.on = true;
   let conn;
   try {
     const c = await config();
@@ -260,7 +261,7 @@ export async function tick() {
     }
   } catch { /* tenta de novo no próximo ciclo */ } finally {
     if (conn) { await conn.query("SELECT RELEASE_LOCK('lm_backup')").catch(() => {}); conn.release(); }
-    ticking = false;
+    TICKING.on = false;
   }
 }
 

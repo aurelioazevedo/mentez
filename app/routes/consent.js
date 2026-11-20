@@ -1,4 +1,5 @@
 // Termos digitais: página pública de leitura/aceite (/t/:token), envio, comprovante e modelos editáveis.
+import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { page, bare, html, raw, brDate, brDateTime } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
@@ -6,7 +7,7 @@ import { decrypt } from '../lib/crypto.js';
 import { canSeePatient, forbidden } from '../lib/perm.js';
 import * as C from '../lib/consent.js';
 
-const baseUrl = (req) => (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+const baseUrl = (req) => (Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
 const ipOf = (req) => String(req.get('cf-connecting-ip') || req.get('x-forwarded-for') || req.ip || '').split(',')[0].trim();
 const cpfOk = (v) => { const d = String(v || '').replace(/\D/g, ''); return !d || d.length === 11; };
 

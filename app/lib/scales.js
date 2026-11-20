@@ -1,6 +1,7 @@
 // Escalas e questionários de acompanhamento (instrumentos de uso livre): PHQ-9 e GAD-7.
 // O paciente responde por link (WhatsApp), pelo portal ou na sessão; o sistema soma, classifica e
 // mostra a evolução. O item 9 do PHQ-9 (pensamentos de se ferir) gera alerta imediato à psicóloga.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -54,14 +55,14 @@ export const bandLabel = (inst, score) => INSTRUMENTS[inst]?.bands[band(inst, sc
 export const VIA = { whatsapp: 'Link pelo WhatsApp', link: 'Link', portal: 'Portal do paciente', sessao: 'Na sessão' };
 
 // ---------- link seguro ----------
-function sigOf(id) { return crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev').update(`escala:${id}`).digest('base64url').slice(0, 16); }
+function sigOf(id) { return crypto.createHmac('sha256', Tenancy.env('SESSION_SECRET') || 'dev').update(`escala:${id}`).digest('base64url').slice(0, 16); }
 export const tokenOf = (id) => `${id}.${sigOf(id)}`;
 export function idOfToken(tok) {
   const m = /^(\d{1,10})\.([\w-]{16})$/.exec(String(tok || ''));
   if (!m) return null;
   return crypto.timingSafeEqual(Buffer.from(m[2]), Buffer.from(sigOf(m[1]))) ? Number(m[1]) : null;
 }
-export const urlOf = (id) => `${(process.env.PUBLIC_URL || 'https://sistema.lorrainymendes.com.br').replace(/\/+$/, '')}/e/${tokenOf(id)}`;
+export const urlOf = (id) => `${(Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br').replace(/\/+$/, '')}/e/${tokenOf(id)}`;
 
 // ---------- aplicações ----------
 export async function create(patientId, instrument, { via = 'link', userId = null, days = 7 } = {}) {
@@ -126,10 +127,10 @@ export async function setPlan(patientId, instrument, everyDays, userId) {
   await q(`INSERT INTO scale_plans (patient_id, instrument, every_days, next_at, active, created_by) VALUES (?,?,?,?,1,?)
     ON DUPLICATE KEY UPDATE every_days = VALUES(every_days), next_at = VALUES(next_at), active = 1, created_by = VALUES(created_by)`, [patientId, instrument, everyDays, next, userId]);
 }
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick() {
-  if (running) return { skipped: true };
-  running = true;
+  if (RUNNING.on) return { skipped: true };
+  RUNNING.on = true;
   const out = { sent: 0, failed: 0 };
   try {
     const hour = Number(nowLocal().slice(11, 13));
@@ -145,5 +146,5 @@ export async function tick() {
       if (r.ok) out.sent++; else { out.failed++; await q("UPDATE scale_apps SET via = 'portal' WHERE id = ?", [id]); }
     }
     return out;
-  } catch (e) { console.error('escalas', e.message); return { ...out, error: e.message }; } finally { running = false; }
+  } catch (e) { console.error('escalas', e.message); return { ...out, error: e.message }; } finally { RUNNING.on = false; }
 }

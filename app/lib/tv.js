@@ -1,6 +1,7 @@
 // Painel de chamadas (TV da recepção): senhas na chegada, chamada por sala/consultório com sinal e voz,
 // várias TVs conectadas por código de 6 dígitos. A TV nunca recebe dado clínico: só senha (ou iniciais),
 // sala e profissional.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import * as TTS from './tts.js';
 import { q, one, getSetting, setSetting } from './db.js';
@@ -211,7 +212,7 @@ export async function removeScreen(id) { await q('DELETE FROM tv_screens WHERE i
 export const isOnline = (s) => s.last_seen && (Date.now() - new Date(`${String(s.last_seen).replace(' ', 'T')}-03:00`)) < 60e3;
 
 // O que a TV mostra agora (consultado a cada 2 segundos).
-const lastTouch = new Map();
+const lastTouch = new Tenancy.TMap();  // separado por clínica
 export async function feed(screen) {
   const now = Date.now();
   if ((lastTouch.get(screen.id) || 0) < now - 20e3) { lastTouch.set(screen.id, now); await q('UPDATE tv_screens SET last_seen = NOW() WHERE id = ?', [screen.id]); }

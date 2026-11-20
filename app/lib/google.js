@@ -1,6 +1,7 @@
 // Integração com o Google Agenda (uma conexão OAuth por profissional).
 // O sistema é a fonte da verdade: as sessões são enviadas para a agenda Google
 // do(a) profissional responsável pelo paciente. Nenhum dado clínico é enviado.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -19,29 +20,29 @@ const TZ = 'America/Sao_Paulo';
 export const TITLE_OPTIONS = { iniciais: 'Iniciais (ex.: “Sessão · M. S.”)', primeiro_nome: 'Primeiro nome (ex.: “Sessão · Maria”)', nome_completo: 'Nome completo' };
 
 // ---------- configuração (credenciais OAuth guardadas criptografadas no banco) ----------
-let cfgCache = null;
+const S = Tenancy.scoped({ cfgCache: null }); // caches com um valor por clínica
 export async function config() {
-  if (cfgCache && cfgCache.at > Date.now() - 60e3) return cfgCache.v;
+  if (S.cfgCache && S.cfgCache.at > Date.now() - 60e3) return S.cfgCache.v;
   const id = await getSetting('google_client_id');
   const secret = await getSetting('google_client_secret_enc');
   const v = id && secret ? { clientId: id, clientSecret: decrypt(secret) } : null;
-  cfgCache = { at: Date.now(), v };
+  S.cfgCache = { at: Date.now(), v };
   return v;
 }
 export async function saveConfig(clientId, clientSecret) {
   await setSetting('google_client_id', clientId);
   if (clientSecret) await setSetting('google_client_secret_enc', encrypt(clientSecret));
-  cfgCache = null;
+  S.cfgCache = null;
 }
 export async function clearConfig() {
   await setSetting('google_client_id', null);
   await setSetting('google_client_secret_enc', null);
-  cfgCache = null;
+  S.cfgCache = null;
 }
-export const redirectUri = (req) => `${(process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '')}/conta/google/retorno`;
+export const redirectUri = (req) => `${(Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '')}/conta/google/retorno`;
 
 // ---------- OAuth ----------
-function stateSecret() { return process.env.SESSION_SECRET; }
+function stateSecret() { return Tenancy.env('SESSION_SECRET'); }
 export function makeState(uid) {
   const body = Buffer.from(JSON.stringify({ uid, n: crypto.randomBytes(8).toString('hex'), exp: Date.now() + 10 * 60e3 })).toString('base64url');
   return `${body}.${crypto.createHmac('sha256', stateSecret()).update('g:' + body).digest('base64url')}`;
@@ -84,7 +85,7 @@ export async function exchangeCode(req, code) {
   return { refreshToken: t.refresh_token, accessToken: t.access_token, expiresIn: t.expires_in, email };
 }
 
-const tokens = new Map(); // uid → { token, exp }
+const tokens = new Tenancy.TMap(); // uid → { token, exp } (separado por clínica)
 async function accessToken(user) {
   const c = tokens.get(user.id);
   if (c && c.exp > Date.now() + 60e3) return c.token;
@@ -145,7 +146,7 @@ function titleFor(a, owner) {
 const rfc = (dt) => dt.replace(' ', 'T');
 
 function eventBody(a, owner, wantMeet) {
-  const base = process.env.PUBLIC_URL || 'https://sistema.lorrainymendes.com.br';
+  const base = Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br';
   const ev = {
     summary: titleFor(a, owner),
     description: `Sessão de psicoterapia ${a.modality === 'online' ? 'on-line' : 'presencial'} · ${a.duration_min} min\n${base}/agenda/${a.id}\n\nEvento criado pelo sistema do consultório. Altere a sessão pelo sistema.`,
@@ -225,7 +226,7 @@ export async function futureIds(where, params) {
 // Compromissos pessoais no Google que batem com o horário (ignora eventos criados pelo sistema).
 // Compromissos pessoais da Google Agenda do(a) profissional (sem os eventos criados pelo sistema e sem
 // os marcados como “Disponível”). Devolve só horários — nunca título nem detalhes. Cache curto por período.
-const busyCache = new Map();
+const busyCache = new Tenancy.TMap();  // separado por clínica
 const toLocal = (v) => new Date(new Date(v).getTime() - 3 * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
 export async function busyBlocks(ownerId, from, to) {
   if (!ownerId || !(await config())) return [];
@@ -285,7 +286,7 @@ function fold(line) {
 export async function icsFeed(user) {
   const rows = await q(`SELECT a.*, p.name, p.social_name FROM appointments a JOIN patients p ON p.id = a.patient_id
     WHERE p.owner_id = ? AND a.status <> 'cancelada' AND a.starts_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND a.starts_at < DATE_ADD(NOW(), INTERVAL 180 DAY) ORDER BY a.starts_at`, [user.id]);
-  const base = process.env.PUBLIC_URL || 'https://sistema.lorrainymendes.com.br';
+  const base = Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br';
   const host = base.replace(/^https?:\/\//, '');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Lorrainy Mendes//Sistema do consultorio//PT-BR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',

@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import * as Tenancy from './tenancy.js';
 
 function config() {
   if (process.env.DB_HOST) {
@@ -16,6 +17,11 @@ function config() {
 
 let pool;
 export function db() {
+  if (Tenancy.multi()) {
+    const p = Tenancy.currentPool();
+    if (!p) throw new Error('Consulta ao banco fora do contexto de uma clínica.');
+    return p;
+  }
   if (!pool) {
     pool = mysql.createPool({
       ...config(),

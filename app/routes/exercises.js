@@ -1,3 +1,4 @@
+import * as Tenancy from '../lib/tenancy.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +24,7 @@ r.param('id', async (req, res, next, id) => {
   } catch (e) { next(e); }
 });
 const nm = (p) => p.social_name || p.name;
-const baseUrl = (req) => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+const baseUrl = (req) => Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`;
 
 // ---------- catálogo ----------
 r.get('/', async (req, res) => {

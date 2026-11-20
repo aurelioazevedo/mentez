@@ -1,3 +1,4 @@
+import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDateTime, waLink } from '../lib/html.js';
@@ -30,7 +31,7 @@ const contactLabel = (cv) => cv.patient_name || cv.contact_name || cv.phone;
 // Configuração e simulador: /configuracoes/agente  (administração)
 // =====================================================================
 export const admin = router();
-const sims = new Map(); // histórico do simulador por usuário (em memória)
+const sims = new Tenancy.TMap(); // histórico do simulador por usuário (em memória) (separado por clínica)
 
 admin.get('/', async (req, res) => {
   const c = await Agent.config();

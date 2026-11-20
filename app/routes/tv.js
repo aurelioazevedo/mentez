@@ -1,4 +1,5 @@
 // Painel de chamadas: página pública da TV (/tv, sem login, conectada por código) e Configurações → Painel de chamadas.
+import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
 import * as Media from '../lib/tvmedia.js';
@@ -396,7 +397,7 @@ settings.get('/midia/:id', async (req, res, next) => {
     ${c.approval === 'pendente' ? html`<p class="flash warn">Esta campanha está aguardando aprovação: ainda não aparece na TV.</p>` : c.approval === 'recusada' ? html`<p class="flash err">Campanha recusada${c.reject_reason ? `: ${c.reject_reason}` : ''}. Ajuste e salve para enviar de novo à aprovação.</p>` : ''}
     ${campaignForm(req, c, await TV.screens(), `${BACK}/midia/${c.id}`, 'Conteúdo da campanha', await Sp.list())}` }));
 });
-const baseOf = (req) => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+const baseOf = (req) => Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`;
 settings.post('/midia/ordem', express.json({ limit: '20kb' }), async (req, res) => {
   const ids = String(Array.isArray(req.body.ids) ? req.body.ids.join(',') : req.body.ids || '').split(',');
   const ok = await Media.reorder(ids);

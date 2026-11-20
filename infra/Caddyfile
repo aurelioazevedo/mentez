@@ -1,0 +1,42 @@
+# Mentez — servidor web (HTTPS automático)
+{
+	# Certificado sob demanda: antes de emitir para um endereço novo (subdomínio de clínica ou domínio próprio),
+	# o Caddy pergunta ao app se o endereço pertence a uma clínica ativa.
+	on_demand_tls {
+		ask http://app:3000/_mentez/tls
+	}
+}
+
+(seg) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	encode zstd gzip
+}
+
+www.mentez.com.br {
+	redir https://mentez.com.br{uri} permanent
+}
+www.bemestarmental.com.br {
+	redir https://bemestarmental.com.br{uri} permanent
+}
+# Site de vendas e diretório (provisórios até as próximas etapas)
+mentez.com.br {
+	import seg
+	root * /srv/mentez
+	file_server
+}
+bemestarmental.com.br {
+	import seg
+	root * /srv/bem
+	file_server
+}
+# Painel da Mentez e todas as clínicas (slug.mentez.com.br e domínios próprios)
+https:// {
+	tls {
+		on_demand
+	}
+	import seg
+	reverse_proxy app:3000
+}

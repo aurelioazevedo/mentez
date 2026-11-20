@@ -1,5 +1,6 @@
 // Link do WhatsApp do site: o site aponta para /wa no sistema, que decide o destino —
 // o número do atendente virtual (automatizado) ou o WhatsApp da Dra. Lorrainy.
+import * as Tenancy from './tenancy.js';
 import { q, getSetting, setSetting } from './db.js';
 import * as WA from './whatsapp.js';
 import * as Agent from './agent.js';
@@ -7,28 +8,27 @@ import * as Agent from './agent.js';
 export const DEFAULT_DOCTOR = '5562984454631';
 const DEFAULTS = { mode: 'doutora', doctorPhone: DEFAULT_DOCTOR, assistantPhone: null, fallback: true };
 
-let cache = null;
+const S = Tenancy.scoped({ cache: null, numCache: null }); // caches com um valor por clínica
 export async function config() {
-  if (cache && cache.at > Date.now() - 30e3) return cache.v;
+  if (S.cache && S.cache.at > Date.now() - 30e3) return S.cache.v;
   let c = { ...DEFAULTS };
   try { const raw = await getSetting('site_wa'); if (raw) c = { ...c, ...JSON.parse(raw) }; } catch { /* padrão */ }
-  cache = { at: Date.now(), v: c };
+  S.cache = { at: Date.now(), v: c };
   return c;
 }
 export async function saveConfig(patch) {
   const next = { ...(await config()), ...patch };
   await setSetting('site_wa', JSON.stringify(next));
-  cache = null;
+  S.cache = null;
   return config();
 }
 
 // Número do aparelho conectado à instância usada pelo atendente (guardado para não depender da Evolution a cada clique).
-let numCache = null;
 export async function assistantNumber(force = false) {
   const c = await config();
   const wac = await WA.config();
   const instance = wac?.instance || null;
-  if (!force && numCache && numCache.instance === instance && numCache.at > Date.now() - 10 * 60e3) return numCache.v;
+  if (!force && S.numCache && S.numCache.instance === instance && S.numCache.at > Date.now() - 10 * 60e3) return S.numCache.v;
   // último número conhecido, só se for da mesma instância
   let v = c.assistantPhone && c.assistantInstance === instance ? c.assistantPhone : null;
   try {
@@ -41,7 +41,7 @@ export async function assistantNumber(force = false) {
       }
     }
   } catch { /* usa o último número conhecido */ }
-  numCache = { at: Date.now(), instance, v };
+  S.numCache = { at: Date.now(), instance, v };
   return v;
 }
 

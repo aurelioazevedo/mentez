@@ -1,4 +1,5 @@
 // Notificações do sino (barra superior): pendências que pedem ação, por perfil.
+import * as Tenancy from './tenancy.js';
 import { q, one } from './db.js';
 import { can, patientScope } from './perm.js';
 import { todayLocal } from './time.js';
@@ -6,7 +7,7 @@ import { brDate, money } from './html.js';
 import * as WA from './whatsapp.js';
 import * as Agent from './agent.js';
 
-const cache = new Map(); // por usuário, 20 s
+const cache = new Tenancy.TMap(); // por usuário, 20 s (separado por clínica)
 
 export async function forUser(user, fresh = false) {
   // O cache vale enquanto não houver alteração nova no sistema (live_events), por até 20 s.

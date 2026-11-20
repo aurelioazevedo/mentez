@@ -1,4 +1,5 @@
 // Cobrança online (Asaas): webhook público, ações no lançamento e Configurações → Cobrança online.
+import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDate, brDateTime, money } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
@@ -72,7 +73,7 @@ export async function paymentCard(x) {
 
 // ---------- Configurações → Cobrança online ----------
 export const settings = router();
-const pubUrl = (req) => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+const pubUrl = (req) => Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`;
 settings.get('/', async (req, res) => {
   const c = await G.config();
   const st = await G.stats();

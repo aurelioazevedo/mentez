@@ -1,4 +1,5 @@
 // LGPD e CFP: prazos de guarda, limpeza automática de contatos antigos do CRM, anonimização e exportação dos dados do paciente.
+import * as Tenancy from './tenancy.js';
 import * as RT from './richtext.js';
 import AdmZip from 'adm-zip';
 import { q, one, db, getSetting, setSetting } from './db.js';
@@ -37,9 +38,9 @@ export async function purgeCrm(months) {
   if (cards.length) Live.emit('crm');
   return cards.length;
 }
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick() {
-  if (running) return; running = true; let conn;
+  if (RUNNING.on) return; RUNNING.on = true; let conn;
   try {
     const c = await config(); if (!c.crmAuto) return;
     conn = await db().getConnection();
@@ -47,7 +48,7 @@ export async function tick() {
     await purgeCrm(c.crmMonths);
   } catch (e) { console.error('privacidade', e.message); } finally {
     if (conn) { await conn.query("SELECT RELEASE_LOCK('lm_privacy')").catch(() => {}); conn.release(); }
-    running = false;
+    RUNNING.on = false;
   }
 }
 

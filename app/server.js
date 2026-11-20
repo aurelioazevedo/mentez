@@ -1,8 +1,10 @@
+import * as Tenancy from './lib/tenancy.js';
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { migrate } from './lib/db.js';
+import * as Platform from './routes/platform.js';
 import { loadUser, requireUser, checkOrigin } from './lib/auth.js';
 import { bare, html } from './lib/html.js';
 import { flash } from './lib/router.js';
@@ -71,8 +73,8 @@ app.set('trust proxy', 1);
 
 // ---- segurança + bloqueio de indexação em TODAS as respostas ----
 // A página de agendamento pode ser exibida dentro do site da clínica (seção “Agende”); o resto do sistema, nunca.
-const EMBED_ORIGINS = (process.env.EMBED_ORIGINS || 'https://lorrainymendes.com.br https://www.lorrainymendes.com.br').trim();
 app.use((req, res, next) => {
+  const EMBED_ORIGINS = String(Tenancy.env('EMBED_ORIGINS') || '').trim(); // sites da clínica que podem exibir o agendamento
   const embeddable = req.path === '/agendar' || req.path.startsWith('/agendar/');
   res.set({
     'X-Robots-Tag': 'noindex, nofollow, noarchive, nosnippet, noimageindex',
@@ -88,6 +90,24 @@ app.use((req, res, next) => {
 
 app.get('/robots.txt', (_req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
 app.use('/static', express.static(path.join(__dirname, 'public'), { maxAge: '7d', index: false }));
+
+// ---------- Mentez: qual clínica é esta requisição ----------
+// O Caddy (rede interna do Docker) pergunta se pode emitir o certificado HTTPS de um endereço.
+app.get('/_mentez/tls', (req, res, next) => {
+  if (!Tenancy.multi() || req.get('x-forwarded-for')) return next(); // só chamadas internas, sem passar pelo proxy
+  Tenancy.allowCertificate(req.query.domain).then((ok) => res.sendStatus(ok ? 200 : 404), () => res.sendStatus(404));
+});
+app.get('/_mentez/saude', (_req, res) => res.json({ ok: true })); // verificação do contêiner
+app.use(async (req, res, next) => {
+  if (!Tenancy.multi()) return next();
+  const host = String(req.hostname || '').toLowerCase();
+  if (Tenancy.platformHosts().has(host)) return Platform.handle(req, res, next);
+  let t = null;
+  try { t = await Tenancy.byHost(host); } catch (e) { return next(e); }
+  if (!t) return res.status(404).send(String(bare('Clínica não encontrada', html`<div class="center-card"><h1>Endereço não encontrado</h1><p>Não há nenhuma clínica neste endereço. Confira o link recebido.</p></div>`)));
+  if (t.status !== 'ativa') return res.status(403).send(String(bare('Acesso suspenso', html`<div class="center-card"><h1>Acesso temporariamente suspenso</h1><p>O acesso a esta clínica está suspenso. Fale com a administração da clínica.</p></div>`)));
+  Tenancy.run(t, next); // tudo o que vem depois (banco, chaves, caches) é desta clínica
+});
 // App instalável (PWA) e notificações push
 app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
 app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'manifest.webmanifest')));
@@ -226,10 +246,40 @@ app.use((err, req, res, _next) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-migrate()
-  .then(() => console.log('Banco de dados pronto.'))
+// Repete uma tarefa automática para cada clínica ativa (ou para a clínica única, sem a plataforma)
+const every = (ms, fn, label, first = null) => {
+  const go = () => Tenancy.forEachTenant(() => Promise.resolve(fn()).catch((e) => console.error(`${label}:`, e.message)), label);
+  if (first !== null) setTimeout(go, first).unref();
+  setInterval(go, ms).unref();
+};
+async function boot() {
+  if (Tenancy.multi()) {
+    await Tenancy.migratePlatform();
+    await Tenancy.forEachTenant(() => migrate(), 'migração'); // cada clínica no seu banco, sempre no esquema atual
+  } else await migrate();
+}
+boot()
+  .then(() => console.log(Tenancy.multi() ? 'Mentez: plataforma e clínicas prontas.' : 'Banco de dados pronto.'))
   .catch((e) => console.error('Falha ao preparar o banco:', e.message))
-  .finally(() => app.listen(port, () => { console.log(`Sistema rodando na porta ${port}`); startWhatsApp(); Live.cleanup(); setInterval(Live.cleanup, 3600e3).unref(); Fin.ensureRecurring().catch(() => {}); setInterval(() => Fin.ensureRecurring().catch(() => {}), 6 * 3600e3).unref(); setTimeout(() => Backup.tick(), Number(process.env.BACKUP_TICK_MS) || 90e3).unref(); setInterval(() => Backup.tick(), Number(process.env.BACKUP_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Flow.autoReminders(), Number(process.env.FLOW_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Monitor.tick(), Number(process.env.MONITOR_TICK_MS) || 2 * 60e3).unref(); setTimeout(() => Privacy.tick(), 5 * 60e3).unref(); setInterval(() => Waitlist.tick(), Number(process.env.WAITLIST_TICK_MS) || 60e3).unref(); setInterval(() => Privacy.tick(), 12 * 3600e3).unref(); setInterval(() => SessionAI.tick().catch(() => {}), 10 * 60e3).unref(); Rental.config().then(() => Rental.tick()).catch(() => {}); setInterval(() => Rental.tick().catch(() => {}), 6 * 3600e3).unref(); setInterval(() => Nfse.tick().catch((e) => console.error('NFS-e:', e.message)), Number(process.env.NFSE_TICK_MS) || 5 * 60e3).unref(); setInterval(() => Scales.tick().catch((e) => console.error('escalas:', e.message)), Number(process.env.SCALES_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Reactivation.tick().catch((e) => console.error('reativação:', e.message)), Number(process.env.REACT_TICK_MS) || 10 * 60e3).unref(); setInterval(() => Engage.tick().catch((e) => console.error('aniversário/pesquisa:', e.message)), Number(process.env.ENGAGE_TICK_MS) || 5 * 60e3).unref(); setInterval(() => Notify.tick().catch((e) => console.error('lembretes e-mail/SMS:', e.message)), Number(process.env.NOTIFY_TICK_MS) || 5 * 60e3).unref(); setInterval(() => Gateway.tick().catch((e) => console.error('cobrança online:', e.message)), Number(process.env.GATEWAY_TICK_MS) || 10 * 60e3).unref(); }));
+  .finally(() => app.listen(port, () => {
+    console.log(`Sistema rodando na porta ${port}`);
+    startWhatsApp();
+    every(3600e3, () => Live.cleanup(), 'live', 5e3);
+    every(6 * 3600e3, () => Fin.ensureRecurring(), 'recorrentes', 10e3);
+    every(Number(process.env.BACKUP_TICK_MS) || 10 * 60e3, () => Backup.tick(), 'backup', Number(process.env.BACKUP_TICK_MS) || 90e3);
+    every(Number(process.env.FLOW_TICK_MS) || 10 * 60e3, () => Flow.autoReminders(), 'lembrete de pagamento');
+    every(Number(process.env.MONITOR_TICK_MS) || 2 * 60e3, () => Monitor.tick(), 'monitor');
+    every(12 * 3600e3, () => Privacy.tick(), 'privacidade', 5 * 60e3);
+    every(Number(process.env.WAITLIST_TICK_MS) || 60e3, () => Waitlist.tick(), 'lista de espera');
+    every(10 * 60e3, () => SessionAI.tick(), 'IA na sessão');
+    every(6 * 3600e3, () => Rental.config().then(() => Rental.tick()), 'locação', 15e3);
+    every(Number(process.env.NFSE_TICK_MS) || 5 * 60e3, () => Nfse.tick(), 'NFS-e');
+    every(Number(process.env.SCALES_TICK_MS) || 10 * 60e3, () => Scales.tick(), 'escalas');
+    every(Number(process.env.REACT_TICK_MS) || 10 * 60e3, () => Reactivation.tick(), 'reativação');
+    every(Number(process.env.ENGAGE_TICK_MS) || 5 * 60e3, () => Engage.tick(), 'aniversário/pesquisa');
+    every(Number(process.env.NOTIFY_TICK_MS) || 5 * 60e3, () => Notify.tick(), 'lembretes e-mail/SMS');
+    every(Number(process.env.GATEWAY_TICK_MS) || 10 * 60e3, () => Gateway.tick(), 'cobrança online');
+  }));
 process.on('unhandledRejection', (e) => { console.error('unhandledRejection', e); Monitor.recordError(e, 'processo'); });
 
 export default app;

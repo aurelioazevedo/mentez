@@ -1,6 +1,7 @@
 // Nota fiscal de serviço (NFS-e) pelo Asaas, em nome de quem emite o recebimento:
 // a clínica (CNPJ da clínica, uid = null) ou o(a) profissional que recebe direto e tem CNPJ próprio (uid = id do usuário).
 // Fica pronta e desligada até haver CNPJ; com ela ligada, as notas saem sozinhas ao receber, em lote no mês ou uma a uma.
+import * as Tenancy from './tenancy.js';
 import { q, one, getSetting, setSetting } from './db.js';
 import { ISSUER_SQL } from './fin.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -222,10 +223,10 @@ export function hasCpf(x) {
   try { const v = (x.payer_cpf_enc ? decrypt(x.payer_cpf_enc) : '') || (x.cpf_enc ? decrypt(x.cpf_enc) : ''); return [11, 14].includes(String(v).replace(/\D/g, '').length); } catch { return false; }
 }
 // ---------- rotina ----------
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick() {
-  if (running) return { skipped: true };
-  running = true;
+  if (RUNNING.on) return { skipped: true };
+  RUNNING.on = true;
   const out = { queued: 0, emitted: 0, refreshed: 0 };
   try {
     // clínica e cada profissional com CNPJ próprio: cada um com a sua configuração e a sua conta do Asaas
@@ -239,7 +240,7 @@ export async function tick() {
     for (const n of await q("SELECT id FROM nfse WHERE status = 'pendente' ORDER BY id LIMIT 20")) { const r = await emit(n.id); if (r.ok) out.emitted++; }
     for (const n of await q("SELECT id FROM nfse WHERE status IN ('agendada','cancelando') AND ext_id IS NOT NULL ORDER BY id LIMIT 40")) { await refresh(n.id); out.refreshed++; }
     return out;
-  } catch (e) { console.error('NFS-e', e.message); return { ...out, error: e.message }; } finally { running = false; }
+  } catch (e) { console.error('NFS-e', e.message); return { ...out, error: e.message }; } finally { RUNNING.on = false; }
 }
 export async function stats(from, to, uid = null) {
   return one(`SELECT SUM(n.status = 'emitida') emitidas, COALESCE(SUM(IF(n.status = 'emitida', n.value, 0)),0) valor, SUM(n.status IN ('pendente','agendada')) andamento, SUM(n.status = 'erro') erros

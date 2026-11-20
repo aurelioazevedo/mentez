@@ -1,5 +1,6 @@
 // CRM dos atendimentos de WhatsApp: um card por contato, organizado em etapas (Kanban).
 // Os cards andam sozinhos com os eventos do sistema; movimentos manuais são respeitados.
+import * as Tenancy from './tenancy.js';
 import { q, one, getSetting, setSetting } from './db.js';
 import { encrypt } from './crypto.js';
 import { phoneKey } from './whatsapp.js';
@@ -18,9 +19,9 @@ export const DEFAULT_STAGES = [
 const FUNNEL = DEFAULT_STAGES.map(([k]) => k);
 const MANUAL_DAYS = 3; // depois de mover à mão, só eventos fortes mexem no card por 3 dias
 
-let seeded = false;
+const S = Tenancy.scoped({ seeded: false }); // por clínica
 export async function ensureStages() {
-  if (seeded) return;
+  if (S.seeded) return;
   const n = await one('SELECT COUNT(*) n FROM crm_stages');
   if (!Number(n.n)) {
     let i = 0;
@@ -31,7 +32,7 @@ export async function ensureStages() {
     if (same) await q("UPDATE crm_stages SET auto_key = 'equipe' WHERE id = ?", [same.id]);
     else { const m = await one('SELECT MAX(position) p FROM crm_stages'); await q("INSERT IGNORE INTO crm_stages (name, color, position, auto_key) VALUES ('Equipe WhatsApp', '#2f6b5a', ?, 'equipe')", [Number(m?.p ?? 0) + 1]); }
   }
-  seeded = true;
+  S.seeded = true;
   await syncTeam().catch((e) => console.error('crm equipe', e.message));
 }
 

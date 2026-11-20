@@ -1,4 +1,5 @@
 // Teleconsulta: Configurações (clínica), escolha da plataforma (profissional) e salas de vídeo (profissional e paciente).
+import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
 import { page, bare, html, raw, brDate, weekday, VERSION } from '../lib/html.js';
@@ -15,7 +16,7 @@ const firstName = (p) => String(p.social_name || p.name || '').trim().split(/\s+
 export const settings = router();
 settings.get('/', async (req, res) => {
   const c = await T.config();
-  const pub = (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  const pub = (Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
   send(res, page(req, { title: 'Teleconsulta', active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Teleconsulta</h1>
       <p class="muted">Escolha quais plataformas a clínica permite e qual é o padrão. Cada profissional escolhe a sua em Minha conta → Teleconsulta, e em cada sessão dá para trocar.</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/tc/teste" target="_blank" rel="noopener">Testar câmera e microfone</a><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>

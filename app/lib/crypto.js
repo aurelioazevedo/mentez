@@ -1,8 +1,9 @@
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 
 // Chave de 32 bytes derivada de ENCRYPTION_KEY (prontuário, CPF, respostas dos exercícios).
 function key() {
-  const raw = process.env.ENCRYPTION_KEY;
+  const raw = Tenancy.env('ENCRYPTION_KEY');
   if (!raw || raw.length < 32) throw new Error('ENCRYPTION_KEY ausente ou curta demais.');
   return crypto.createHash('sha256').update(raw).digest();
 }

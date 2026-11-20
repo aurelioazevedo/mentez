@@ -1,5 +1,6 @@
 // Painel de chamadas — etapa 2: mídias (imagem, vídeo curto sem som) e campanhas da clínica na TV,
 // com período, dias, horário, tempo na tela, peso e escolha das TVs. A chamada sempre interrompe a mídia.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import QRCode from 'qrcode';
 import { q, one } from './db.js';
@@ -34,7 +35,7 @@ export async function saveMedia(buf, mime, name, userId) {
   for (let i = 0, seq = 0; i < buf.length; i += CHUNK, seq++) await q('INSERT INTO tv_media_chunks (media_id, seq, data) VALUES (?,?,?)', [r.insertId, seq, buf.subarray(i, i + CHUNK)]);
   return { ok: true, id: r.insertId, kind: t.kind, sha };
 }
-const cache = new Map(); let cacheBytes = 0;
+const cache = new Tenancy.TMap(); let cacheBytes = 0;  // separado por clínica
 export async function readMedia(id) {
   if (cache.has(id)) { const v = cache.get(id); cache.delete(id); cache.set(id, v); return v; }
   const m = await one('SELECT id, kind, mime, size, sha FROM tv_media WHERE id = ?', [id]);
@@ -42,7 +43,7 @@ export async function readMedia(id) {
   const parts = await q('SELECT data FROM tv_media_chunks WHERE media_id = ? ORDER BY seq', [id]);
   const v = { ...m, buf: Buffer.concat(parts.map((p) => p.data)) };
   cache.set(id, v); cacheBytes += v.buf.length;
-  for (const [k, x] of cache) { if (cacheBytes <= 120 * 1024 * 1024) break; cache.delete(k); cacheBytes -= x.buf.length; }
+  for (const [k, x] of cache) { if (cacheBytes <= 120 * 1024 * 1024) break; cache.deleteRaw(k); cacheBytes -= x.buf.length; }
   return v;
 }
 // Responde o arquivo com suporte a “Range” (os vídeos pedem pedaços).

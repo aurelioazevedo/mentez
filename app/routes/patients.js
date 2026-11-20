@@ -1,3 +1,4 @@
+import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
 import { cpfValid, cpfFmt, docFmt, docValid, phoneFmt } from '../lib/br.js';
@@ -303,7 +304,7 @@ r.get('/:id', async (req, res, next) => {
     })() : ''}
     ${tab === 'termos' ? await (async () => {
       const links = await Consent.forPatient(p.id); const tpl = await Consent.templates();
-      const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+      const base = (Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
       const newLink = int(req.query.link) && /^[A-Za-z0-9_-]{20,}$/.test(String(req.query.t || '')) ? `${base}/t/${req.query.t}` : null;
       const ST = { pendente: ['agendada', 'Aguardando aceite'], aceito: ['realizada', 'Aceito'], recusado: ['falta', 'Recusado'], cancelado: ['cancelada', 'Cancelado'] };
       return html`<section class="card">

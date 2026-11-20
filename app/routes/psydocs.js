@@ -1,5 +1,6 @@
 // Documentos psicológicos: criação a partir da ficha, emissão com assinatura eletrônica e código de verificação,
 // impressão/PDF, envio ao paciente por link e página pública de verificação de autenticidade.
+import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import QRCode from 'qrcode';
 import { q, one, audit } from '../lib/db.js';
@@ -18,7 +19,7 @@ import { PDFDocument } from 'pdf-lib';
 
 const r = router();
 const nm = (p) => p.social_name || p.name;
-const baseOf = (req) => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+const baseOf = (req) => Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`;
 async function patientOf(req, id) {
   const p = await one('SELECT * FROM patients WHERE id = ?', [id]);
   if (!p) return null;

@@ -2,6 +2,7 @@
 // páginas abertas — de todos os usuários, em qualquer processo do servidor — são avisadas.
 // O banco é o ponto de encontro porque a hospedagem roda vários processos Node ao mesmo tempo.
 import { q, one } from './db.js';
+import * as Tenancy from './tenancy.js';
 
 export const TOPICS = ['agenda', 'crm', 'pacientes', 'financeiro', 'exercicios', 'usuarios', 'config'];
 
@@ -23,13 +24,15 @@ const ROUTE_TOPICS = [
 // POSTs que não alteram dados compartilhados
 const IGNORE = [/^\/login/, /^\/logout/, /^\/conta/, /^\/configuracoes\/agente\/simular/, /^\/configuracoes\/whatsapp\/qr/, /^\/configuracoes\/whatsapp\/teste/];
 
-let pending = new Set(); let flushTimer = null;
+// Fila de avisos por clínica (cada clínica grava no próprio banco)
+const F = Tenancy.scoped({ pending: null, flushTimer: null });
 // Registra a alteração. Agrupa as chamadas de ~150 ms num único evento.
 export function emit(topics) {
-  for (const t of [].concat(topics)) if (TOPICS.includes(t)) pending.add(t);
-  if (!pending.size || flushTimer) return;
-  flushTimer = setTimeout(async () => {
-    const list = [...pending]; pending = new Set(); flushTimer = null;
+  if (!F.pending) F.pending = new Set();
+  for (const t of [].concat(topics)) if (TOPICS.includes(t)) F.pending.add(t);
+  if (!F.pending.size || F.flushTimer) return;
+  F.flushTimer = setTimeout(async () => { // o temporizador guarda o contexto da clínica
+    const list = [...F.pending]; F.pending = new Set(); F.flushTimer = null;
     try { await q('INSERT INTO live_events (topics) VALUES (?)', [list.join(',')]); } catch (e) { console.error('live', e.message); }
   }, 150);
 }
@@ -45,37 +48,42 @@ export function middleware(req, res, next) {
 }
 
 // ---------- distribuição para as páginas abertas neste processo (SSE) ----------
-const clients = new Set();
-let lastId = null; let poller = null;
-
-async function poll() {
+// Cada clínica tem as suas páginas abertas, o seu último evento lido e a sua consulta periódica.
+const rooms = new Map(); // slug → { tenant, clients, lastId, poller }
+function roomOf() {
+  const t = Tenancy.current(); const k = t?.slug || '_';
+  if (!rooms.has(k)) rooms.set(k, { tenant: t, clients: new Set(), lastId: null, poller: null });
+  return rooms.get(k);
+}
+async function poll(room) {
   try {
-    if (lastId === null) { lastId = Number((await one('SELECT COALESCE(MAX(id),0) m FROM live_events')).m); return; }
-    const rows = await q('SELECT id, topics FROM live_events WHERE id > ? ORDER BY id LIMIT 200', [lastId]);
+    if (room.lastId === null) { room.lastId = Number((await one('SELECT COALESCE(MAX(id),0) m FROM live_events')).m); return; }
+    const rows = await q('SELECT id, topics FROM live_events WHERE id > ? ORDER BY id LIMIT 200', [room.lastId]);
     if (!rows.length) return;
-    lastId = Number(rows[rows.length - 1].id);
+    room.lastId = Number(rows[rows.length - 1].id);
     const topics = [...new Set(rows.flatMap((r) => String(r.topics).split(',')))];
-    const msg = `id: ${lastId}\nevent: change\ndata: ${JSON.stringify({ id: lastId, topics })}\n\n`;
-    for (const c of clients) c.write(msg);
+    const msg = `id: ${room.lastId}\nevent: change\ndata: ${JSON.stringify({ id: room.lastId, topics })}\n\n`;
+    for (const c of room.clients) c.write(msg);
   } catch (e) { console.error('live poll', e.message); }
 }
-function ensurePoller() {
-  if (!poller && clients.size) poller = setInterval(poll, Number(process.env.LIVE_POLL_MS || 1000));
-  if (poller && !clients.size) { clearInterval(poller); poller = null; }
+function ensurePoller(room) {
+  if (!room.poller && room.clients.size) room.poller = setInterval(() => (room.tenant ? Tenancy.run(room.tenant, () => poll(room)) : poll(room)), Number(process.env.LIVE_POLL_MS || 1000));
+  if (room.poller && !room.clients.size) { clearInterval(room.poller); room.poller = null; }
 }
 
 export async function stream(req, res) {
+  const room = roomOf();
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store, no-transform',
     Connection: 'keep-alive', 'X-Accel-Buffering': 'no',
   });
-  if (lastId === null) await poll();
-  res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ id: lastId })}\n\n`);
-  clients.add(res); ensurePoller();
+  if (room.lastId === null) await poll(room);
+  res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ id: room.lastId })}\n\n`);
+  room.clients.add(res); ensurePoller(room);
   const beat = setInterval(() => res.write(': ok\n\n'), 15000);
   // Encerra após 4 min; o navegador reconecta sozinho (evita conexões presas no proxy).
   const end = setTimeout(() => res.end(), 4 * 60000);
-  req.on('close', () => { clearInterval(beat); clearTimeout(end); clients.delete(res); ensurePoller(); });
+  req.on('close', () => { clearInterval(beat); clearTimeout(end); room.clients.delete(res); ensurePoller(room); });
 }
 
 // Reserva para quando o proxy não deixa o SSE passar: a página pergunta “houve algo desde X?”.

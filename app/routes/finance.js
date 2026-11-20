@@ -1,3 +1,4 @@
+import * as Tenancy from '../lib/tenancy.js';
 import { q, one, audit } from '../lib/db.js';
 import { docFmt } from '../lib/br.js';
 import { page, bare, html, raw, money, brDate, brDateTime, label } from '../lib/html.js';
@@ -1106,7 +1107,7 @@ export async function receiptPage(x, req) {
   const proDoc = !fp ? '' : fp.kind === 'pj' && fp.cnpj ? `CNPJ ${cnpjFmt(fp.cnpj)}${fp.razao ? ` · ${fp.razao}` : ''}` : fp.cpf ? `CPF ${Fiscal.cpfFmt(fp.cpf)}` : rl.doc ? `CPF/CNPJ ${docFmt(rl.doc)}` : '';
   const signer = byPro
     ? { name: fp.saved && fp.fullName && fp.fullName !== pro.name ? fp.fullName : proName(pro), line: `Psicólogo(a)${pro.crp ? ` · CRP ${pro.crp}` : ''}`, doc: proDoc || 'CPF: _______________________' }
-    : { name: c.name, line: pro ? `Atendimento: ${proName(pro)}${pro.crp ? ` · CRP ${pro.crp}` : ''}` : '', doc: c.doc ? `CNPJ/CPF ${docFmt(c.doc)}` : (process.env.PRO_CPF ? `CPF ${process.env.PRO_CPF}` : 'CNPJ/CPF: _______________________') };
+    : { name: c.name, line: pro ? `Atendimento: ${proName(pro)}${pro.crp ? ` · CRP ${pro.crp}` : ''}` : '', doc: c.doc ? `CNPJ/CPF ${docFmt(c.doc)}` : (Tenancy.env('PRO_CPF') ? `CPF ${Tenancy.env('PRO_CPF')}` : 'CNPJ/CPF: _______________________') };
   return bare('Recibo', html`
   <div class="print-bar"><button class="btn" data-print>Imprimir / salvar em PDF</button></div>
   <article class="letter receipt">

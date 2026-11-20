@@ -1,4 +1,5 @@
 // Portal do paciente (/paciente): entrada pelo WhatsApp e área pessoal instalável no celular.
+import * as Tenancy from '../lib/tenancy.js';
 import path from 'node:path';
 import { botFields } from '../lib/ratelimit.js';
 import fs from 'node:fs';
@@ -455,8 +456,8 @@ staff.post('/enviar/:pid', async (req, res, next) => {
   const phone = p.phone || p.responsible_phone;
   if (!phone) return res.flash('O paciente não tem WhatsApp cadastrado.', 'err').redirect(`/pacientes/${p.id}?aba=dados#portal`);
   const token = await P.createLink(p.id, req.user.id);
-  const url = `${process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`}${BASE}/acesso/${token}`;
-  const out = await WA.send({ phone, text: `Olá, ${P.firstName(p)}! Este é o seu acesso ao portal do paciente, onde você vê suas sessões, remarca, paga com Pix, baixa recibos e responde termos e exercícios:\n${url}\n\nO link é pessoal e vale por 7 dias. Depois, entre em ${process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`}${BASE} com o seu WhatsApp. Dá para instalar no celular como aplicativo.`, kind: 'manual', patient_id: p.id, user_id: req.user.id });
+  const url = `${Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`}${BASE}/acesso/${token}`;
+  const out = await WA.send({ phone, text: `Olá, ${P.firstName(p)}! Este é o seu acesso ao portal do paciente, onde você vê suas sessões, remarca, paga com Pix, baixa recibos e responde termos e exercícios:\n${url}\n\nO link é pessoal e vale por 7 dias. Depois, entre em ${Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`}${BASE} com o seu WhatsApp. Dá para instalar no celular como aplicativo.`, kind: 'manual', patient_id: p.id, user_id: req.user.id });
   await audit(req, 'portal-enviar-acesso', `patient:${p.id}`);
   res.flash(out.ok ? 'Acesso ao portal enviado pelo WhatsApp.' : `Não foi possível enviar pelo WhatsApp (${out.error || 'erro'}). Link (vale 7 dias): ${url}`, out.ok ? 'ok' : 'err').redirect(`/pacientes/${p.id}?aba=dados#portal`);
 });

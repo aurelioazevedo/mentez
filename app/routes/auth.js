@@ -1,3 +1,4 @@
+import * as Tenancy from '../lib/tenancy.js';
 import bcrypt from 'bcryptjs';
 import { q, one, audit } from '../lib/db.js';
 import { bare, html } from '../lib/html.js';
@@ -41,7 +42,7 @@ r.get('/setup', async (req, res) => {
 r.post('/setup', async (req, res) => {
   if (await hasUsers()) return res.redirect('/login');
   const { token, name, email, password, password2 } = req.body;
-  const expected = process.env.SETUP_TOKEN;
+  const expected = Tenancy.env('SETUP_TOKEN');
   if (!expected || !safeEqual(str(token), expected)) return res.flash('Código de instalação inválido.', 'err').redirect('/setup');
   if (!password || password.length < 10 || password !== password2) return res.flash('As senhas precisam ser iguais e ter pelo menos 10 caracteres.', 'err').redirect('/setup');
   const hash = await bcrypt.hash(password, 12);

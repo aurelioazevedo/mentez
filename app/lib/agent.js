@@ -2,6 +2,7 @@
 // O agente conversa, informa, vende os e-books e — somente pelas ferramentas abaixo,
 // validadas no banco — consulta horários, agenda, remarca e cancela sessões, ou
 // transfere para atendimento humano. Nunca faz orientação clínica.
+import * as Tenancy from './tenancy.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { q, one, getSetting, setSetting } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -37,13 +38,13 @@ const DEFAULTS = {
   notifyProWhatsApp: true, clinicInfo: '', primary: 'claude', altProvider: 'groq', altBaseUrl: '',
   relayOn: false, relayOps: [],
 };
-let cache = null;
+const S = Tenancy.scoped({ cache: null }); // caches com um valor por clínica
 export async function config() {
-  if (cache && cache.at > Date.now() - 30e3) return cache.v;
+  if (S.cache && S.cache.at > Date.now() - 30e3) return S.cache.v;
   const raw = await getSetting('agent_config');
   let c = { ...DEFAULTS };
   if (raw) { try { const o = JSON.parse(raw); c = { ...c, ...o, apiKey: o.key_enc ? decrypt(o.key_enc) : '', groqKey: o.groq_key_enc ? decrypt(o.groq_key_enc) : '' }; } catch { /* usa padrão */ } }
-  cache = { at: Date.now(), v: c };
+  S.cache = { at: Date.now(), v: c };
   return c;
 }
 export async function saveConfig(patch) {
@@ -53,7 +54,7 @@ export async function saveConfig(patch) {
   if (patch.groqKey) next.groq_key_enc = encrypt(patch.groqKey);
   delete next.apiKey; delete next.groqKey;
   await setSetting('agent_config', JSON.stringify(next));
-  cache = null;
+  S.cache = null;
   return config();
 }
 export const claudeReady = (c) => !!(c && c.apiKey && !c.suspended);
@@ -646,7 +647,7 @@ async function contextMessage(c, conv, extra) {
 }
 
 // ---------- ciclo da conversa ----------
-const conversationsInFlight = new Map();
+const conversationsInFlight = new Tenancy.TMap();  // separado por clínica
 let clientCache = null;
 function client(c) {
   if (!clientCache || clientCache.key !== c.apiKey) clientCache = { key: c.apiKey, v: new Anthropic({ apiKey: c.apiKey, maxRetries: 2, timeout: 120e3 }) };

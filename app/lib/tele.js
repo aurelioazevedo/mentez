@@ -1,6 +1,7 @@
 // Teleconsulta: sala própria (vídeo pelo navegador, ponto a ponto), Google Meet ou Zoom.
 // A clínica define o que é permitido e o padrão; cada profissional escolhe a sua plataforma;
 // em cada sessão dá para trocar. O link certo é gerado/atualizado a cada mudança na sessão.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -37,7 +38,7 @@ export async function saveConfig(b, cur) {
     cfTurnKeyId: String(b.cfTurnKeyId || '').trim().slice(0, 80), cf_turn_token_enc: b.cfTurnRemove ? null : keep(b.cfTurnToken, cur.cfTurnToken),
   };
   if (b.cfTurnRemove) next.cfTurnKeyId = '';
-  cfCache = null;
+  S.cfCache = null;
   // o padrão da clínica precisa estar entre os permitidos
   if (!allowed(next).includes(next.clinicDefault)) next.clinicDefault = allowed(next).find((k) => k !== 'manual') || 'manual';
   await setSetting('tele_cfg', JSON.stringify(next));
@@ -45,12 +46,13 @@ export async function saveConfig(b, cur) {
 }
 // Servidor de retransmissão (TURN): quando as redes bloqueiam a conexão direta, o vídeo passa por ele (criptografado).
 // Cloudflare Realtime TURN: o sistema gera credenciais temporárias (24 h) a partir da chave da clínica.
-let cfCache = null; // { at, list } — reaproveita por 6 h
+const S = Tenancy.scoped({ cfCache: null, zoomTok: null }); // caches com um valor por clínica
+// { at, list } — reaproveita por 6 h
 const CF_BASE = () => process.env.TURN_CF_URL || 'https://rtc.live.cloudflare.com';
 export const cfReady = (c) => !!(c.cfTurnKeyId && c.cfTurnToken);
 export const relayReady = (c) => cfReady(c) || !!c.turnUrl;
 async function cfServers(c) {
-  if (cfCache && Date.now() - cfCache.at < 6 * 3600e3) return cfCache.list;
+  if (S.cfCache && Date.now() - S.cfCache.at < 6 * 3600e3) return S.cfCache.list;
   const base = `${CF_BASE()}/v1/turn/keys/${encodeURIComponent(c.cfTurnKeyId)}/credentials`;
   const opt = { method: 'POST', signal: AbortSignal.timeout(8000), headers: { Authorization: `Bearer ${c.cfTurnToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }) };
   let r = await fetch(`${base}/generate-ice-servers`, opt);
@@ -60,10 +62,10 @@ async function cfServers(c) {
   const list = [].concat(d.iceServers || []).filter((x) => x && x.urls)
     .map((x) => ({ ...x, urls: [].concat(x.urls).filter((u) => !/:53(\?|$)/.test(u)) })); // porta 53 costuma ser bloqueada nos navegadores
   if (!list.length) throw new Error('Cloudflare não devolveu servidores.');
-  cfCache = { at: Date.now(), list };
+  S.cfCache = { at: Date.now(), list };
   return list;
 }
-export async function testRelay(c) { cfCache = null; if (!cfReady(c)) throw new Error('Informe o Key ID e o token do TURN da Cloudflare.'); const l = await cfServers(c); return l.reduce((n, x) => n + x.urls.filter((u) => /^turns?:/.test(u)).length, 0); }
+export async function testRelay(c) { S.cfCache = null; if (!cfReady(c)) throw new Error('Informe o Key ID e o token do TURN da Cloudflare.'); const l = await cfServers(c); return l.reduce((n, x) => n + x.urls.filter((u) => /^turns?:/.test(u)).length, 0); }
 export async function iceServers(c) {
   const list = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
   if (cfReady(c)) { try { list.push(...(await cfServers(c))); } catch (e) { console.error('TURN Cloudflare', e.message); } }
@@ -72,14 +74,14 @@ export async function iceServers(c) {
 }
 
 // ---------- link seguro do paciente ----------
-function sigOf(id) { return crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev').update(`tele:${id}`).digest('base64url').slice(0, 16); }
+function sigOf(id) { return crypto.createHmac('sha256', Tenancy.env('SESSION_SECRET') || 'dev').update(`tele:${id}`).digest('base64url').slice(0, 16); }
 export const tokenOf = (id) => `${id}.${sigOf(id)}`;
 export function idOfToken(tok) {
   const m = /^(\d{1,10})\.([\w-]{16})$/.exec(String(tok || ''));
   if (!m) return null;
   return crypto.timingSafeEqual(Buffer.from(m[2]), Buffer.from(sigOf(m[1]))) ? Number(m[1]) : null;
 }
-const base = () => (process.env.PUBLIC_URL || 'https://sistema.lorrainymendes.com.br').replace(/\/+$/, '');
+const base = () => (Tenancy.env('PUBLIC_URL') || 'https://sistema.lorrainymendes.com.br').replace(/\/+$/, '');
 export const patientUrl = (id) => `${base()}/tc/${tokenOf(id)}`;
 export const staffPath = (id) => `/teleconsulta/${id}`;
 
@@ -97,15 +99,14 @@ export async function resolve(a, c = null, owner = null) {
 }
 
 // Zoom (Server-to-Server OAuth)
-let zoomTok = null;
 async function zoomToken(c) {
-  if (zoomTok && zoomTok.exp > Date.now() + 60e3 && zoomTok.key === c.zoomClientId) return zoomTok.v;
+  if (S.zoomTok && S.zoomTok.exp > Date.now() + 60e3 && S.zoomTok.key === c.zoomClientId) return S.zoomTok.v;
   const url = `${process.env.ZOOM_OAUTH_URL || 'https://zoom.us'}/oauth/token?grant_type=account_credentials&account_id=${encodeURIComponent(c.zoomAccountId)}`;
   const r = await fetch(url, { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(`${c.zoomClientId}:${c.zoomSecret}`).toString('base64')}` }, signal: AbortSignal.timeout(15e3) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token) throw new Error(j.reason || j.error || `Zoom recusou as credenciais (${r.status})`);
-  zoomTok = { v: j.access_token, exp: Date.now() + (j.expires_in || 3000) * 1000, key: c.zoomClientId };
-  return zoomTok.v;
+  S.zoomTok = { v: j.access_token, exp: Date.now() + (j.expires_in || 3000) * 1000, key: c.zoomClientId };
+  return S.zoomTok.v;
 }
 async function zoomApi(c, method, path, body) {
   const r = await fetch(`${process.env.ZOOM_API_URL || 'https://api.zoom.us'}/v2${path}`, { method, headers: { Authorization: `Bearer ${await zoomToken(c)}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(15e3) });
@@ -181,16 +182,19 @@ async function roomRow(id) { return one('SELECT * FROM tele_rooms WHERE appt_id 
 async function put(id, to, msg) { await q('INSERT INTO tele_signals (appt_id, to_role, msg, created) VALUES (?,?,?,?)', [id, to, JSON.stringify(msg), Date.now()]); }
 
 // presença (cache por processo, renovado a cada 3 s) — usada na agenda e na recepção
-let cache = new Map();
-async function refreshCache() {
+// Um mapa por clínica (os ids das sessões se repetem entre clínicas)
+const P = Tenancy.scoped({ cache: new Map() });
+async function refreshOne() {
   try {
     const now = Date.now();
     const rows = await q('SELECT appt_id, owner_id, pac_name, admitted, pro_seen, pac_seen, waiting_since FROM tele_rooms WHERE pro_seen > ? OR pac_seen > ?', [now - ALIVE_MS, now - ALIVE_MS]);
-    cache = new Map(rows.map((r) => [Number(r.appt_id), { pro: alive(r.pro_seen, now), pac: alive(r.pac_seen, now), admitted: !!r.admitted, waitingSince: r.waiting_since ? Number(r.waiting_since) : null, ownerId: r.owner_id, name: r.pac_name }]));
+    P.cache = new Map(rows.map((r) => [Number(r.appt_id), { pro: alive(r.pro_seen, now), pac: alive(r.pac_seen, now), admitted: !!r.admitted, waitingSince: r.waiting_since ? Number(r.waiting_since) : null, ownerId: r.owner_id, name: r.pac_name }]));
   } catch { /* banco indisponível: mantém o último */ }
 }
+// Dentro de uma requisição: só a clínica atual; no relógio de 3 s: todas as clínicas ativas
+const refreshCache = () => (Tenancy.current() || !Tenancy.multi() ? refreshOne() : Tenancy.forEachTenant(refreshOne, 'presença na teleconsulta'));
 setInterval(refreshCache, 3000).unref?.();
-export const presence = (id) => { const r = cache.get(Number(id)); return { pro: !!r?.pro, pac: !!r?.pac, admitted: !!r?.admitted, waitingSince: r?.pac && !r?.admitted ? r.waitingSince : null }; };
+export const presence = (id) => { const r = P.cache.get(Number(id)); return { pro: !!r?.pro, pac: !!r?.pac, admitted: !!r?.admitted, waitingSince: r?.pac && !r?.admitted ? r.waitingSince : null }; };
 // Pacientes na sala de espera (ainda não autorizados) das sessões da profissional
 export async function waitingFor(ownerId) {
   const now = Date.now();

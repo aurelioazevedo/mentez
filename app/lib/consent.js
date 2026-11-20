@@ -1,5 +1,6 @@
 // Termos digitais: o paciente lê e aceita por um link. Guarda o texto exato aceito (com resumo criptográfico),
 // data/hora, IP, navegador e quem assinou (o próprio paciente ou o responsável legal).
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one } from './db.js';
 import { encrypt } from './crypto.js';
@@ -120,7 +121,7 @@ export const forPatient = (pid) => q('SELECT l.*, u.name who FROM consent_links 
 export async function sendLink(patient, kinds, userId, { base, wa = true, email = true } = {}) {
   const l = await createLink(patient, kinds, userId);
   if (!l) return null;
-  const url = `${String(base || process.env.PUBLIC_URL || '').replace(/\/+$/, '')}/t/${l.token}`;
+  const url = `${String(base || Tenancy.env('PUBLIC_URL') || '').replace(/\/+$/, '')}/t/${l.token}`;
   const first = String(patient.social_name || patient.name).split(' ')[0];
   const titles = l.docs.map((d) => d.title).join(', ');
   const text = `Olá, ${first}! Segue o link para leitura e aceite ${l.docs.length > 1 ? 'dos documentos' : 'do documento'} do seu atendimento psicológico (${titles}):\n${url}\n\nO link é pessoal e vale por 30 dias.`;

@@ -1,4 +1,5 @@
 // Relacionamento com o paciente: mensagem de aniversário e pesquisa de satisfação (NPS) após a sessão.
+import * as Tenancy from './tenancy.js';
 import crypto from 'node:crypto';
 import { q, one, getSetting, setSetting } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -89,7 +90,7 @@ export async function sendBirthday(p, { c = null, force = false } = {}) {
 }
 
 // ---------- pesquisa de satisfação ----------
-function sigOf(id) { return crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev').update(`pesquisa:${id}`).digest('base64url').slice(0, 12); }
+function sigOf(id) { return crypto.createHmac('sha256', Tenancy.env('SESSION_SECRET') || 'dev').update(`pesquisa:${id}`).digest('base64url').slice(0, 12); }
 export const tokenOf = (id) => `${id}.${sigOf(id)}`;
 export function idOfToken(tok) {
   const m = /^(\d{1,10})\.([\w-]{12})$/.exec(String(tok || ''));
@@ -143,10 +144,10 @@ export async function answer(id, score, comment) {
 }
 
 // ---------- rotina (a cada poucos minutos) ----------
-let running = false;
+const RUNNING = Tenancy.scoped({ on: false }); // trava por clínica
 export async function tick() {
-  if (running) return { skipped: true };
-  running = true;
+  if (RUNNING.on) return { skipped: true };
+  RUNNING.on = true;
   const out = { bday: 0, survey: 0, failed: 0 };
   try {
     const c = await config();
@@ -169,7 +170,7 @@ export async function tick() {
       }
     }
     return out;
-  } catch (e) { console.error('relacionamento', e.message); return { ...out, error: e.message }; } finally { running = false; }
+  } catch (e) { console.error('relacionamento', e.message); return { ...out, error: e.message }; } finally { RUNNING.on = false; }
 }
 
 // ---------- resultados (Relatórios → Satisfação) ----------

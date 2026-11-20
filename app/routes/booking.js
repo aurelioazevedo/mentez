@@ -1,4 +1,5 @@
 // Agendamento online: página pública (/agendar) e Configurações → Agendamento online.
+import * as Tenancy from '../lib/tenancy.js';
 import QRCode from 'qrcode';
 import { botFields } from '../lib/ratelimit.js';
 import { q, one, audit } from '../lib/db.js';
@@ -146,7 +147,7 @@ settings.get('/', async (req, res) => {
   const c = await BK.config();
   const all = await q("SELECT id, name, title FROM users WHERE active = 1 AND demo = 0 AND role IN ('admin','psicologo') AND attends = 1 ORDER BY role = 'admin' DESC, name");
   const shown = await BK.professionals({ ...c, pros: [] });
-  const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+  const base = Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`;
   const link = `${base}/agendar`;
   const qr = await QRCode.toDataURL(link, { width: 260, margin: 1 });
   const recent = await q("SELECT a.id, a.starts_at, a.created_at, p.name, p.social_name FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.created_via = 'online' ORDER BY a.id DESC LIMIT 8");

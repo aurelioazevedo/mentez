@@ -1,24 +1,25 @@
 // Notificações push (Web Push) para os aparelhos dos profissionais.
 // As mensagens são curtas e não levam informação clínica.
+import * as Tenancy from './tenancy.js';
 import webpush from 'web-push';
 import { q, getSetting } from './db.js';
 import { encrypt, decrypt, sha256 } from './crypto.js';
 
-let vapid = null;
+const S = Tenancy.scoped({ vapid: null }); // caches com um valor por clínica
 export async function keys() {
-  if (vapid) return vapid;
+  if (S.vapid) return S.vapid;
   const raw = await getSetting('vapid');
   if (raw) {
     const o = JSON.parse(raw);
-    vapid = { publicKey: o.publicKey, privateKey: decrypt(o.private_enc) };
+    S.vapid = { publicKey: o.publicKey, privateKey: decrypt(o.private_enc) };
   } else {
     // Gera uma única vez; se outro processo gerar ao mesmo tempo, prevalece o primeiro gravado.
     const k = webpush.generateVAPIDKeys();
     await q('INSERT IGNORE INTO settings (k, v) VALUES (?, ?)', ['vapid', JSON.stringify({ publicKey: k.publicKey, private_enc: encrypt(k.privateKey) })]);
     const o = JSON.parse(await getSetting('vapid'));
-    vapid = { publicKey: o.publicKey, privateKey: decrypt(o.private_enc) };
+    S.vapid = { publicKey: o.publicKey, privateKey: decrypt(o.private_enc) };
   }
-  return vapid;
+  return S.vapid;
 }
 
 export async function subscribe(userId, sub, device) {
