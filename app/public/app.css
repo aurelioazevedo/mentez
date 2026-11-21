@@ -2385,3 +2385,18 @@ a.mz2-me{text-decoration:none;color:inherit}
 .mk-item .check{align-self:center}
 .bl-retrato .brand-logo-prev img.mk-photo{width:96px;height:96px;max-height:96px;border-radius:50%;object-fit:cover}
 @media (max-width:700px){.mk-row,.mk-row.two,.mk-item{grid-template-columns:1fr}}
+
+/* Identidade da clínica: escolha do estilo */
+.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.st-opt{display:grid;gap:8px;padding:10px;border:1.5px solid var(--line);border-radius:16px;cursor:pointer;background:var(--surface);position:relative}
+.st-opt:has(input:checked){border-color:var(--terracota);box-shadow:0 0 0 3px color-mix(in srgb,var(--terracota) 18%,transparent)}
+.st-opt input{position:absolute;opacity:0;pointer-events:none}
+.st-opt:has(input:focus-visible){outline:2px solid var(--terracota);outline-offset:2px}
+.st-prev{display:grid;grid-template-columns:22px 1fr;height:96px;overflow:hidden;border:1px solid rgba(0,0,0,.08)}
+.st-bar{display:block;height:100%}
+.st-body{display:grid;align-content:center;gap:6px;padding:10px 12px}
+.st-body b{font-size:17px;line-height:1.1}
+.st-line{display:block;height:6px;border-radius:4px;width:80%}.st-line.short{width:55%}
+.st-btn{justify-self:start;color:#fff;font-size:11px;font-weight:600;padding:3px 10px}
+.st-txt{display:grid;gap:2px}.st-txt b{font-size:14px}.st-txt small{font-size:12px;color:var(--muted);line-height:1.35}
+.st-opt:has(input:checked) .st-txt b::after{content:' ✓';color:var(--terracota)}

@@ -7,6 +7,7 @@ import { router, send } from '../lib/router.js';
 import * as Brand from '../lib/brand.js';
 import * as Cards from '../lib/cards.js';
 import * as BK from '../lib/booking.js';
+import * as Styles from '../lib/styles.js';
 
 const digits = (v) => String(v || '').replace(/\D/g, '');
 const fmtPhone = (p) => { const d = digits(p).replace(/^55(?=\d{10,11}$)/, ''); return d.length >= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, -4)}-${d.slice(-4)}` : p || ''; };
@@ -14,12 +15,12 @@ const ig = (v) => String(v || '').replace(/^@/, '').replace(/^https?:\/\/(www\.)
 
 // ---------- visual (cores da clínica; na identidade legada, as da Dra. Lorrainy) ----------
 function palette(b) {
-  const L = b.legacy;
+  const st = Styles.STYLES[b.style] || Styles.STYLES.mentez; const w = Styles.swatch(b.style);
+  const L = st.light || {}; const cls = b.style === 'classico';
   return {
-    accent: b.colors?.[0] || (L ? '#9c4422' : '#04857E'), dark: b.colors?.[1] || (L ? '#47291c' : '#071936'),
-    soft: b.colors?.[3] || (L ? '#e5d8c6' : '#E6F6EF'), bg: L ? '#efe7dd' : '#F5F7FC', ink: L ? '#47291c' : '#0D2246', muted: L ? '#6e5546' : '#4F5E74',
-    serif: L ? "'Fraunces', Georgia, serif" : "'Plus Jakarta Sans', system-ui, sans-serif", sans: L ? "'Instrument Sans', system-ui, sans-serif" : "'Plus Jakarta Sans', system-ui, sans-serif",
-    fonts: L ? 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Instrument+Sans:wght@400;500;600&display=swap' : 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap',
+    accent: b.colors?.[0] || w.accent, dark: b.colors?.[1] || (cls ? '#47291c' : L['strong-bg'] || w.ink),
+    soft: b.colors?.[3] || w.soft, bg: w.bg, ink: w.ink, muted: cls ? '#6e5546' : L.muted || '#4F5E74',
+    serif: st.serif, sans: st.sans, fonts: st.fonts,
   };
 }
 const CSS = (p) => `:root{--a:${p.accent};--d:${p.dark};--s:${p.soft};--bg:${p.bg};--ink:${p.ink};--mu:${p.muted};--serif:${p.serif};--sans:${p.sans}}

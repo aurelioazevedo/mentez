@@ -11,6 +11,7 @@
 import { getSetting, setSetting } from './db.js';
 import * as Tenancy from './tenancy.js';
 import * as Billing from './billing.js';
+import * as Styles from './styles.js';
 
 const LEGACY = {
   name: 'Consultório Lorrainy Mendes', short: 'Lorrainy Mendes', proName: 'Dra. Lorrainy Mendes', proFirst: 'Dra. Lorrainy', proRole: 'Psicóloga',
@@ -46,6 +47,7 @@ function finish(b) {
   b.who = b.proName || b.short || b.name; // como a clínica se apresenta ao paciente
   // Personalização visual (logo, símbolo, favicon e cores): sistema da Dra. Lorrainy sempre; na Mentez, conforme o plano
   if (b.custom === false) { b.logo = ''; b.logoDark = ''; b.symbol = ''; b.symbolDark = ''; b.favicon = ''; b.colors = []; b.color = ''; }
+  b.style = Styles.keyOf(b.custom === false ? '' : b.style, b.legacy);
   b.colors = (b.colors && b.colors.length ? b.colors : [b.color || '', '', '', '']).concat(['', '', '', '']).slice(0, 4);
   b.color = b.colors[0];
   // logoUrl: logo da própria clínica (documentos, portal e páginas do paciente; vazio = nome em texto)
@@ -76,6 +78,7 @@ export async function load(force = false) {
   };
   for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'symbol', 'symbolDark', 'favicon', 'photo', 'appName']) b[k] = pick(k, b[k]);
   b.colors = Array.isArray(saved.colors) ? saved.colors : [];
+  b.style = saved.style || '';
   b.custom = await canCustomize();
   if (!saved.appName && saved.short) b.appName = legacyBrand() ? `Sistema ${saved.short}` : saved.short;
   b.appNameSaved = saved.appName || '';
@@ -95,7 +98,7 @@ export async function save(b) {
   while (colors.length < 4) colors.push('');
   const color = colors[0];
   const next = { ...cur, short: s(b.short, 80), proName: s(b.proName, 120), proFirst: s(b.proFirst, 60), proRole: s(b.proRole, 60), crp: s(b.crp, 30),
-    site: s(b.site, 120).replace(/^https?:\/\//, '').replace(/\/+$/, ''), instagram: s(b.instagram, 60), uf: s(b.uf, 2).toUpperCase(), whatsapp: s(b.whatsapp, 40), color, colors, appName: s(b.appName, 80) };
+    site: s(b.site, 120).replace(/^https?:\/\//, '').replace(/\/+$/, ''), instagram: s(b.instagram, 60), uf: s(b.uf, 2).toUpperCase(), whatsapp: s(b.whatsapp, 40), color, colors, style: b.style === undefined ? (cur.style || '') : (Styles.STYLES[b.style] ? b.style : ''), appName: s(b.appName, 80) };
   await setSetting('brand', JSON.stringify(next));
   const fin = JSON.parse((await getSetting('fin_clinic')) || '{}');
   await setSetting('fin_clinic', JSON.stringify({ ...fin, name: s(b.name, 160), city: s(b.city, 80), phone: s(b.phone, 40), email: s(b.email, 120), address: s(b.address, 200) }));
@@ -162,7 +165,7 @@ export function manifest({ start = '/', scope = '/', suffix = '' } = {}) {
   return {
     name: suffix ? `${b.short} · ${suffix}` : b.appName, short_name: (b.legacy && !suffix ? 'Consultório' : b.short).slice(0, 24), description: b.legacy ? 'Sistema de gestão do consultório — Lorrainy Mendes, Psicóloga' : `${b.name} · gestão pela Mentez`,
     start_url: start, scope, id: start, display: 'standalone', lang: 'pt-BR',
-    background_color: b.legacy ? '#f6f0e8' : '#F5F7FC', theme_color: b.colors[1] || (b.legacy ? '#47291c' : '#071936'),
+    background_color: Styles.swatch(b.style).bg, theme_color: b.colors[1] || Styles.swatch(b.style).dark || (b.legacy ? '#47291c' : '#071936'),
     icons,
   };
 }
@@ -182,12 +185,7 @@ function lum(hex) {
 }
 export function themeCss(b = get()) {
   const out = [];
-  if (!b.legacy) {
-    out.push(`:root,.letter{--terracota:#04857E;--terracota-d:#036B65;--terracota-l:#07C6BC;--creme:#E6F6EF;--creme-deep:#BDE5D2;--musgo:#5B47C9;--marrom:#1E3663;--marrom-deep:#071936;--bg:#F5F7FC;--bg2:#E8EDF5;--ink:#0D2246;--muted:#4F5E74;--line:#D9E0EC;--card:#fff;--surface:#fff;--surface-2:#F5F7FC;--strong-bg:#071936;--strong-ink:#F5F7FC;--strong-accent:#07C6BC;--serif:'Plus Jakarta Sans',system-ui,sans-serif;--sans:'Plus Jakarta Sans',system-ui,sans-serif}`);
-    out.push(':root[data-theme="dark"]{--terracota:#07C6BC;--terracota-d:#3BD6CD;--terracota-l:#07C6BC;--creme:#132C57;--creme-deep:#1E3663;--marrom:#C9D2E3;--marrom-deep:#F5F7FC;--bg:#071936;--bg2:#0D2246;--ink:#F5F7FC;--muted:#A9B5CA;--line:#1E3663;--card:#0D2246;--surface:#0D2246;--surface-2:#132C57;--strong-bg:#132C57;--strong-ink:#F5F7FC}');
-    out.push('@media (prefers-color-scheme: dark){:root[data-theme="auto"]{--terracota:#07C6BC;--terracota-d:#3BD6CD;--creme:#132C57;--creme-deep:#1E3663;--marrom:#C9D2E3;--marrom-deep:#F5F7FC;--bg:#071936;--bg2:#0D2246;--ink:#F5F7FC;--muted:#A9B5CA;--line:#1E3663;--card:#0D2246;--surface:#0D2246;--surface-2:#132C57}}');
-    out.push('h1,h2,h3{font-weight:700;letter-spacing:-.01em}');
-  }
+  out.push(Styles.css(b.style || Styles.keyOf('', b.legacy))); // estilo escolhido (cores, fontes, cantos, sombras)
   // Paleta da clínica (até 4 cores): 1 principal (botões, links, menu ativo), 2 escura (títulos e textos fortes),
   // 3 de destaque (gradientes, ícones e gráficos), 4 clara (fundos suaves e etiquetas). Vazias = cores padrão.
   const [c1, c2, c3, c4] = b.colors || [b.color];

@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as Tenancy from './tenancy.js';
 import * as Brand from './brand.js';
+import * as Styles from './styles.js';
 import { can, ROLES } from './perm.js';
 
 // Templates HTML seguros: tudo é escapado, exceto valores marcados com raw().
@@ -93,7 +94,7 @@ function head(title, theme = '', o = {}) {
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
 <meta name="googlebot" content="noindex, nofollow">
 <meta name="referrer" content="same-origin">
-<meta name="theme-color" content="${Brand.get().legacy ? '#47291c' : '#071936'}">
+<meta name="theme-color" content="${Brand.get().colors?.[1] || Styles.swatch(Brand.get().style).dark || (Brand.get().legacy ? '#47291c' : '#071936')}">
 <meta name="color-scheme" content="${theme === 'dark' ? 'dark' : theme === 'auto' ? 'light dark' : 'light'}">
 <title>${title} · ${o.suffix || Brand.get().appName}</title>
 <link rel="icon" href="${Brand.icon('favicon.png')}" type="image/png">
@@ -103,7 +104,7 @@ function head(title, theme = '', o = {}) {
 <meta name="apple-mobile-web-app-title" content="${o.appTitle || (Brand.get().legacy ? 'Consultório' : Brand.get().short)}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-${Brand.get().legacy ? raw('<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">') : raw('<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">')}
+<link href="${(Styles.STYLES[Brand.get().style] || Styles.STYLES[Brand.get().legacy ? 'classico' : 'mentez']).fonts}" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css?v=${VERSION}">
 ${Brand.themeCss() ? raw(`<style>${Brand.themeCss()}</style>`) : ''}
 </head>`;

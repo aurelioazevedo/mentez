@@ -4,6 +4,7 @@ import { audit } from '../lib/db.js';
 import { page, html, raw, logoTag, appLogo } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
 import * as Brand from '../lib/brand.js';
+import * as Styles from '../lib/styles.js';
 
 // /marca/logo, /marca/logo-escuro, /marca/simbolo, /marca/simbolo-escuro e /marca/favicon (sem login)
 const ROUTE_KIND = { logo: 'claro', 'logo-escuro': 'escuro', simbolo: 'simbolo', 'simbolo-escuro': 'simbolo-escuro', favicon: 'favicon', foto: 'foto' };
@@ -58,7 +59,18 @@ settings.get('/', async (req, res) => {
       <label class="fld"><span>Cidade</span><input name="city" maxlength="80" value="${v(b.city)}" placeholder="Goiânia"></label>
       <label class="fld"><span>UF</span><input name="uf" maxlength="2" value="${v(b.uf)}" placeholder="GO"></label>
       <label class="fld span2"><span>Nome do sistema <small class="muted">(título das páginas e do aplicativo)</small></span><input name="appName" maxlength="80" value="${v(b.appNameSaved)}" placeholder="${b.appName}"></label>
-      ${b.custom !== false ? html`<h2 class="span2">Paleta de cores</h2>
+      ${b.custom !== false ? html`<h2 class="span2">Estilo do sistema</h2>
+      <p class="span2 muted small">Muda as cores, as fontes, os cantos e as sombras de todas as telas, do cartão digital e do link na bio. Cada estilo tem versão clara e escura. A paleta de cores abaixo, se preenchida, vai por cima do estilo.</p>
+      <link rel="stylesheet" href="${Styles.allFonts()}">
+      <div class="span2 st-grid" role="radiogroup" aria-label="Estilo do sistema">${Object.entries(Styles.STYLES).map(([k, st]) => { const w = Styles.swatch(k); return html`<label class="st-opt">
+        <input type="radio" name="style" value="${k}" ${k === b.style ? raw('checked') : ''}>
+        <span class="st-prev" style="background:${w.bg};border-radius:${Math.min(st.r, 16)}px">
+          <span class="st-bar" style="background:${w.dark || w.ink}"></span>
+          <span class="st-body"><b style="font-family:${st.serif};color:${w.ink}">Aa Agenda</b>
+            <span class="st-line" style="background:${w.soft}"></span><span class="st-line short" style="background:${w.soft}"></span>
+            <span class="st-btn" style="background:${w.accent};border-radius:${Math.max(4, st.r - 8)}px;font-family:${st.sans}">Salvar</span></span></span>
+        <span class="st-txt"><b>${st.label}</b><small>${st.desc}</small></span></label>`; })}</div>
+      <h2 class="span2">Paleta de cores</h2>
       <p class="span2 muted small">Até 4 cores da clínica ou do profissional. Deixe em branco para usar as cores padrão${b.legacy ? '' : ' da Mentez'}. Os textos dos botões mudam sozinhos para escuro quando a cor principal é muito clara.</p>
       <div class="span2 pal-grid" data-palette>
         ${PALETTE.map(([label, hint, def], i) => html`<label class="pal"><span class="pal-sw"><input type="color" value="${b.colors[i] || def}" data-pal-pick="${i}" aria-label="Escolher ${label}"></span>
