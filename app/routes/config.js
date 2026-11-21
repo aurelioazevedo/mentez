@@ -1,4 +1,5 @@
 import * as Tenancy from '../lib/tenancy.js';
+import * as Domains from '../lib/domains.js';
 import * as Billing from '../lib/billing.js';
 import * as Brand from '../lib/brand.js';
 import { one } from '../lib/db.js';
@@ -74,6 +75,10 @@ r.get('/', async (req, res) => {
       key: 'assinatura', href: '/configuracoes/assinatura', title: 'Plano e assinatura',
       desc: 'Plano da Mentez, faturas e forma de pagamento (Pix, boleto ou cartão).',
       status: (() => { const a = Billing.accessOf(Tenancy.current()); return a.state === 'ativa' || a.state === 'cortesia' ? ['realizada', a.state === 'ativa' ? 'Em dia' : 'Cortesia'] : a.state === 'teste' ? ['confirmada', `Teste · ${a.daysLeft} dia(s)`] : ['falta', a.state === 'atrasada' ? 'Em aberto' : 'Suspenso']; })(),
+    }, {
+      key: 'dominio', href: '/configuracoes/dominio', title: 'Domínio próprio',
+      desc: 'Use o endereço da clínica (ex.: app.suaclinica.com.br) no lugar do endereço da Mentez, com o passo a passo do registro A no Registro.br ou na hospedagem.',
+      status: await (async () => { const ds = await Domains.list(Tenancy.current().id).catch(() => []); const on = ds.find((d) => d.verified_at && d.https_at); return on ? ['realizada', on.domain] : ds.length ? ['confirmada', 'Aguardando DNS'] : ['cancelada', `${Tenancy.current().slug}.${Tenancy.baseDomain()}`]; })(),
     }] : []),
     {
       key: 'whatsapp', href: '/configuracoes/whatsapp', title: 'WhatsApp',

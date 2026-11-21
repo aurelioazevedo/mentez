@@ -10,6 +10,8 @@ import * as Billing from './lib/billing.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
+import { domainSettings } from './routes/domain.js';
+import * as Domains from './lib/domains.js';
 import { loadUser, requireUser, checkOrigin } from './lib/auth.js';
 import { bare, html } from './lib/html.js';
 import { flash } from './lib/router.js';
@@ -191,6 +193,7 @@ app.use('/conta', accountRoutes);
 app.get(/^\/usuarios\/(google|whatsapp|agente|acessos)(\/.*)?$/, (req, res) => res.redirect(301, req.originalUrl.replace(/^\/usuarios\//, '/configuracoes/')));
 app.use('/configuracoes/identidade', requirePerm('usuarios'), brandSettings);
 app.use('/configuracoes/assinatura', subscriptionSettings);
+app.use('/configuracoes/dominio', requirePerm('usuarios'), domainSettings);
 app.use('/configuracoes/google', requirePerm('usuarios'), googleAdmin);
 app.use('/configuracoes/whatsapp', requirePerm('usuarios'), waAdmin);
 app.use('/configuracoes/agente', requirePerm('usuarios'), agentAdmin);
@@ -274,6 +277,7 @@ async function boot() {
   if (Tenancy.multi()) {
     await Tenancy.migratePlatform();
     await Billing.migrate();
+    await Domains.migrate();
     await Tenancy.forEachTenant(() => migrate(), 'migração'); // cada clínica no seu banco, sempre no esquema atual
   } else await migrate();
 }
@@ -283,6 +287,7 @@ boot()
   .finally(() => app.listen(port, () => {
     console.log(`Sistema rodando na porta ${port}`);
     startWhatsApp();
+    if (Tenancy.multi()) { const dt = () => Domains.tick().catch((e) => console.error('domínios:', e.message)); setTimeout(dt, 60e3).unref(); setInterval(dt, Number(process.env.DOMAIN_TICK_MS) || 10 * 60e3).unref(); }
     every(3600e3, () => Live.cleanup(), 'live', 5e3);
     every(6 * 3600e3, () => Fin.ensureRecurring(), 'recorrentes', 10e3);
     every(Number(process.env.BACKUP_TICK_MS) || 10 * 60e3, () => Backup.tick(), 'backup', Number(process.env.BACKUP_TICK_MS) || 90e3);

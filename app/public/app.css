@@ -2276,3 +2276,25 @@ label.ask-opt:has(input:focus-visible) { outline: 2px solid var(--terracota); ou
   .mz2-card.mz2-table>header{padding:0 2px}
   .mz2-table tr{background:#fff}
 }
+
+/* Configurações → Domínio próprio */
+.dm-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
+.dm-head h2{margin:0;word-break:break-all}
+.dm-card h3{font-size:15px;margin:18px 0 8px}
+.dm-rec code,.dm-card p code,.dm-guides code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--bg2);padding:2px 6px;border-radius:6px;word-break:break-all}
+.dm-rec td{vertical-align:middle}
+.dm-copy{margin-left:6px;font-size:12px;padding:2px 8px}
+.dm-guides{display:grid;gap:8px}
+.dm-guides details{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--surface)}
+.dm-guides summary{cursor:pointer;font-weight:600}
+.dm-guides ol{margin:10px 0 4px;padding-left:20px;display:grid;gap:6px}
+.dm-card .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.dm-card .actions form{margin:0}
+@media (max-width:620px){
+  .dm-rec thead{display:none}
+  .dm-rec tr{display:grid;gap:6px;padding:10px 0}
+  .dm-rec td{display:flex;justify-content:space-between;align-items:center;gap:8px;border:0;padding:2px 0}
+  .dm-rec td::before{content:attr(data-label);color:var(--muted);font-size:12px}
+  .dm-card .actions .btn{width:100%}
+  .dm-card .actions form{flex:1 1 100%}
+}

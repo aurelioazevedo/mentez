@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import * as T from '../lib/tenancy.js';
+import * as Domains from '../lib/domains.js';
 import { q, one, migrate } from '../lib/db.js';
 import { bare, html, raw, brDate, brDateTime } from '../lib/html.js';
 import { router, send, str, int, flash } from '../lib/router.js';
@@ -366,10 +367,11 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
       </form>
     </section>
     <section class="card"><h2>Domínios próprios</h2>
-      <p class="muted small">O endereço <b>${t.slug}.${T.baseDomain()}</b> sempre funciona. Para usar um domínio da clínica (ex.: app.clinica.com.br), a clínica cria no DNS dela um registro <b>A</b> apontando para o servidor da Mentez (ou <b>CNAME</b> para ${t.slug}.${T.baseDomain()}) e você cadastra aqui. O HTTPS é emitido na primeira visita.</p>
-      ${domains.length ? html`<ul class="list">${domains.map((d) => html`<li><div class="maint-bk"><span><b>${d.domain}</b> ${d.is_primary ? html`<span class="badge b-realizada">principal</span>` : ''}<small>cadastrado em ${brDate(d.created_at)}</small></span>
-        <span class="actions">${!d.is_primary ? html`<form method="post" action="/clinicas/${t.id}/dominio/principal"><input type="hidden" name="domain" value="${d.domain}"><button class="chip" data-confirm="Usar ${d.domain} como endereço principal? Links enviados aos pacientes passam a usar este domínio — confirme antes que o DNS já aponta para a Mentez.">Tornar principal</button></form>` : html`<form method="post" action="/clinicas/${t.id}/dominio/principal"><input type="hidden" name="domain" value=""><button class="chip">Voltar ao endereço da Mentez</button></form>`}
-          <form method="post" action="/clinicas/${t.id}/dominio/remover"><input type="hidden" name="domain" value="${d.domain}"><button class="chip" data-confirm="Remover ${d.domain}?">Remover</button></form></span></div></li>`)}</ul>` : ''}
+      <p class="muted small">O endereço <b>${t.slug}.${T.baseDomain()}</b> sempre funciona. A própria clínica cadastra o domínio em Configurações → Domínio próprio e cria no DNS um registro <b>A</b> apontando para <b>${(await Domains.serverIps().catch(() => ({ v4: [] }))).v4[0] || 'o IP do servidor'}</b>. O domínio só abre a clínica depois que o DNS aponta para cá; o HTTPS é emitido sozinho.</p>
+      ${domains.length ? html`<ul class="list">${domains.map((d) => { const st = Domains.stateOf(d); return html`<li><div class="maint-bk"><span><b>${d.domain}</b> <span class="badge b-${st.badge}">${st.label}</span> ${d.is_primary ? html`<span class="badge b-realizada">principal</span>` : ''}<small>cadastrado em ${brDate(d.created_at)}${d.checked_at ? ` · verificado em ${brDateTime(d.checked_at)}` : ''}${d.last_check ? ` · ${d.last_check}` : ''}</small></span>
+        <span class="actions"><form method="post" action="/clinicas/${t.id}/dominio/verificar"><input type="hidden" name="domain" value="${d.domain}"><button class="chip">Verificar</button></form>
+          ${!d.is_primary ? (st.key === 'ativo' ? html`<form method="post" action="/clinicas/${t.id}/dominio/principal"><input type="hidden" name="domain" value="${d.domain}"><button class="chip" data-confirm="Usar ${d.domain} como endereço principal? Links enviados aos pacientes passam a usar este domínio.">Tornar principal</button></form>` : '') : html`<form method="post" action="/clinicas/${t.id}/dominio/principal"><input type="hidden" name="domain" value=""><button class="chip">Voltar ao endereço da Mentez</button></form>`}
+          <form method="post" action="/clinicas/${t.id}/dominio/remover"><input type="hidden" name="domain" value="${d.domain}"><button class="chip" data-confirm="Remover ${d.domain}?">Remover</button></form></span></div></li>`; })}</ul>` : ''}
       <form method="post" action="/clinicas/${t.id}/dominio" class="inline-form"><input name="domain" required placeholder="app.clinica.com.br" maxlength="190"><button class="btn ghost">Adicionar domínio</button></form>
     </section>
     <section class="card flush"><h2 class="pad">Histórico</h2>${hist.length ? html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Quando</th><th>Ação</th><th>Quem</th><th>Detalhe</th></tr></thead><tbody>${hist.map((h) => html`<tr><td>${brDateTime(h.created_at)}</td><td>${h.action}</td><td>${h.actor || '—'}</td><td class="small">${h.detail || ''}</td></tr>`)}</tbody></table></div>` : html`<p class="muted pad">Sem registros.</p>`}</section>`));
@@ -393,20 +395,22 @@ handle.post('/clinicas/:id/situacao', need, async (req, res, next) => {
 });
 handle.post('/clinicas/:id/dominio', need, async (req, res, next) => {
   const t = await tenantOf(req); if (!t) return next();
-  try { const d = await T.addDomain(t.id, req.body.domain); await log(req, 'dominio-adicionar', t.id, d); res.flash(`Domínio ${d} cadastrado.`); } catch (e) { res.flash(e.message, 'err'); }
+  try { const d = await Domains.add(t.id, req.body.domain, req.admin?.email || 'painel'); res.flash(`Domínio ${d} cadastrado. A clínica precisa criar o registro A no DNS.`); } catch (e) { res.flash(e.message, 'err'); }
+  res.redirect(`/clinicas/${t.id}`);
+});
+handle.post('/clinicas/:id/dominio/verificar', need, async (req, res, next) => {
+  const t = await tenantOf(req); if (!t) return next();
+  try { const r = await Domains.check(Domains.normalize(req.body.domain), t.id); res.flash(r.ok && r.https ? 'Domínio ativo (DNS e HTTPS).' : r.ok ? 'DNS certo; HTTPS ainda sendo emitido.' : r.problems.join(' '), r.ok ? 'ok' : 'warn'); } catch (e) { res.flash(e.message, 'err'); }
   res.redirect(`/clinicas/${t.id}`);
 });
 handle.post('/clinicas/:id/dominio/principal', need, async (req, res, next) => {
   const t = await tenantOf(req); if (!t) return next();
-  await T.pq('UPDATE tenant_domains SET is_primary = 0 WHERE tenant_id = ?', [t.id]);
-  if (req.body.domain) await T.pq('UPDATE tenant_domains SET is_primary = 1, verified_at = COALESCE(verified_at, NOW()) WHERE tenant_id = ? AND domain = ?', [t.id, str(req.body.domain, 190)]);
-  T.clearCache(); await log(req, 'dominio-principal', t.id, req.body.domain || `${t.slug}.${T.baseDomain()}`);
-  res.flash('Endereço principal atualizado.').redirect(`/clinicas/${t.id}`);
+  try { await Domains.setPrimary(t.id, req.body.domain ? Domains.normalize(req.body.domain) : '', req.admin?.email || 'painel'); res.flash('Endereço principal atualizado.'); } catch (e) { res.flash(e.message, 'err'); }
+  res.redirect(`/clinicas/${t.id}`);
 });
 handle.post('/clinicas/:id/dominio/remover', need, async (req, res, next) => {
   const t = await tenantOf(req); if (!t) return next();
-  await T.pq('DELETE FROM tenant_domains WHERE tenant_id = ? AND domain = ?', [t.id, str(req.body.domain, 190)]); T.clearCache();
-  await log(req, 'dominio-remover', t.id, req.body.domain);
+  await Domains.remove(t.id, str(req.body.domain, 190), req.admin?.email || 'painel');
   res.flash('Domínio removido.').redirect(`/clinicas/${t.id}`);
 });
 handle.post('/clinicas/:id/assinatura', need, async (req, res, next) => {

@@ -149,7 +149,7 @@ export async function byHost(host) {
   let row = null;
   const slug = slugOfHost(h);
   if (slug) row = await pone(`${SELECT} WHERE t.slug = ?`, [slug]);
-  else row = await pone(`${SELECT} JOIN tenant_domains x ON x.tenant_id = t.id WHERE x.domain = ?`, [h]);
+  else row = await pone(`${SELECT} JOIN tenant_domains x ON x.tenant_id = t.id WHERE x.domain = ? AND x.verified_at IS NOT NULL`, [h]); // domínio próprio só depois de o DNS apontar para a Mentez
   const t = shape(row);
   cache.set(h, { t, at: Date.now() });
   return t;
@@ -174,7 +174,7 @@ export async function allowCertificate(domain) {
   const t = await byHost(d).catch(() => null);
   if (!t || t.status === 'cancelada') return false;
   if (slugOfHost(d)) return true;
-  return !!(await pone('SELECT 1 x FROM tenant_domains WHERE domain = ? AND tenant_id = ?', [d, t.id]));
+  return !!(await pone('SELECT 1 x FROM tenant_domains WHERE domain = ? AND tenant_id = ? AND verified_at IS NOT NULL', [d, t.id]));
 }
 
 // ---------- criar uma clínica ----------
