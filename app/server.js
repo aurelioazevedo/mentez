@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { migrate } from './lib/db.js';
 import * as Platform from './routes/platform.js';
 import * as Brand from './lib/brand.js';
+import * as Modules from './lib/modules.js';
+import { FEATURES } from './lib/html.js';
 import * as Billing from './lib/billing.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
@@ -195,8 +197,8 @@ app.get('/live', (req, res, next) => Live.stream(req, res).catch(next));
 app.get('/live/since', (req, res, next) => Live.since(req, res).catch(next));
 app.use(notes);
 // Módulos ligáveis (menu): relê a configuração no máximo a cada 30 s
-let featuresAt = 0;
-app.use((req, res, next) => { if (Date.now() - featuresAt > 30e3) { featuresAt = Date.now(); Rental.config().then(() => next(), () => next()); } else next(); });
+const featuresAt = Tenancy.scoped({ at: 0 }); // por clínica
+app.use((req, res, next) => { if (Date.now() - featuresAt.at > 30e3) { featuresAt.at = Date.now(); Promise.all([Rental.config(), Modules.exercisesOn()]).then(() => next(), () => next()); } else next(); });
 app.use('/conta/teleconsulta', teleAccount);
 app.use('/conta/fiscal/nfse', (req, res, next) => (['admin', 'psicologo'].includes(req.user?.role) ? next() : res.status(403).send('Sem permissão')), nfseMine);
 app.use('/teleconsulta', teleStaff);
@@ -256,7 +258,7 @@ app.use('/escala', requirePerm('agenda'), escalaRoutes);
 app.use('/atendimento', requirePerm('agenda'), agentTeam);
 app.use('/crm', requirePerm('agenda'), crmRoutes);
 app.use('/financeiro', requirePerm('financeiro', 'meufin'), financeRoutes);
-app.use('/exercicios', requirePerm('prontuario'), exerciseRoutes);
+app.use('/exercicios', requirePerm('prontuario'), (req, res, next) => (FEATURES.exercicios ? next() : res.redirect('/configuracoes/exercicios')), exerciseRoutes);
 app.use(dashRoutes);
 
 // Folhas em PDF dos cadernos (somente usuárias logadas)

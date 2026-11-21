@@ -23,6 +23,8 @@ import * as G from '../lib/gateway.js';
 import { encrypt as enc2 } from '../lib/crypto.js';
 import * as WA from '../lib/whatsapp.js';
 import * as Scales from '../lib/scales.js';
+import * as Mood from '../lib/mood.js';
+import * as Modules from '../lib/modules.js';
 import { scaleForm, readAnswers, thanks as scaleThanks } from './scales.js';
 import { receiptPage } from './finance.js';
 
@@ -55,7 +57,7 @@ const gate = (req, title, inner) => bare(title, html`<main class="pp-gate">
 async function shell(req, title, tab, inner) {
   const { p } = req.pp; const c = req.ppc;
   const others = (await P.switchable(req.pp)).filter((x) => x.id !== p.id);
-  const tabs = [['inicio', 'Início', 'home', ''], ['sessoes', 'Sessões', 'agenda', '/sessoes'], c.showPayments && ['pagamentos', 'Pagamentos', 'financeiro', '/pagamentos'], c.showTerms && ['termos', 'Termos', 'termos', '/termos'], c.showExercises && ['exercicios', 'Exercícios', 'exercicios', '/exercicios']].filter(Boolean);
+  const tabs = [['inicio', 'Hoje', 'home', ''], ['tarefas', 'Tarefas', 'exercicios', '/tarefas'], ['sessoes', 'Sessões', 'agenda', '/sessoes'], c.showPayments && ['pagamentos', 'Pagamentos', 'financeiro', '/pagamentos']].filter(Boolean);
   return bare(title, html`<div class="pp-app">
   <header class="pp-top">
     ${logoTag('pp-mark')}
@@ -80,7 +82,7 @@ r.get('/manifest.webmanifest', (req, res) => {
   const m = Brand.manifest({ start: BASE, scope: `${BASE}/`, suffix: 'Portal do paciente' });
   res.type('application/manifest+json').set('Cache-Control', 'public, max-age=3600').send(JSON.stringify({ ...m, id: `${BASE}/`, description: 'Suas sessões, pagamentos, termos e exercícios.' }));
 });
-r.use(async (req, res, next) => { req.ppc = await P.config(); next(); });
+r.use(async (req, res, next) => { req.ppc = await P.config(); if (!(await Modules.exercisesOn())) req.ppc.showExercises = false; next(); });
 const off = async (req, res) => { const w = await clinicWa(); return send(res.status(503), gate(req, 'Portal indisponível', html`<section class="pp-card"><h1>Portal do paciente</h1><p>O portal está indisponível no momento. Para falar com o consultório, use o WhatsApp.</p>${w.link ? html`<a class="btn" href="${w.link}" target="_blank" rel="noopener">Falar pelo WhatsApp</a>` : ''}</section>`)); };
 
 const loginForm = (req, err = '', phone = '') => gate(req, 'Entrar', html`<section class="pp-card">
@@ -188,27 +190,107 @@ function apptCard(a, c, big = false) {
   </article>`;
 }
 
+// Tarefas pendentes do paciente (questionários, termos, exercícios), na ordem em que aparecem
+async function pendingOf(req) {
+  const { p } = req.pp; const c = req.ppc;
+  const [terms, ex, scl] = await Promise.all([c.showTerms ? P.terms(p.id) : [], c.showExercises ? P.exercises(p.id) : [], Scales.pendingForPortal(p.id)]);
+  return [
+    ...scl.map((x) => ({ href: `${BASE}/questionarios/${x.id}`, icon: '📋', title: Scales.INSTRUMENTS[x.instrument]?.short ? `${Scales.INSTRUMENTS[x.instrument].short} · questionário` : 'Questionário de acompanhamento', sub: `cerca de 2 minutos · até ${brDate(x.expires_at)}`, badge: 'Para responder' })),
+    ...terms.filter((t) => t.status === 'pendente' && String(t.expires_at) > nowLocal()).map((t) => ({ href: `${BASE}/termos/${t.id}`, icon: '📄', title: 'Termo para ler e aceitar', sub: JSON.parse(t.docs).map((d) => d.title).join(', '), badge: 'Pendente' })),
+    ...ex.filter((e) => ['enviado', 'aberto'].includes(e.status) && String(e.expires_at) > nowLocal()).map((e) => ({ href: `${BASE}/exercicios/${e.id}`, icon: '📝', title: byKey(e.exercise_key)?.title || 'Exercício', sub: `enviado em ${brDate(e.created_at)} · até ${brDate(e.expires_at)}`, badge: e.status === 'aberto' ? 'Começado' : 'Novo' })),
+  ];
+}
+const taskItem = (t) => html`<a href="${t.href}" class="pp-task"><span class="pp-task-ic" aria-hidden="true">${t.icon}</span><span class="pp-task-t"><b>${t.title}</b><small>${t.sub}</small></span><span class="pp-chip">${t.badge}</span><span class="pp-go" aria-hidden="true">›</span></a>`;
+
 r.get('/', async (req, res) => {
   const { p } = req.pp; const c = req.ppc;
-  const [next, pays, terms, ex, scl] = await Promise.all([P.upcoming(p.id), c.showPayments ? P.openPayments(p.id) : [], c.showTerms ? P.terms(p.id) : [], c.showExercises ? P.exercises(p.id) : [], Scales.pendingForPortal(p.id)]);
-  const pendTerms = terms.filter((t) => t.status === 'pendente' && String(t.expires_at) > nowLocal());
-  const pendEx = ex.filter((e) => ['enviado', 'aberto'].includes(e.status) && String(e.expires_at) > nowLocal());
-  const total = pays.reduce((s, x) => s + Number(x.amount), 0);
+  const [next, pays, pend, mood, pro] = await Promise.all([P.upcoming(p.id), c.showPayments ? P.openPayments(p.id) : [], pendingOf(req), c.checkin ? Mood.today(p.id) : null,
+    p.owner_id ? one('SELECT name, title FROM users WHERE id = ?', [p.owner_id]) : null]);
+  const total = pays.reduce((s2, x) => s2 + Number(x.amount), 0);
   const w = await clinicWa();
-  send(res, await shell(req, 'Início', 'inicio', html`
-    <h1 class="pp-hi">Olá, ${P.firstName(p)}!</h1>
+  // jornada de hoje: o check-in (se ligado) + as tarefas pendentes
+  const steps = (c.checkin ? 1 : 0) + pend.length; const done = c.checkin && mood ? 1 : 0;
+  const pct = steps ? Math.round((done / steps) * 100) : 100;
+  const care = pend.length + (c.checkin && !mood ? 1 : 0) + (pays.length ? 1 : 0);
+  send(res, await shell(req, 'Hoje', 'inicio', html`
+    <section class="pp-hero">
+      <p class="pp-kicker">Sua jornada hoje</p>
+      <h1>Oi, ${P.firstName(p)}</h1>
+      ${pro ? html`<p class="pp-with">Você acompanha com ${proName(pro)}</p>` : ''}
+      ${care ? html`<span class="pp-pill">${care} cuidado(s) pendente(s)</span>` : html`<span class="pp-pill ok">Tudo em dia</span>`}
+    </section>
+    ${c.checkin ? (mood ? html`<a class="pp-checkin done tone-${mood.e.tone}" href="${BASE}/checkin">
+        <span class="pp-ck-tag">✓ Check-in feito</span><span class="pp-ck-emo" aria-hidden="true">${mood.e.emoji}</span>
+        <p class="pp-ck-q">Hoje você registrou</p><h2>${mood.e.label} · ${mood.intensity}/10</h2><span class="pp-ck-btn">Rever ou mudar →</span></a>`
+      : html`<a class="pp-checkin" href="${BASE}/checkin">
+        <span class="pp-ck-tag">✦ Check-in do dia</span><span class="pp-ck-emo" aria-hidden="true">☀️</span>
+        <p class="pp-ck-q">Como você está hoje?</p><h2>Registrar humor</h2><p class="pp-ck-sub">Um minuto para nomear o que apareceu.</p><span class="pp-ck-btn">Fazer check-in →</span></a>`) : ''}
+    ${steps ? html`<section class="pp-journey"><div><b>Jornada de hoje</b><span>${pct}%</span></div><span class="pp-bar"><i style="width:${pct}%"></i></span><small>${done} de ${steps} concluído(s).</small></section>` : ''}
     <section class="pp-sec"><h2>Próxima sessão</h2>
       ${next.length ? apptCard(next[0], c, true) : html`<p class="pp-empty">Nenhuma sessão agendada.${w.link ? html` <a class="link" href="${w.link}" target="_blank" rel="noopener">Agendar pelo WhatsApp</a>` : ''}</p>`}
       ${next.length > 1 ? html`<p class="small"><a class="link" href="${BASE}/sessoes">Ver as outras ${next.length - 1} sessão(ões) agendada(s) →</a></p>` : ''}
     </section>
-    ${pendTerms.length || pendEx.length || pays.length || scl.length ? html`<section class="pp-sec"><h2>Pendências</h2><div class="pp-todo">
-      ${scl.map((x) => html`<a href="${BASE}/questionarios/${x.id}" class="pp-item warn"><b>📋 Questionário de acompanhamento</b><small>cerca de 2 minutos · disponível até ${brDate(x.expires_at)}</small></a>`)}
-      ${pays.length ? html`<a href="${BASE}/pagamentos" class="pp-item warn"><b>💳 ${pays.length} pagamento(s) em aberto</b><small>${money(total)} · pague com Pix pelo portal</small></a>` : ''}
-      ${pendTerms.map((t) => html`<a href="${BASE}/termos/${t.id}" class="pp-item"><b>📄 Termo para ler e aceitar</b><small>${JSON.parse(t.docs).map((d) => d.title).join(', ')}</small></a>`)}
-      ${pendEx.map((e) => html`<a href="${BASE}/exercicios/${e.id}" class="pp-item"><b>📝 ${byKey(e.exercise_key)?.title || 'Exercício'}</b><small>enviado em ${brDate(e.created_at)} · disponível até ${brDate(e.expires_at)}</small></a>`)}
-    </div></section>` : html`<section class="pp-sec"><p class="pp-empty">✨ Tudo em dia por aqui.</p></section>`}
+    ${pend.length || pays.length ? html`<section class="pp-sec"><h2>Próximos passos</h2><div class="pp-tasks">
+      ${pend.slice(0, 4).map(taskItem)}
+      ${pays.length ? taskItem({ href: `${BASE}/pagamentos`, icon: '💳', title: `${pays.length} pagamento(s) em aberto`, sub: `${money(total)} · Pix pelo portal`, badge: 'Pagar' }) : ''}
+      ${pend.length > 4 ? html`<p class="small"><a class="link" href="${BASE}/tarefas">Ver todas as tarefas →</a></p>` : ''}
+    </div></section>` : ''}
     ${w.link ? html`<p class="pp-help"><a class="btn ghost" href="${w.link}" target="_blank" rel="noopener">Falar com o consultório no WhatsApp</a></p>` : ''}
-    <p class="pp-crisis muted small">Em caso de crise: CVV 188 (24 h) · SAMU 192</p>`));
+    <p class="pp-crisis muted small">Este app não é canal de emergência. Em caso de crise: CVV 188 (24 h) · SAMU 192</p>`));
+});
+
+// ---------- check-in do dia ----------
+r.get('/checkin', async (req, res, next) => {
+  if (!req.ppc.checkin) return next();
+  const m = await Mood.today(req.pp.p.id);
+  const hist = (await Mood.history(req.pp.p.id, 14)).filter((x) => x.day !== m?.day).slice(0, 6);
+  send(res, await shell(req, 'Check-in', 'inicio', html`<section class="pp-hero sm"><p class="pp-kicker">Cartão diário</p><h1>O que apareceu agora?</h1></section>
+    <form method="post" action="${BASE}/checkin" class="pp-ckform">
+      <h2>Emoção principal</h2><p class="muted small">Escolha a emoção mais próxima do que você sente.</p>
+      <div class="pp-emos" role="radiogroup" aria-label="Emoção principal">${Mood.EMOTIONS.map(([k, l, e, t]) => html`<label class="pp-emo tone-${t}"><input type="radio" name="emotion" value="${k}" ${m?.emotion === k ? raw('checked') : ''} required><span class="pp-emo-ic" aria-hidden="true">${e}</span><b>${l}</b></label>`)}</div>
+      <h2>Intensidade</h2>
+      <label class="pp-range"><input type="range" name="intensity" min="0" max="10" step="1" value="${m ? m.intensity : 5}" data-range-num aria-label="Intensidade de 0 a 10"><span><small>leve</small><b data-range-out>${m ? m.intensity : 5}</b><small>forte</small></span></label>
+      <h2>Quer contar o que aconteceu? <small class="muted">(opcional)</small></h2>
+      <textarea name="note" rows="3" maxlength="2000" placeholder="Só a sua psicóloga ou psicólogo vê.">${m?.note || ''}</textarea>
+      <label class="pp-unsafe"><input type="checkbox" name="unsafe" value="1"><span>Não estou me sentindo seguro(a) agora ou penso em me machucar</span></label>
+      <button class="btn big">${m ? 'Atualizar check-in' : 'Salvar check-in'}</button>
+    </form>
+    ${hist.length ? html`<section class="pp-sec"><h2>Seus últimos dias</h2><ul class="pp-mood-hist">${hist.map((x) => html`<li><span aria-hidden="true">${x.e.emoji}</span><b>${x.e.label}</b><small>${brDate(x.day)} · ${x.intensity}/10</small></li>`)}</ul></section>` : ''}
+    <p class="pp-crisis muted small">Este app não é canal de emergência. Em caso de crise: CVV 188 (24 h) · SAMU 192</p>`));
+});
+r.post('/checkin', async (req, res, next) => {
+  if (!req.ppc.checkin) return next();
+  const out = await Mood.save(req.pp.p, req.body);
+  if (out.error) { flash(res, out.error, 'err'); return res.redirect(`${BASE}/checkin`); }
+  send(res, await shell(req, 'Check-in salvo', 'inicio', out.risk ? html`<section class="pp-card pp-alert">
+      <h1>Você não está sozinho(a)</h1>
+      <p>Obrigado por contar. Avisamos o seu profissional, mas <b>ele pode não ver na hora</b>. Se você estiver em perigo ou pensando em se machucar, procure ajuda agora:</p>
+      <a class="btn big" href="tel:188">Ligar para o CVV · 188</a><p class="muted small">Gratuito, 24 horas, também por chat em cvv.org.br</p>
+      <a class="btn ghost big" href="tel:192">Emergência · SAMU 192</a>
+      <p class="small"><a class="link" href="${BASE}">Voltar ao início</a></p></section>`
+    : html`<section class="pp-card pp-thanks tone-${out.emotion.tone}"><span class="pp-ck-emo big" aria-hidden="true">${out.emotion.emoji}</span><h1>Check-in salvo</h1>
+      <p>Você registrou <b>${out.emotion.label}</b>, intensidade ${out.intensity}/10. ${out.emotion.tone === 'pos' ? 'Que bom! Repare no que ajudou a chegar aqui.' : 'Nomear o que sentimos já é um passo de cuidado.'}</p>
+      <p><a class="btn" href="${BASE}">Voltar ao início</a></p></section>`));
+});
+
+// ---------- tarefas ----------
+r.get('/tarefas', async (req, res) => {
+  const { p } = req.pp; const c = req.ppc;
+  const pend = await pendingOf(req);
+  const [doneScl, doneEx, doneTerms] = await Promise.all([
+    q("SELECT id, instrument, answered_at FROM scale_apps WHERE patient_id = ? AND status = 'respondido' ORDER BY answered_at DESC LIMIT 10", [p.id]).catch(() => []),
+    c.showExercises ? P.exercises(p.id).then((l) => l.filter((e) => ['respondido', 'revisado'].includes(e.status))) : [],
+    c.showTerms ? P.terms(p.id).then((l) => l.filter((t) => t.status === 'aceito')) : [],
+  ]);
+  const done = [
+    ...doneScl.map((x) => ({ href: '', icon: '📋', title: Scales.INSTRUMENTS[x.instrument]?.short || 'Questionário', sub: `respondido em ${brDate(x.answered_at)}`, badge: '✓ Feito' })),
+    ...doneEx.map((e) => ({ href: `${BASE}/exercicios/${e.id}`, icon: '📝', title: byKey(e.exercise_key)?.title || 'Exercício', sub: e.status === 'revisado' ? 'revisado pelo seu profissional' : 'respondido', badge: '✓ Feito' })),
+    ...doneTerms.map((t) => ({ href: `${BASE}/termos/${t.id}`, icon: '📄', title: 'Termo aceito', sub: JSON.parse(t.docs).map((d) => d.title).join(', '), badge: '✓ Feito' })),
+  ];
+  send(res, await shell(req, 'Tarefas', 'tarefas', html`<h1>Tarefas</h1>
+    <section class="pp-tasks-head"><span class="pp-tasks-n">${pend.length}</span><div><b>Para responder</b><small>${pend.length ? 'Toque em uma tarefa para começar, no seu ritmo.' : 'Nada pendente agora.'}</small></div></section>
+    ${pend.length ? html`<div class="pp-tasks">${pend.map(taskItem)}</div>` : html`<p class="pp-empty">✨ Tudo em dia por aqui.</p>`}
+    ${done.length ? html`<section class="pp-sec"><h2>Concluídas</h2><div class="pp-tasks done">${done.map((t) => (t.href ? taskItem(t) : html`<div class="pp-task"><span class="pp-task-ic" aria-hidden="true">${t.icon}</span><span class="pp-task-t"><b>${t.title}</b><small>${t.sub}</small></span><span class="pp-chip ok">${t.badge}</span></div>`))}</div></section>` : ''}`));
 });
 
 // ---------- sessões ----------
@@ -503,6 +585,7 @@ settings.get('/', async (req, res) => {
       <label class="fld check"><input type="checkbox" name="showReceipts" value="1" ${yes(c.showReceipts)}><span>Recibos dos pagamentos confirmados</span></label>
       <label class="fld check"><input type="checkbox" name="showTerms" value="1" ${yes(c.showTerms)}><span>Termos enviados (o paciente lê e aceita pelo portal)</span></label>
       <label class="fld check"><input type="checkbox" name="showExercises" value="1" ${yes(c.showExercises)}><span>Exercícios enviados (responde pelo portal)</span></label>
+      <label class="fld check"><input type="checkbox" name="checkin" value="1" ${yes(c.checkin)}><span><b>Check-in diário de humor</b>: o paciente registra a emoção do dia e a intensidade; o profissional vê na ficha (aba Humor) e recebe alerta se o paciente sinalizar que não está seguro</span></label>
       <label class="fld"><span>Mensagem na tela de entrada (opcional)</span><textarea name="welcome" rows="2" maxlength="500">${c.welcome}</textarea></label>
       <div class="actions"><button class="btn">Salvar</button></div>
       <p class="muted small">Segurança: o código vale 10 minutos e só é enviado para WhatsApp cadastrado; o aparelho fica conectado por até 90 dias; trocar o WhatsApp no cadastro desconecta os aparelhos antigos. Na ficha do paciente (aba Dados) dá para enviar o acesso e encerrar os acessos. Pacientes que usaram nos últimos 30 dias: ${n.n}.</p>

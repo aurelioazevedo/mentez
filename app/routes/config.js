@@ -25,6 +25,8 @@ import * as Tele from '../lib/tele.js';
 import * as Nfse from '../lib/nfse.js';
 import * as IcpCloud from '../lib/icpcloud.js';
 import * as Ins from '../lib/insurance.js';
+import * as Modules from '../lib/modules.js';
+import { audit } from '../lib/db.js';
 
 const r = router();
 
@@ -120,6 +122,7 @@ export async function statusItems({ master = false } = {}) {
     { key: 'locacao', href: '/configuracoes/locacao', title: 'Locação de espaços', desc: 'Aluguel de consultórios, salas e auditórios por hora, período, diária ou plano mensal com mensalidade; integrado ao financeiro.', status: rtc.enabled ? ['realizada', 'Ligado · menu Locação'] : ['cancelada', 'Desligado'] },
     { key: 'portal', href: '/configuracoes/portal', title: 'Portal do paciente', desc: 'Área do paciente instalável no celular: sessões (confirmar, remarcar, cancelar), Pix, recibos, termos e exercícios. Entrada pelo WhatsApp.', status: ptl.enabled ? ['realizada', 'Ligado · /paciente'] : ['cancelada', 'Desligado'] },
     { key: 'sessao-ia', href: '/configuracoes/sessao-ia', title: 'IA na sessão', desc: 'Grava a sessão com autorização do paciente, transcreve e escreve o rascunho da evolução para revisar antes de salvar no prontuário.', status: sai.enabled ? ['realizada', `Liberada · transcrição: ${sai.sttProvider === 'groq' ? 'Groq' : sai.sttProvider === 'openai' ? 'OpenAI' : 'outro serviço'}`] : ['cancelada', 'Desligada'] },
+    { key: 'exercicios', href: '/configuracoes/exercicios', title: 'Exercícios', desc: 'Biblioteca de exercícios e folhas para enviar aos pacientes, com acompanhamento das respostas.', status: (await Modules.exercisesOn()) ? ['realizada', 'Ligado · menu Exercícios'] : ['cancelada', 'Desligado'] },
     { key: 'documentos', href: '/configuracoes/documentos', title: 'Documentos psicológicos', desc: 'Modelos de declaração, atestado, relatório, laudo e parecer (Res. CFP 06/2019), emitidos com assinatura eletrônica e código de verificação.', status: ['confirmada', '5 modelos editáveis'] },
     { key: 'termos', href: '/configuracoes/termos', title: 'Termos e documentos', desc: 'Termo de consentimento, contrato terapêutico e autorização de gravação/IA que o paciente aceita por link.', status: ['confirmada', 'Modelos editáveis · aceite com data, hora e IP'] },
     { key: 'privacidade', href: '/configuracoes/privacidade', title: 'Privacidade e LGPD', desc: 'Prazo de guarda do prontuário, limpeza automática de contatos antigos do CRM e anonimização.', status: ['confirmada', 'Prontuário: mínimo 5 anos (CFP)'] },
@@ -155,6 +158,20 @@ r.get('/', async (req, res) => {
       <div><h2>${it.title}</h2><p class="muted small">${it.desc}</p><span class="badge b-${it.status[0]}">${it.status[1]}</span></div>
       <span class="cfg-go" aria-hidden="true">›</span></a>`)}</div>`,
   }));
+});
+
+r.get('/exercicios', async (req, res) => {
+  const on = await Modules.exercisesOn();
+  send(res, page(req, { title: 'Exercícios', active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Exercícios</h1>
+      <p class="muted">Biblioteca de exercícios e folhas para enviar aos pacientes, com acompanhamento das respostas no prontuário e no portal do paciente.</p></div>
+      <div class="ph-actions"><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
+    <form method="post" class="card stack">
+      <label class="fld check"><input type="checkbox" name="on" value="1" ${on ? raw('checked') : ''}><span><b>Módulo Exercícios ligado</b> (aparece no menu e na ficha do paciente)</span></label>
+      <div class="actions"><button class="btn">Salvar</button></div></form>` }));
+});
+r.post('/exercicios', async (req, res) => {
+  await Modules.setExercises(!!req.body.on); await audit(req, 'config-exercicios', req.body.on ? 'ligado' : 'desligado');
+  res.flash(req.body.on ? 'Módulo Exercícios ligado.' : 'Módulo Exercícios desligado.').redirect('/configuracoes/exercicios');
 });
 
 export default r;

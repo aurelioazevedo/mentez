@@ -11,6 +11,8 @@ import { router, send, int, str, dec } from '../lib/router.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
 import { todayLocal, nowLocal, isYmd, longDate } from '../lib/time.js';
 import { EXERCISES, byKey } from '../lib/exercises.js';
+import { FEATURES } from '../lib/html.js';
+import * as Mood from '../lib/mood.js';
 import { renderResponse } from '../lib/forms.js';
 import { syncLater, futureIds } from '../lib/google.js';
 import { patientMessages } from './whatsapp.js';
@@ -263,7 +265,7 @@ r.get('/:id', async (req, res, next) => {
   const waOn = WA.ready(await WA.config());
   const onWait = can(req.user, 'agenda') ? await one("SELECT id FROM waitlist WHERE patient_id = ? AND status = 'aguardando'", [p.id]) : null;
   const ins = await insForm(p);
-  const TABS = [['prontuario', 'Prontuário', clin && isClinician(req.user.role)], ['sessoes', 'Sessões', true], ['exercicios', 'Exercícios', clin], ['escalas', 'Escalas', clin], ['financeiro', 'Financeiro', fin], ['convenio', 'Convênio', true], ['mensagens', 'WhatsApp', true], ['termos', 'Termos', true], ['documentos', 'Documentos', clin], ['dados', 'Dados', true]].filter((t) => t[2]);
+  const TABS = [['prontuario', 'Prontuário', clin && isClinician(req.user.role)], ['sessoes', 'Sessões', true], ['exercicios', 'Exercícios', clin && FEATURES.exercicios], ['escalas', 'Escalas', clin], ['humor', 'Humor', clin], ['financeiro', 'Financeiro', fin], ['convenio', 'Convênio', true], ['mensagens', 'WhatsApp', true], ['termos', 'Termos', true], ['documentos', 'Documentos', clin], ['dados', 'Dados', true]].filter((t) => t[2]);
   const tab = TABS.some((t) => t[0] === req.query.aba) ? req.query.aba : TABS[0][0];
   const interactive = EXERCISES.filter((e) => e.form);
   const printable = EXERCISES.filter((e) => !e.form);
@@ -335,6 +337,7 @@ r.get('/:id', async (req, res, next) => {
     </section>` : ''}
 
     ${tab === 'escalas' ? await scalesTab(req, p) : ''}
+    ${tab === 'humor' ? await moodTab(req, p) : ''}
     ${tab === 'convenio' ? await insuranceTab(req, p) : ''}
     ${tab === 'exercicios' ? html`
     <section class="card">
@@ -493,3 +496,21 @@ r.get('/:id/prontuario', async (req, res, next) => {
 });
 
 export default r;
+
+// Aba Humor: check-ins diários do paciente pelo portal (só o profissional responsável vê, como o prontuário)
+async function moodTab(req, p) {
+  const list = await Mood.history(p.id, 90);
+  if (list.some((x) => x.risk && !x.risk_seen_at)) await Mood.markSeen(p.id);
+  const last14 = []; const by = Object.fromEntries(list.map((x) => [x.day, x]));
+  for (let i = 13; i >= 0; i--) { const d = new Date(Date.now() - 3 * 3600e3 - i * 864e5).toISOString().slice(0, 10); last14.push({ d, x: by[d] }); }
+  const color = (x) => (x.e.tone === 'pos' ? 'var(--ok)' : x.e.tone === 'dif' ? 'var(--err)' : 'var(--muted)');
+  return html`<section class="card"><h2>Humor (check-in diário)</h2>
+    <p class="muted small">O paciente registra pelo portal a emoção do dia e a intensidade (0 a 10). Ligue em Configurações → Portal do paciente → Check-in diário. ${list.length ? `${list.length} registro(s) nos últimos 90 dias.` : ''}</p>
+    ${list.length ? html`<div class="mood-strip" role="img" aria-label="Últimos 14 dias">${last14.map(({ d, x }) => html`<div class="mood-day ${x?.risk ? 'risk' : ''}" title="${brDate(d)}${x ? ` · ${x.e.label} ${x.intensity}/10` : ' · sem registro'}">
+        <span class="mood-bar"><i style="height:${x ? Math.max(8, x.intensity * 10) : 0}%;background:${x ? color(x) : 'transparent'}"></i></span><span class="mood-emo">${x ? x.e.emoji : '·'}</span><small>${d.slice(8, 10)}/${d.slice(5, 7)}</small></div>`)}</div>
+      <p class="muted small mood-leg"><span style="color:var(--ok)">■</span> emoções agradáveis · <span style="color:var(--err)">■</span> emoções difíceis · altura = intensidade</p>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Dia</th><th>Emoção</th><th>Intensidade</th><th>O que aconteceu</th></tr></thead><tbody>
+      ${list.map((x) => html`<tr class="${x.risk ? 'mood-risk' : ''}"><td>${brDate(x.day)}</td><td>${x.e.emoji} ${x.e.label}${x.risk ? html` <span class="badge b-falta">sinal de risco</span>` : ''}</td><td>${x.intensity}/10</td><td class="small">${x.note || '—'}</td></tr>`)}
+      </tbody></table></div>` : html`<p class="muted">Nenhum check-in ainda.</p>`}
+  </section>`;
+}

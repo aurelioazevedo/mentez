@@ -1981,3 +1981,6 @@ document.addEventListener('click', (e) => {
   const o = e.target.closest('[data-open-dialog]'); if (o) { document.getElementById(o.dataset.openDialog)?.showModal?.(); return; }
   const c = e.target.closest('[data-close-dialog]'); if (c) c.closest('dialog')?.close();
 });
+
+// Controle deslizante com o valor ao lado (ex.: tamanho da foto do cartão digital)
+document.addEventListener('input', (e) => { const r = e.target.closest?.('[data-range], [data-range-num]'); if (!r) return; const out = r.closest('label')?.querySelector('[data-range-out]'); if (out) out.textContent = r.hasAttribute('data-range-num') ? r.value : `${r.value}px`; });

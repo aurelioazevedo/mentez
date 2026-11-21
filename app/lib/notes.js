@@ -1,4 +1,5 @@
 // Notificações do sino (barra superior): pendências que pedem ação, por perfil.
+import * as Mood from './mood.js';
 import * as Tenancy from './tenancy.js';
 import { q, one } from './db.js';
 import { can, patientScope } from './perm.js';
@@ -56,6 +57,9 @@ export async function forUser(user, fresh = false) {
       else if (lastB?.status === 'erro') items.push({ tone: 'err', href: '/configuracoes/backup', text: '☁️ O último backup falhou', sub: String(lastB.error || '').slice(0, 90) });
     }
     if (can(user, 'prontuario')) {
+      // check-in do portal: paciente sinalizou que não está seguro (só para o profissional responsável)
+      const mr = await Mood.alertsFor(user, ' AND p.owner_id = ? ', [user.id]).catch(() => []);
+      for (const x of mr) items.push({ tone: 'err', href: `/pacientes/${x.patient_id}?aba=humor`, text: `⚠️ ${x.social_name || x.name} sinalizou no check-in que pode não estar bem`, sub: `em ${brDate(x.day)} · veja a aba Humor` });
       const e = await one(`SELECT COUNT(*) n FROM assignments s JOIN patients p ON p.id = s.patient_id WHERE s.status = 'respondido' ${sc.sql}`, sc.params);
       if (e.n) items.push({ href: '/exercicios', text: `📝 ${e.n} exercício(s) respondido(s) para revisar` });
     }

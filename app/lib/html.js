@@ -62,7 +62,7 @@ export const icon = (n) => raw(`<svg viewBox="0 0 24 24" aria-hidden="true">${IC
 
 // Módulos que podem ser ligados/desligados (o próprio módulo atualiza ao carregar a configuração)
 // Módulos ligáveis do menu (um conjunto por clínica)
-export const FEATURES = Tenancy.scoped({ locacao: false });
+export const FEATURES = Tenancy.scoped({ locacao: false, exercicios: !Tenancy.multi() });
 const NAV = [
   ['/', 'Início', 'home', ['agenda', 'cadastro']],
   ['/agenda', 'Agenda', 'agenda', ['agenda']],
@@ -70,7 +70,7 @@ const NAV = [
   ['/crm', 'CRM', 'crm', ['agenda']],
   ['/marketing', 'Marketing', 'marketing', ['agenda']],
   ['/pacientes', 'Pacientes', 'pacientes', ['cadastro']],
-  ['/exercicios', 'Exercícios', 'exercicios', ['prontuario']],
+  ['/exercicios', 'Exercícios', 'exercicios', ['prontuario'], 'exercicios'],
   ['/financeiro', 'Financeiro', 'financeiro', ['financeiro', 'meufin']],
   ['/relatorios', 'Relatórios', 'relatorios', ['financeiro', 'meufin']],
   ['/locacao', 'Locação', 'locacao', ['agenda'], 'locacao'],

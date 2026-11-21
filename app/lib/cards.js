@@ -33,7 +33,7 @@ function cardDefaults(b) {
     intro: '', waText: `Olá${b.proFirst ? `, ${b.proFirst}` : ''}! Vim pelo seu cartão digital e gostaria de agendar uma consulta.`,
     show: { whatsapp: true, phone: true, email: true, instagram: true, site: true, address: false },
     extra: [], info: [{ label: 'Atendimento', value: b.place ? `On-line e presencial em ${b.city || b.place}` : 'On-line e presencial' }, { label: '', value: '' }],
-    crisis: true,
+    crisis: true, photoSize: 96,
   };
 }
 function linksDefaults(b) {
@@ -44,7 +44,7 @@ function linksDefaults(b) {
       ...(b.siteUrl ? [{ kind: 'site', title: 'Conhecer o site', sub: b.site, url: b.siteUrl, text: '', highlight: false }] : []),
       { kind: 'agendar', title: 'Agendar on-line', sub: 'Escolha um horário livre', url: '', text: '', highlight: false },
     ],
-    crisis: true,
+    crisis: true, photoSize: 132,
   };
 }
 export async function config(kind) {
@@ -64,14 +64,14 @@ export async function save(kind, body) {
     const v = {
       enabled: !!body.enabled, name: s(body.name, 80), role: s(body.role, 80), intro: s(body.intro, 300), waText: s(body.waText, 300),
       show: Object.fromEntries(['whatsapp', 'phone', 'email', 'instagram', 'site', 'address'].map((k) => [k, !!body[`show_${k}`]])),
-      extra, info: [0, 1].map((i) => ({ label: s(il[i], 30), value: s(iv[i], 60) })), crisis: !!body.crisis,
+      extra, info: [0, 1].map((i) => ({ label: s(il[i], 30), value: s(iv[i], 60) })), crisis: !!body.crisis, photoSize: Math.min(140, Math.max(64, Number(body.photoSize) || 96)),
     };
     await setSetting('mkt_card', JSON.stringify(v));
   } else {
     const k = arr(body.item_kind); const t = arr(body.item_title); const sub = arr(body.item_sub); const u = arr(body.item_url); const tx = arr(body.item_text); const hl = arr(body.item_highlight).map(String);
     const items = k.map((kk, i) => ({ kind: KINDS.includes(kk) ? kk : 'link', title: s(t[i], 60), sub: s(sub[i], 80), url: ['whatsapp', 'agendar', 'secao'].includes(kk) ? '' : cleanUrl(u[i]), text: s(tx[i], 300), highlight: hl.includes(String(i)) }))
       .filter((x) => x.title && (x.url || ['whatsapp', 'agendar', 'secao'].includes(x.kind))).slice(0, 16);
-    const v = { enabled: !!body.enabled, title: s(body.title, 80), tagline: s(body.tagline, 100), bio: s(body.bio, 300), photo: !!body.photo, items, crisis: !!body.crisis };
+    const v = { enabled: !!body.enabled, title: s(body.title, 80), tagline: s(body.tagline, 100), bio: s(body.bio, 300), photo: !!body.photo, items, crisis: !!body.crisis, photoSize: Math.min(240, Math.max(80, Number(body.photoSize) || 132)) };
     await setSetting('mkt_links', JSON.stringify(v));
   }
   return config(kind);

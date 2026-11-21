@@ -33,7 +33,7 @@ a{color:inherit}.in{animation:up .6s cubic-bezier(.22,1,.36,1) both;animation-de
 .card.flip .card__inner{transform:rotateY(180deg)}
 .card__face{position:absolute;inset:0;border-radius:20px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;box-shadow:0 18px 40px -18px rgba(0,0,0,.45)}
 .card__front{background:linear-gradient(135deg,var(--a),var(--d));color:#fff;display:grid;grid-template-columns:auto 1fr;align-items:center;gap:16px;padding:22px;text-align:left}
-.card__photo{width:96px;height:96px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,255,255,.85);background:rgba(255,255,255,.15);display:grid;place-items:center;font:600 30px var(--serif)}
+.card__photo{width:var(--ph,96px);height:var(--ph,96px);border-radius:50%;overflow:hidden;border:3px solid rgba(255,255,255,.85);background:rgba(255,255,255,.15);display:grid;place-items:center;font:600 30px var(--serif)}
 .card__photo img{width:100%;height:100%;object-fit:cover}
 .card__name{display:block;font:500 clamp(20px,6vw,26px)/1.15 var(--serif)}.card__role{display:block;margin-top:6px;font-size:13px;opacity:.9}
 .card__logo{position:absolute;right:18px;top:16px;max-width:110px;max-height:34px;opacity:.9}
@@ -54,7 +54,7 @@ a{color:inherit}.in{animation:up .6s cubic-bezier(.22,1,.36,1) both;animation-de
 .info{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}.info div{background:#fff;border-radius:14px;padding:12px 14px;border:1px solid rgba(0,0,0,.06)}.info span{display:block;font-size:11.5px;color:var(--mu)}.info b{font-size:13.5px}
 footer{margin-top:28px;text-align:center;font-size:12px;line-height:1.6;color:var(--mu)}footer img{max-height:28px;max-width:120px;display:block;margin:0 auto 8px;opacity:.85}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--d);color:#fff;padding:10px 16px;border-radius:999px;font-size:13.5px;opacity:0;transition:opacity .3s;pointer-events:none}.toast.on{opacity:1}
-.photo{width:132px;height:132px;margin:8px auto 14px;border-radius:50%;overflow:hidden;border:4px solid #fff;box-shadow:0 12px 30px -14px rgba(0,0,0,.45);background:var(--s);display:grid;place-items:center;font:600 40px var(--serif);color:var(--a)}.photo img{width:100%;height:100%;object-fit:cover}
+.photo{width:var(--ph,132px);height:var(--ph,132px);margin:8px auto 14px;border-radius:50%;overflow:hidden;border:4px solid #fff;box-shadow:0 12px 30px -14px rgba(0,0,0,.45);background:var(--s);display:grid;place-items:center;font:600 40px var(--serif);color:var(--a)}.photo img{width:100%;height:100%;object-fit:cover}
 .l-title{text-align:center;font:500 26px/1.2 var(--serif);margin:0}.l-logo{display:block;max-width:220px;max-height:80px;margin:0 auto}
 .tagline{text-align:center;margin:8px 0 0;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--a);font-weight:600}.bio{text-align:center;margin:10px 8px 0;font-size:15px;line-height:1.55}
 .links{list-style:none;margin:22px 0 0;padding:0;display:grid;gap:12px}
@@ -112,7 +112,7 @@ pub.get('/cartao', async (req, res) => {
   const body = html`<main>
     <button class="card in" style="--i:0" type="button" data-flip aria-label="Virar o cartão para ver o QR Code" aria-pressed="false"><span class="card__inner">
       <span class="card__face card__front">${b.logoDarkUrl ? html`<img class="card__logo" src="${b.logoDarkUrl}" alt="">` : ''}
-        <span class="card__photo">${b.photoUrl ? html`<img src="${b.photoUrl}" alt="">` : initials(c.name)}</span>
+        <span class="card__photo" style="--ph:${c.photoSize || 96}px">${b.photoUrl ? html`<img src="${b.photoUrl}" alt="">` : initials(c.name)}</span>
         <span><span class="card__name">${c.name}</span><span class="card__role">${c.role}</span></span></span>
       <span class="card__face card__back">${raw(qr)}<span><strong>Compartilhe este cartão</strong><p>Aponte a câmera do celular para o código e abra o cartão.</p><small>${url.replace(/^https?:\/\//, '')}</small></span></span>
     </span></button>
@@ -160,7 +160,7 @@ pub.get('/links', async (req, res) => {
   });
   flush();
   const body = html`<main>
-    ${c.photo && b.photoUrl ? html`<div class="photo in" style="--i:0"><img src="${b.photoUrl}" alt="${c.title}"></div>` : ''}
+    ${c.photo && b.photoUrl ? html`<div class="photo in" style="--i:0;--ph:${c.photoSize || 132}px"><img src="${b.photoUrl}" alt="${c.title}"></div>` : ''}
     ${b.logo || b.legacy ? html`<h1 class="in" style="--i:1;margin:0"><img class="l-logo" src="${b.logoUrl}" alt="${c.title}"></h1>` : html`<h1 class="l-title in" style="--i:1">${c.title}</h1>`}
     ${c.tagline ? html`<p class="tagline in" style="--i:2">${c.tagline}</p>` : ''}
     ${c.bio ? html`<p class="bio in" style="--i:3">${c.bio}</p>` : ''}
@@ -205,6 +205,7 @@ admin.get('/cartao', async (req, res) => {
       <label class="fld check span2"><input type="checkbox" name="enabled" value="1" ${ck(c.enabled)}><span><b>Cartão publicado</b> (desmarque para tirar do ar)</span></label>
       <label class="fld"><span>Nome no cartão</span><input name="name" maxlength="80" value="${c.name}"></label>
       <label class="fld"><span>Linha abaixo do nome</span><input name="role" maxlength="80" value="${c.role}" placeholder="Psicóloga · CRP 00/00000"></label>
+      <label class="fld span2"><span>Tamanho da foto no cartão: <b data-range-out>${c.photoSize}px</b></span><input type="range" name="photoSize" min="64" max="140" step="4" value="${c.photoSize}" data-range></label>
       <label class="fld span2"><span>Apresentação curta</span><textarea name="intro" rows="2" maxlength="300" placeholder="Terapia Cognitivo-Comportamental com acolhimento e método. On-line e presencial.">${c.intro}</textarea></label>
       <fieldset class="span2 mk-fs"><legend>Botões do cartão</legend>${SH.map(([k, l]) => html`<label class="fld check"><input type="checkbox" name="show_${k}" value="1" ${ck(c.show[k])}><span>${l}</span></label>`)}</fieldset>
       <label class="fld span2"><span>Mensagem já escrita ao abrir o WhatsApp</span><input name="waText" maxlength="300" value="${c.waText}"></label>
@@ -233,6 +234,7 @@ admin.get('/links', async (req, res) => {
       <label class="fld"><span>Linha de destaque</span><input name="tagline" maxlength="100" value="${c.tagline}" placeholder="Psicóloga · TCC · Goiânia"></label>
       <label class="fld span2"><span>Bio</span><textarea name="bio" rows="2" maxlength="300" placeholder="Terapia que transforma, com acolhimento e método.">${c.bio}</textarea></label>
       <label class="fld check span2"><input type="checkbox" name="photo" value="1" ${ck(c.photo)}><span>Mostrar a foto no topo</span></label>
+      <label class="fld span2"><span>Tamanho da foto: <b data-range-out>${c.photoSize}px</b></span><input type="range" name="photoSize" min="80" max="240" step="4" value="${c.photoSize}" data-range></label>
       <fieldset class="span2 mk-fs"><legend>Botões, na ordem em que aparecem</legend>
         <p class="muted small">“WhatsApp” abre a conversa com a mensagem escrita abaixo; “Agendamento on-line” leva à página de agendar${bk.enabled ? '' : ' (hoje desligada em Configurações, então não aparece)'}; “Título de seção” separa grupos de botões. Deixe o título vazio para apagar um botão. Destaque = botão colorido.</p>
         ${items.map((x, i) => html`<div class="mk-item">

@@ -11,7 +11,7 @@ import * as Live from './live.js';
 import { notify } from './push.js';
 
 export const COOKIE = 'lm_pac';
-const DEFAULTS = { enabled: false, allowConfirm: true, allowReschedule: true, rescheduleMinHours: 24, allowCancel: true, cancelMinHours: 24, showPayments: true, showReceipts: true, showTerms: true, showExercises: true, welcome: '' };
+const DEFAULTS = { enabled: false, allowConfirm: true, allowReschedule: true, rescheduleMinHours: 24, allowCancel: true, cancelMinHours: 24, showPayments: true, showReceipts: true, showTerms: true, showExercises: true, checkin: true, welcome: '' };
 export async function config() {
   let c = {};
   try { c = JSON.parse((await getSetting('portal_cfg')) || '{}'); } catch { /* padrão */ }
@@ -22,7 +22,7 @@ export async function saveConfig(b) {
   await setSetting('portal_cfg', JSON.stringify({
     enabled: !!b.enabled, allowConfirm: !!b.allowConfirm, allowReschedule: !!b.allowReschedule, rescheduleMinHours: hrs(b.rescheduleMinHours, 24),
     allowCancel: !!b.allowCancel, cancelMinHours: hrs(b.cancelMinHours, 24), showPayments: !!b.showPayments, showReceipts: !!b.showReceipts,
-    showTerms: !!b.showTerms, showExercises: !!b.showExercises, welcome: String(b.welcome || '').trim().slice(0, 500),
+    showTerms: !!b.showTerms, showExercises: !!b.showExercises, checkin: !!b.checkin, welcome: String(b.welcome || '').trim().slice(0, 500),
   }));
 }
 
