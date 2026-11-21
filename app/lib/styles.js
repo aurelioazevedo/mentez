@@ -52,6 +52,30 @@ export const STYLES = {
     dark: { terracota: '#D2B57E', 'terracota-d': '#E0C796', 'terracota-l': '#D2B57E', creme: '#2C2820', 'creme-deep': '#3B352A', marrom: '#D8D4CC', 'marrom-deep': '#F5F2EC', bg: '#121212', bg2: '#1A1A1A', ink: '#F2EFE9', muted: '#A9A59E', line: '#2A2A2A', card: '#1A1A1A', surface: '#1A1A1A', 'surface-2': '#222', 'strong-bg': '#2C2820', 'strong-ink': '#F5F2EC' },
     css: 'h1{font-weight:400;letter-spacing:-.01em}h2,h3{font-weight:400}.card,.kpi{border-radius:8px}.btn,.chip,input,select,textarea{border-radius:6px}',
   },
+  aurora: {
+    label: 'Aurora', desc: 'Vidro translúcido sobre degradê lilás, rosa e azul; títulos com serifa. Moderno e leve.', fonts: F('family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700'),
+    serif: "'Fraunces', Georgia, serif", sans: SANS('Plus Jakarta Sans'), r: 24,
+    light: { terracota: '#7B5CD6', 'terracota-d': '#6245BE', 'terracota-l': '#A68DF2', creme: 'rgba(123,92,214,.10)', 'creme-deep': 'rgba(123,92,214,.20)', musgo: '#D96AA7', marrom: '#4A3F7A', 'marrom-deep': '#2B2452', bg: '#F4F1FA', bg2: 'rgba(255,255,255,.45)', ink: '#2A2540', muted: '#6F6A88', line: 'rgba(120,100,190,.16)', card: 'rgba(255,255,255,.62)', surface: 'rgba(255,255,255,.72)', 'surface-2': 'rgba(255,255,255,.45)', 'strong-bg': '#2B2452', 'strong-ink': '#F4F1FA', 'strong-accent': '#C9B8FF', shadow: '0 1px 1px rgba(80,60,140,.04), 0 14px 36px -16px rgba(80,60,140,.28)' },
+    dark: { terracota: '#B9A4FF', 'terracota-d': '#CDBEFF', 'terracota-l': '#B9A4FF', creme: 'rgba(185,164,255,.12)', 'creme-deep': 'rgba(185,164,255,.22)', musgo: '#F09BC8', marrom: '#D3CCF0', 'marrom-deep': '#F4F1FA', bg: '#15112A', bg2: 'rgba(255,255,255,.05)', ink: '#F1EEFA', muted: '#A9A3C4', line: 'rgba(255,255,255,.10)', card: 'rgba(42,34,78,.55)', surface: 'rgba(42,34,78,.65)', 'surface-2': 'rgba(255,255,255,.06)', 'strong-bg': '#2A2350', 'strong-ink': '#F4F1FA', shadow: '0 1px 1px rgba(0,0,0,.3), 0 18px 40px -18px rgba(0,0,0,.6)' },
+    css: [
+      'body{background:radial-gradient(1100px 700px at -5% -10%,#F2DDF3 0%,transparent 60%),radial-gradient(1000px 650px at 105% 0%,#D9E4FB 0%,transparent 58%),radial-gradient(900px 700px at 50% 110%,#E6DAF8 0%,transparent 62%),#F4F1FA;background-attachment:fixed}',
+      ':root[data-theme="dark"] body{background:radial-gradient(1100px 700px at -5% -10%,#3A2557 0%,transparent 60%),radial-gradient(1000px 650px at 105% 0%,#1F2C5A 0%,transparent 58%),radial-gradient(900px 700px at 50% 110%,#2E2152 0%,transparent 62%),#15112A;background-attachment:fixed}',
+      '@media (prefers-color-scheme: dark){:root[data-theme="auto"] body{background:radial-gradient(1100px 700px at -5% -10%,#3A2557 0%,transparent 60%),radial-gradient(1000px 650px at 105% 0%,#1F2C5A 0%,transparent 58%),radial-gradient(900px 700px at 50% 110%,#2E2152 0%,transparent 62%),#15112A;background-attachment:fixed}}',
+      '.card,.kpi,.side-card,.tsearch,.st-opt,.cfg-item{-webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);border-color:rgba(255,255,255,.7) !important}',
+      ':root[data-theme="dark"] .card,:root[data-theme="dark"] .kpi,:root[data-theme="dark"] .side-card,:root[data-theme="dark"] .tsearch{border-color:rgba(255,255,255,.10) !important}',
+      '.card,.kpi{border-radius:24px}.side-card{border-radius:26px}',
+      'h1,h2{font-family:var(--serif);font-weight:500;letter-spacing:-.01em}h3{font-weight:700}',
+      '.btn:not(.ghost):not(.danger){background:linear-gradient(135deg,var(--terracota-l),var(--terracota) 55%,var(--musgo));border-color:transparent;box-shadow:0 8px 20px -10px var(--terracota)}',
+      '.btn.ghost{background:rgba(255,255,255,.55);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}:root[data-theme="dark"] .btn.ghost{background:rgba(255,255,255,.06)}',
+      '.side nav a{background:rgba(255,255,255,.45);border-color:rgba(255,255,255,.6)}:root[data-theme="dark"] .side nav a{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}',
+      '.side nav a.on{background:linear-gradient(135deg,var(--terracota-l),var(--terracota) 60%,var(--musgo));border-color:transparent;box-shadow:0 10px 24px -12px var(--terracota)}',
+      'input,select,textarea{border-radius:14px}.chip,.badge{border-radius:999px}',
+      ':root[data-theme="dark"] .side nav a.on{background:linear-gradient(135deg,#CDBEFF,#B9A4FF 60%,#F09BC8);border-color:transparent;color:#1B1533}',
+      ':root[data-theme="dark"] .btn:not(.ghost):not(.danger){color:#1B1533}',
+      '@media (prefers-color-scheme: dark){:root[data-theme="auto"] .side nav a{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}:root[data-theme="auto"] .side nav a.on{background:linear-gradient(135deg,#CDBEFF,#B9A4FF 60%,#F09BC8);border-color:transparent;color:#1B1533}:root[data-theme="auto"] .btn:not(.ghost):not(.danger){color:#1B1533}:root[data-theme="auto"] .btn.ghost{background:rgba(255,255,255,.06)}:root[data-theme="auto"] .card,:root[data-theme="auto"] .kpi,:root[data-theme="auto"] .side-card,:root[data-theme="auto"] .tsearch{border-color:rgba(255,255,255,.10) !important}}',
+    ].join(''),
+    swatch: { bg: '#EFE8F8', accent: '#7B5CD6', ink: '#2A2540', soft: '#E3D9F7', dark: '#2B2452' },
+  },
 };
 export const keyOf = (k, legacy) => (STYLES[k] ? k : legacy ? 'classico' : 'mentez');
 const vars = (o) => Object.entries(o).map(([k, v]) => `--${k}:${v}`).join(';');
