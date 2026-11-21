@@ -14,7 +14,7 @@ import { notify } from './push.js';
 import { proName } from './perm.js';
 import * as Agent from './agent.js';
 
-const DEFAULTS = { enabled: false, pros: [], allowNew: true, modalities: ['online', 'presencial'], duration: null, step: null, minLeadHours: 12, horizonDays: 21,
+const DEFAULTS = { enabled: false, pros: [], allowNew: true, modalities: ['online', 'presencial'], duration: null, step: null, minLeadHours: 12, horizonDays: 21, fewSlots: false, fewCount: 3,
   intro: 'Escolha o melhor dia e horário para a sua sessão. Para confirmar, enviamos um código para o seu WhatsApp.' };
 export async function config() {
   let c = {};
@@ -32,6 +32,7 @@ export async function saveConfig(b) {
     modalities: mods.length ? mods : ['online'], duration: Number(b.duration) > 0 ? Math.min(180, Number(b.duration)) : null, step: Number(b.step) > 0 ? Math.min(240, Number(b.step)) : null,
     minLeadHours: Math.max(1, Math.min(168, Number(b.minLeadHours) || 12)), horizonDays: Math.max(3, Math.min(90, Number(b.horizonDays) || 21)),
     intro: String(b.intro || '').trim().slice(0, 500) || DEFAULTS.intro,
+    fewSlots: !!b.fewSlots, fewCount: Math.max(2, Math.min(4, Number(b.fewCount) || 3)),
   }));
 }
 
@@ -94,6 +95,28 @@ export async function slots(c, ownerId, from = null, days = 14, opts = {}) {
     if (times.length) out.push({ day: d, label: `${weekday(d)}, ${brDate(d).slice(0, 5)}`, times });
   }
   return out;
+}
+
+// Estratégia “poucas opções”: em vez da grade inteira, oferece só n horários (2 a 4), os mais próximos,
+// espalhados por dias e períodos diferentes (manhã, tarde, noite). A escolha é estável: muda só quando a agenda muda.
+// page = 0 mostra os primeiros; “Ver outras opções” avança para os próximos n.
+const period = (t) => (t < '12:00' ? 0 : t < '18:00' ? 1 : 2);
+export async function fewSlots(c, ownerId, page = 0) {
+  const n = Math.max(2, Math.min(4, Number(c.fewCount) || 3));
+  const days = await slots(c, ownerId, null, Math.min(c.horizonDays, 45));
+  const all = days.flatMap((d) => d.times.map((t) => ({ day: d.day, label: d.label, t })));
+  const need = n * (page + 1);
+  const picks = []; const taken = new Set(); let lastP = -1;
+  // 1ª passada: no máximo um horário por dia, alternando o período em relação ao anterior
+  for (const d of days) {
+    if (picks.length >= need) break;
+    const t = d.times.find((x) => period(x) !== lastP) || d.times[0];
+    picks.push({ day: d.day, label: d.label, t }); taken.add(`${d.day} ${t}`); lastP = period(t);
+  }
+  // 2ª passada: completa com os demais horários, em ordem
+  for (const x of all) { if (picks.length >= need) break; if (!taken.has(`${x.day} ${x.t}`)) { picks.push(x); taken.add(`${x.day} ${x.t}`); } }
+  const shown = picks.slice(page * n, page * n + n).sort((a, b) => `${a.day} ${a.t}`.localeCompare(`${b.day} ${b.t}`));
+  return { n, shown, more: all.length > need };
 }
 
 // ---------- pedido + código ----------

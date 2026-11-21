@@ -2524,3 +2524,13 @@ a.mz2-me{text-decoration:none;color:inherit}
 .mk-photo-card .photo-prev img.mk-photo{width:112px;height:112px;border-radius:50%;object-fit:cover;display:block}
 .mk-photo-card .photo-prev{flex:none;min-width:112px;display:flex;justify-content:center}
 @media (max-width:560px){.mk-photo-card{flex-direction:column;align-items:flex-start}}
+
+/* Agendamento online: poucas opções de horário */
+.bk-few { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 6px 0 12px; }
+.bk-few-opt { display: grid; gap: 2px; padding: 14px 16px; border: 1.5px solid var(--line); border-radius: 14px; text-decoration: none; color: var(--ink); background: var(--surface); }
+.bk-few-opt span { font-size: 14px; color: var(--muted); text-transform: capitalize; }
+.bk-few-opt b { font-size: 22px; }
+.bk-few-opt:hover { border-color: var(--terracota); color: var(--terracota); }
+.bk-few-more { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.bk-few-cfg { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: grid; gap: 8px; }
+.bk-few-cfg .fld:not(.check) { max-width: 220px; }

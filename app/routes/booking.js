@@ -39,7 +39,10 @@ publicBooking.get('/', async (req, res) => {
   const modsOf = prof ? prof.mods : [...new Set(pros.flatMap((u) => u.mods))];
   const mod = modsOf.includes(req.query.mod) ? req.query.mod : (modsOf.length === 1 ? modsOf[0] : null);
   const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.de || '')) ? req.query.de : null;
-  const days = prof && mod ? await BK.slots(c, prof.id, from, 14) : [];
+  const page = Math.max(0, Math.min(10, int(req.query.mais) || 0));
+  const few = prof && mod && c.fewSlots ? await BK.fewSlots(c, prof.id, page) : null;
+  const days = prof && mod && !few ? await BK.slots(c, prof.id, from, 14) : [];
+  const wa = Brand.get().wa;
   const g = prof ? await BK.gridFor(c, prof.id) : null;
   const nextFrom = addDays(from && from > todayLocal() ? from : todayLocal(), 14);
   send(res, shell(req, 'Agendar sessão', html`<h1>Agendar sessão</h1><p class="muted">${c.intro}</p>
@@ -47,7 +50,13 @@ publicBooking.get('/', async (req, res) => {
     <ol class="bk-steps"><li class="on">Horário</li><li>Seus dados</li><li>Código</li></ol>
     ${pros.length > 1 ? html`<section class="bk-block"><h2>Com quem?</h2><div class="bk-opts">${pros.map((u) => html`<a class="bk-opt ${prof?.id === u.id ? 'on' : ''}" href="/agendar?${qs({ prof: u.id, mod: u.mods.includes(mod) ? mod : null })}"><b>${u.display}</b><small>${u.crp ? `CRP ${u.crp} · ` : ''}${u.mods.map((m) => (m === 'online' ? 'on-line' : 'presencial')).join(' e ')}</small></a>`)}</div></section>` : html`<p><b>${prof.display}</b>${prof.crp ? html` <small class="muted">· CRP ${prof.crp}</small>` : ''}</p>`}
     ${modsOf.length > 1 ? html`<section class="bk-block"><h2>Como prefere?</h2><div class="bk-opts">${[['online', 'On-line', 'por videochamada'], ['presencial', 'Presencial', (Brand.get().city ? `no consultório, em ${Brand.get().city}` : 'no consultório')]].filter(([k]) => modsOf.includes(k)).map(([k, l, d]) => html`<a class="bk-opt ${mod === k ? 'on' : ''}" href="/agendar?${qs({ prof: prof?.id, mod: k })}"><b>${l}</b><small>${d}</small></a>`)}</div></section>` : ''}
-    ${prof && mod ? html`<section class="bk-block"><h2>Escolha o horário <small class="muted">(sessões de ${g ? g.duration : c.durationEff} min)</small></h2>
+    ${few ? html`<section class="bk-block"><h2>${page ? 'Outras opções de horário' : 'Horários disponíveis'} <small class="muted">(sessões de ${g ? g.duration : c.durationEff} min)</small></h2>
+      ${few.shown.length ? html`<div class="bk-few">${few.shown.map((x) => html`<a class="bk-few-opt" href="/agendar/dados?${qs({ prof: prof.id, mod, t: `${x.day} ${x.t}` })}"><span>${x.label}</span><b>${x.t}</b></a>`)}</div>`
+        : html`<p class="muted">${page ? 'Não há outras opções nos próximos dias.' : 'Não há horários livres nos próximos dias.'}</p>`}
+      <p class="bk-few-more">${few.more ? html`<a class="link" href="/agendar?${qs({ prof: prof.id, mod, mais: page + 1 })}">Nenhum serve? Ver outras opções →</a>` : ''}
+        ${page ? html`<a class="link" href="/agendar?${qs({ prof: prof.id, mod })}">← Primeiras opções</a>` : ''}
+        ${wa ? html`<a class="link" href="https://wa.me/${wa}?text=${encodeURIComponent('Olá! Vim pelo agendamento online e gostaria de combinar outro horário.')}" target="_blank" rel="noopener">Combinar outro horário pelo WhatsApp</a>` : ''}</p>
+    </section>` : prof && mod ? html`<section class="bk-block"><h2>Escolha o horário <small class="muted">(sessões de ${g ? g.duration : c.durationEff} min)</small></h2>
       ${days.length ? html`<div class="bk-days">${days.map((d) => html`<div class="bk-day"><b>${d.label}</b><div class="bk-times">${d.times.map((t) => html`<a class="bk-time" href="/agendar/dados?${qs({ prof: prof.id, mod, t: `${d.day} ${t}` })}">${t}</a>`)}</div></div>`)}</div>`
       : html`<p class="muted">Não há horários livres nestes dias.</p>`}
       ${nextFrom <= addDays(todayLocal(), c.horizonDays) ? html`<p><a class="link" href="/agendar?${qs({ prof: prof.id, mod, de: nextFrom })}">Ver mais datas →</a></p>` : ''}
@@ -166,6 +175,10 @@ settings.get('/', async (req, res) => {
         ${all.map((u) => html`<label class="wl-chip"><input type="checkbox" name="pros" value="${u.id}" ${c.pros.includes(u.id) ? raw('checked') : ''}><span>${proName(u)}${shown.some((x) => x.id === u.id) ? '' : ' (sem escala)'}</span></label>`)}</fieldset>
       <fieldset class="fld wl-chips"><legend>Modalidades</legend>
         ${[['online', 'On-line'], ['presencial', 'Presencial']].map(([k, l]) => html`<label class="wl-chip"><input type="checkbox" name="modalities" value="${k}" ${c.modalities.includes(k) ? raw('checked') : ''}><span>${l}</span></label>`)}</fieldset>
+      <fieldset class="fld bk-few-cfg"><legend>Estratégia de horários</legend>
+        <label class="fld check"><input type="checkbox" name="fewSlots" value="1" ${c.fewSlots ? raw('checked') : ''}><span><b>Mostrar poucas opções de horário</b> — em vez da agenda inteira, a página oferece só alguns horários: os mais próximos, em dias e períodos diferentes. Quem não encontrar um bom horário clica em “Ver outras opções” ou chama no WhatsApp.</span></label>
+        <label class="fld"><span>Quantas opções mostrar</span><select name="fewCount">${[2, 3, 4].map((k) => html`<option value="${k}" ${c.fewCount === k ? raw('selected') : ''}>${k} horários</option>`)}</select></label>
+      </fieldset>
       <div class="form-grid">
         <label class="fld"><span>Antecedência mínima (horas)</span><input type="number" name="minLeadHours" min="1" max="168" value="${c.minLeadHours}"></label>
         <label class="fld"><span>Mostrar horários até (dias à frente)</span><input type="number" name="horizonDays" min="3" max="90" value="${c.horizonDays}"></label>
