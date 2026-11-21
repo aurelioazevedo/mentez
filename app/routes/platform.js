@@ -100,8 +100,9 @@ function layout(req, title, body) {
     </div>`, 'bare mz2-body', req, { suffix: 'Mentez' });
   }
   const act = activeOf(req.path); const c = req.menuCounts || {};
-  return bare(title, html`<div class="mz2"><div class="mz2-app">
-    <aside class="mz2-side">
+  return bare(title, html`<div class="mz2"><input type="checkbox" id="mz2-menu" class="mz2-menu-ck" aria-hidden="true" tabindex="-1"><label for="mz2-menu" class="mz2-scrim" aria-hidden="true"></label><div class="mz2-app">
+    <aside class="mz2-side" id="mz2-side">
+      <label for="mz2-menu" class="mz2-close" aria-label="Fechar menu">×</label>
       <a class="mz2-brand" href="/">${LOGO()}</a>
       ${MENU.map(([g, items]) => html`<p class="mz2-grp">${g}</p><nav class="mz2-nav">${items.map(([href, label, ic, cnt]) => html`<a href="${href}" class="${act === href ? 'on' : ''}">${ICON[ic]}<span>${label}</span>${cnt && c[cnt] ? html`<b>${c[cnt]}</b>` : ''}</a>`)}</nav>`)}
       <p class="mz2-grp">GERAL</p>
@@ -111,11 +112,14 @@ function layout(req, title, body) {
     </aside>
     <div class="mz2-col">
       <header class="mz2-top">
+        <label for="mz2-menu" class="mz2-burger" role="button" aria-label="Abrir menu" aria-controls="mz2-side"><span></span><span></span><span></span></label>
+        <a class="mz2-toplogo" href="/">${LOGO()}</a>
         <form class="mz2-search" action="/clinicas" method="get" role="search">${ICON.busca}<input type="search" name="q" placeholder="Buscar clínica, endereço ou e-mail" aria-label="Buscar clínica" value="${req.path === '/clinicas' ? str(req.query.q, 80) : ''}"><kbd>⌘ K</kbd></form>
         <div class="mz2-tools"><a class="mz2-ic" href="/historico" title="Histórico">${ICON.sino}</a><a class="mz2-ic" href="/termos-de-uso" title="Termos de uso">${ICON.ajuda}</a>
           <span class="mz2-me" title="${req.admin.email}"><i>${initialsOf(req.admin.name)}</i><span><b>${req.admin.name}</b><small>Equipe Mentez</small></span></span></div>
       </header>
       <main class="mz2-main">${flash}${body}</main>
+      <nav class="mz2-tabbar" aria-label="Atalhos">${[['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas'], ['/faturas', 'Faturas', 'faturas'], ['/testes', 'Testes', 'testes']].map(([h, l, ic]) => html`<a href="${h}" class="${act === h ? 'on' : ''}">${ICON[ic]}<span>${l}</span></a>`)}<label for="mz2-menu">${SV('<path d="M4 7h16M4 12h16M4 17h16"/>')}<span>Menu</span></label></nav>
     </div>
   </div></div>`, 'bare mz2-body', req, { suffix: 'Painel Mentez' });
 }

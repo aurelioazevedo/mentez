@@ -1454,6 +1454,13 @@ document.querySelectorAll('[data-logo-file]').forEach((inp) => inp.addEventListe
   } catch (e) { say(`Não foi possível enviar a logo: ${e.message}`, true); inp.value = ''; }
 }));
 
+// ---------- Painel Mentez: rótulos das colunas (no celular cada linha da tabela vira um cartão) e fechar o menu ----------
+document.querySelectorAll('.mz2-table table').forEach((t) => {
+  const heads = [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+  t.querySelectorAll('tbody tr').forEach((tr) => [...tr.children].forEach((td, i) => { if (heads[i] && !td.dataset.label) td.dataset.label = heads[i]; }));
+});
+document.addEventListener('keydown', (e) => { const ck = document.getElementById('mz2-menu'); if (e.key === 'Escape' && ck?.checked) ck.checked = false; });
+
 // ---------- Mentez: criar conta (sugere o endereço pelo nome do consultório e confere se está livre) ----------
 (() => {
   const f = document.querySelector('[data-signup]'); if (!f) return;

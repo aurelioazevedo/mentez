@@ -2208,3 +2208,71 @@ label.ask-opt:has(input:focus-visible) { outline: 2px solid var(--terracota); ou
 @media (max-width:620px){.mz2-grid{grid-template-columns:1fr}.mz2-kpi,.mz2-funnel,.mz2-alerts{grid-column:auto}.mz2-hero-act,.mz2-mini{grid-template-columns:1fr}.mz2-bars{height:210px}.mz2-cols{gap:4px}.mz2-tip{display:none}.mz2-search{flex:1}.mz2-search kbd{display:none}}
 .mz2-pub .mzp-auth{margin:clamp(8px,4vw,40px) auto;width:100%;max-width:440px;border:1px solid #EEF0F3;border-radius:22px;padding:28px}
 .mz2 form.actions select{width:auto;min-width:180px}
+
+/* ===================== Painel Mentez — celular e tablet ===================== */
+.mz2-menu-ck{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
+.mz2-burger,.mz2-toplogo,.mz2-close,.mz2-scrim,.mz2-tabbar{display:none}
+@media (max-width:900px){
+  .mz2{padding:0}
+  .mz2-app{display:block;border-radius:0;padding:0;min-height:100vh;background:var(--z-area)}
+  /* menu em gaveta */
+  .mz2-side{position:fixed;inset:0 auto 0 0;width:min(300px,84vw);max-height:none;background:#fff;z-index:60;padding:calc(14px + env(safe-area-inset-top,0px)) 14px calc(18px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));transform:translateX(-102%);transition:transform .25s ease;box-shadow:0 0 40px rgba(14,21,37,.18);overflow:auto}
+  .mz2-menu-ck:checked ~ .mz2-app .mz2-side{transform:none}
+  .mz2-scrim{display:block;position:fixed;inset:0;background:rgba(1,19,58,.42);z-index:55;opacity:0;pointer-events:none;transition:opacity .25s}
+  .mz2-menu-ck:checked ~ .mz2-scrim{opacity:1;pointer-events:auto}
+  .mz2-close{display:grid;place-items:center;position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px;width:38px;height:38px;border-radius:50%;background:var(--z-area);font-size:24px;line-height:1;color:#3F4656;cursor:pointer}
+  .mz2-nav{grid-template-columns:1fr}
+  .mz2-promo{display:grid;margin-top:16px}
+  /* barra superior */
+  .mz2-col{display:block}
+  .mz2-top{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:grid;grid-template-columns:auto 1fr auto;gap:10px 12px;align-items:center;padding:calc(10px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--z-line)}
+  .mz2-burger{display:grid;gap:4px;width:42px;height:42px;place-content:center;border-radius:12px;border:1px solid var(--z-line);background:#fff;cursor:pointer}
+  .mz2-burger span{display:block;width:18px;height:2px;border-radius:2px;background:var(--z-ink)}
+  .mz2-toplogo{display:block}.mz2-toplogo .mz2-logo{width:118px}
+  .mz2-tools{margin:0;gap:8px}.mz2-tools .mz2-ic{display:none}.mz2-me{padding:0}.mz2-me span{display:none}.mz2-me i{width:38px;height:38px;font-size:13px}
+  .mz2-search{grid-column:1 / -1;flex:none;padding:10px 14px}.mz2-search kbd{display:none}
+  /* conteúdo */
+  .mz2-main{border-radius:0;background:transparent;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(96px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));gap:14px}
+  .mz2-hello{align-items:flex-start}
+  .mz2-hello-act{width:100%}.mz2-hello-act>*{flex:1}
+  /* barra inferior */
+  .mz2-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:rgba(255,255,255,.97);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--z-line);padding:6px max(6px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-right,0px))}
+  .mz2-tabbar a,.mz2-tabbar label{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:12px;color:#6B7280;text-decoration:none;font-size:11px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .mz2-tabbar a.on{color:var(--z-teal-d);background:var(--z-teal-bg)}
+}
+@media (max-width:620px){
+  .mz2-hello h1{font-size:23px}
+  .mz2-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .mz2-hero,.mz2-chart,.mz2-funnel,.mz2-alerts,.mz2-table{grid-column:1 / -1}
+  .mz2-kpi{grid-column:span 1;padding:14px}
+  .mz2-kpi>header{gap:8px}.mz2-kpi .mz2-cardic{width:32px;height:32px;border-radius:10px}.mz2-kpi h2{font-size:13.5px;flex-basis:100%}
+  .mz2-kpi .mz2-big.sm{font-size:21px}
+  .mz2-card{padding:16px;border-radius:18px}
+  .mz2-big{font-size:28px}
+  .mz2-hero-act{grid-template-columns:1fr 1fr}.mz2-hero-act .mz2-btn{padding:10px 8px;font-size:13px}
+  .mz2-mini{grid-template-columns:1fr 1fr}
+  .mz2-legend{display:none}
+  .mz2-bars{height:200px;gap:6px}.mz2-yaxis{font-size:10px}.mz2-colw>span{font-size:9.5px}.mz2-colw i{border-radius:6px 6px 2px 2px}
+  .mz2-tabs{flex-wrap:nowrap;overflow-x:auto;margin:0 -16px;padding:0 16px 2px;scrollbar-width:none}.mz2-tabs a{flex:none}
+  /* tabelas viram cartões */
+  .mz2-table .mz2-tw{overflow:visible}
+  .mz2-table table,.mz2-table tbody,.mz2-table tr,.mz2-table td{display:block;width:100%}
+  .mz2-table thead{display:none}
+  .mz2-table tr{border:1px solid #EEF0F3;border-radius:14px;padding:6px 12px;margin-bottom:10px}
+  .mz2-table td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #F3F4F6;text-align:right;min-width:0}
+  .mz2-table td:last-child{border-bottom:0}
+  .mz2-table td::before{content:attr(data-label);color:var(--z-muted);font-size:12.5px;font-weight:500;text-align:left;flex:none}
+  .mz2-table td:first-child{justify-content:flex-start;text-align:left;font-weight:600}.mz2-table td:first-child::before{display:none}
+  .mz2-table td>*{min-width:0;overflow-wrap:anywhere}
+  .mz2 .ph{flex-direction:column;align-items:flex-start}.mz2 .kpis{grid-template-columns:1fr 1fr}
+  .mz2-pubtop nav a:last-child{display:none}.mz2-pubmain{border-radius:22px}
+}
+@media (prefers-reduced-motion:reduce){.mz2-side,.mz2-scrim{transition:none}}
+@media (max-width:900px){
+  .mz2-burger{order:1}.mz2-toplogo{order:2}.mz2-tools{order:3;justify-self:end}.mz2-search{order:4}
+}
+@media (max-width:620px){
+  .mz2-card.mz2-table{background:transparent;border:0;padding:0;border-radius:0}
+  .mz2-card.mz2-table>header{padding:0 2px}
+  .mz2-table tr{background:#fff}
+}
