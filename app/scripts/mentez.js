@@ -83,6 +83,15 @@ try {
     else if (acao === 'cancelar') console.log(JSON.stringify(await Mig.cancel(src)));
     else if (acao === 'concluir') console.log(JSON.stringify(await Mig.finish(src, `https://${slug}.${T.baseDomain()}`)));
     else die('Uso: migracao <estado|cancelar|concluir> <https://origem> [<endereco>]');
+  } else if (cmd === 'contagem') {
+    // Linhas de cada tabela da clínica (para conferir antes de limpar) e os usuários
+    const t = await T.bySlug(args[0]); if (!t) die('Clínica não encontrada.');
+    await T.run(t, async () => {
+      for (const r of await q("SELECT table_name n, table_rows c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' ORDER BY table_name")) {
+        const c = (await one(`SELECT COUNT(*) c FROM \`${r.n}\``)).c; if (c) console.log(`T:${r.n}=${c}`);
+      }
+      for (const u of await q('SELECT id, name, email, role, is_master, active FROM users ORDER BY id')) console.log(`U:${u.id}|${u.name}|${u.email}|${u.role}|master=${u.is_master}|ativo=${u.active}`);
+    });
   } else if (cmd === 'whatsapp') {
     // Cria a instância do WhatsApp na Evolution da Mentez para clínicas que ainda não têm (ou só para uma)
     const list = args[0] ? [await T.bySlug(args[0])].filter(Boolean) : await T.active();
