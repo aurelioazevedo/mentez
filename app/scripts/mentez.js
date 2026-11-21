@@ -32,7 +32,7 @@ try {
     if (Evolution.enabled()) { const r = await T.run(t, () => Evolution.provision(t)).catch((e) => ({ ok: false, reason: e.message })); console.log(r.ok ? `WhatsApp: instância ${r.instance}` : `WhatsApp: ${r.reason}`); }
   } else if (cmd === 'importar') {
     // Traz uma clínica de um sistema próprio (ex.: importar lorrainy https://sistema.lorrainymendes.com.br --dominio=sistema.lorrainymendes.com.br --legado)
-    const [slug, src] = args; if (!slug || !/^https:\/\//.test(src || '')) die('Uso: importar <endereco> <https://origem> [--dominio=...] [--legado] [--sem-concluir]');
+    const [slug, src] = args; if (!slug || !/^https?:\/\//.test(src || '')) die('Uso: importar <endereco> <https://origem> [--dominio=...] [--legado] [--sem-concluir]');
     const t = await T.bySlug(slug); if (!t) die('Clínica não encontrada na Mentez.');
     const file = `/tmp/mz-import-${slug}.bin`;
     const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 12);
@@ -58,7 +58,7 @@ try {
       await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', ['cli', 'clinica-importar', t.id, `${src} → ${dbName}`]);
       const check = await T.run(t2, async () => (await one('SELECT (SELECT COUNT(*) FROM users) u, (SELECT COUNT(*) FROM patients) p, (SELECT COUNT(*) FROM appointments) a')));
       console.log(`Na Mentez: ${check.u} usuários, ${check.p} pacientes, ${check.a} agendamentos`);
-      if (!flag('sem-concluir')) { const f = await Mig.finish(src, `https://${slug}.${T.baseDomain()}`); console.log(`Origem agora encaminha para a Mentez: ${JSON.stringify(f)}`); }
+      if (!flag('sem-concluir')) { const f = await Mig.finish(src, process.env.MENTEZ_IMPORT_TARGET || `https://${slug}.${T.baseDomain()}`); console.log(`Origem agora encaminha para a Mentez: ${JSON.stringify(f)}`); }
       console.log(`IMPORTAR: ok ${dbName}`);
     } catch (e) {
       console.error(`IMPORTAR: erro ${e.message}`);
