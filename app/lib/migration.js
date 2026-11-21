@@ -16,7 +16,7 @@ import readline from 'node:readline';
 import mysql from 'mysql2/promise';
 import * as T from './tenancy.js';
 
-const keyFile = () => process.env.MENTEZ_MIGRATION_KEY || '/opt/mentez/keys/migracao.pem';
+const keyFile = () => process.env.MENTEZ_MIGRATION_KEY || '/opt/mentez/migracao/migracao.pem';
 const privateKey = () => crypto.createPrivateKey(fs.readFileSync(keyFile()));
 
 // Pedido assinado: “ação:hora:host” com a chave privada
