@@ -12,7 +12,9 @@ import { router, send, int, str } from '../lib/router.js';
 import { parseCookies } from '../lib/auth.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
 import { nowLocal } from '../lib/time.js';
-import { byKey } from '../lib/exercises.js';
+import * as ExLib from '../lib/exlib.js';
+import { byKey, formOf } from '../lib/exlib.js';
+import { sheet } from '../lib/exsheet.js';
 import { renderForm, parseForm, renderResponse } from '../lib/forms.js';
 import { notify } from '../lib/push.js';
 import { proName, canSeePatient, forbidden } from '../lib/perm.js';
@@ -82,7 +84,7 @@ r.get('/manifest.webmanifest', (req, res) => {
   const m = Brand.manifest({ start: BASE, scope: `${BASE}/`, suffix: 'Portal do paciente' });
   res.type('application/manifest+json').set('Cache-Control', 'public, max-age=3600').send(JSON.stringify({ ...m, id: `${BASE}/`, description: 'Suas sessões, pagamentos, termos e exercícios.' }));
 });
-r.use(async (req, res, next) => { req.ppc = await P.config(); if (!(await Modules.exercisesOn())) req.ppc.showExercises = false; next(); });
+r.use(async (req, res, next) => { await ExLib.warm(); req.ppc = await P.config(); if (!(await Modules.exercisesOn())) req.ppc.showExercises = false; next(); });
 const off = async (req, res) => { const w = await clinicWa(); return send(res.status(503), gate(req, 'Portal indisponível', html`<section class="pp-card"><h1>Portal do paciente</h1><p>O portal está indisponível no momento. Para falar com o consultório, use o WhatsApp.</p>${w.link ? html`<a class="btn" href="${w.link}" target="_blank" rel="noopener">Falar pelo WhatsApp</a>` : ''}</section>`)); };
 
 const loginForm = (req, err = '', phone = '') => gate(req, 'Entrar', html`<section class="pp-card">
@@ -462,8 +464,8 @@ async function scaleOf(req) {
 r.get('/questionarios/:id', async (req, res, next) => {
   const a = await scaleOf(req); if (!a) return next();
   const I = Scales.INSTRUMENTS[a.instrument];
-  if (a.status === 'respondido') return send(res, await shell(req, I.short, 'inicio', html`<h1>Questionário respondido</h1><p class="pp-empty">Obrigado! Suas respostas já foram enviadas à sua psicóloga.</p><p><a class="link" href="${BASE}">← Início</a></p>`));
-  if (String(a.expires_at) < nowLocal()) return send(res, await shell(req, I.short, 'inicio', html`<h1>Prazo encerrado</h1><p class="pp-empty">Peça um novo questionário à sua psicóloga.</p>`));
+  if (a.status === 'respondido') return send(res, await shell(req, I.short, 'inicio', html`<h1>Questionário respondido</h1><p class="pp-empty">Obrigado! Suas respostas já foram enviadas ao seu profissional.</p><p><a class="link" href="${BASE}">← Início</a></p>`));
+  if (String(a.expires_at) < nowLocal()) return send(res, await shell(req, I.short, 'inicio', html`<h1>Prazo encerrado</h1><p class="pp-empty">Peça um novo questionário ao seu profissional.</p>`));
   if (!a.opened_at) await q('UPDATE scale_apps SET opened_at = NOW() WHERE id = ?', [a.id]);
   send(res, await shell(req, I.short, 'inicio', html`<h1>${I.title}</h1><div class="pp-card">${scaleForm(I.key)}</div>`));
 });
@@ -493,14 +495,15 @@ r.get('/exercicios/:id', async (req, res, next) => {
   const s = await exOf(req);
   if (!s) return next();
   const ex = byKey(s.exercise_key);
+  const form = formOf(s, ex);
   const open = String(s.expires_at) > nowLocal() && s.status !== 'revisado';
   if (!s.opened_at) await q("UPDATE assignments SET opened_at = ?, status = IF(status='enviado','aberto',status) WHERE id = ?", [nowLocal(), s.id]);
   const resp = s.response_enc ? JSON.parse(decrypt(s.response_enc)) : {};
   send(res, await shell(req, ex.title, 'exercicios', html`<h1>${ex.title}</h1>
     ${s.instructions ? html`<p class="note">${s.instructions}</p>` : ''}
-    ${ex.pdf ? html`<p><a class="btn ghost" href="${BASE}/exercicios/${s.id}/folha.pdf">Baixar a folha em PDF</a></p>` : ''}
-    ${ex.form ? (open ? html`<form method="post" class="pp-card portal-form">${renderForm(ex.form, resp)}<button class="btn big">Enviar respostas</button><p class="muted small">Não existe resposta certa ou errada. Escreva do seu jeito.</p></form>`
-      : html`<section class="pp-card answers">${Object.keys(resp).length ? renderResponse(ex.form, resp) : html`<p class="muted">Sem respostas.</p>`}</section><p class="muted">${s.status === 'revisado' ? 'Este exercício já foi revisado pela sua psicóloga.' : 'O prazo para responder terminou.'}</p>`)
+    ${ex.sheet ? html`<p><a class="btn ghost" href="${BASE}/exercicios/${s.id}/folha" target="_blank">Abrir a folha para imprimir</a></p>` : ex.pdf ? html`<p><a class="btn ghost" href="${BASE}/exercicios/${s.id}/folha.pdf">Baixar a folha em PDF</a></p>` : ''}
+    ${form ? (open ? html`<form method="post" class="pp-card portal-form">${renderForm(form, resp)}<button class="btn big">Enviar respostas</button><p class="muted small">Não existe resposta certa ou errada. Escreva do seu jeito.</p></form>`
+      : html`<section class="pp-card answers">${Object.keys(resp).length ? renderResponse(form, resp) : html`<p class="muted">Sem respostas.</p>`}</section><p class="muted">${s.status === 'revisado' ? 'Este exercício já foi revisado pelo seu profissional.' : 'O prazo para responder terminou.'}</p>`)
       : html`<p>Imprima a folha (ou preencha à mão) e leve para a próxima sessão.</p>`}
     <p><a class="link" href="${BASE}/exercicios">← Exercícios</a></p>`));
 });
@@ -509,8 +512,9 @@ r.post('/exercicios/:id', async (req, res, next) => {
   const s = await exOf(req);
   if (!s) return next();
   const ex = byKey(s.exercise_key);
-  if (!ex.form || s.status === 'revisado' || String(s.expires_at) < nowLocal()) return res.redirect(`${BASE}/exercicios/${s.id}`);
-  await q("UPDATE assignments SET response_enc = ?, responded_at = ?, status = 'respondido' WHERE id = ?", [encrypt(JSON.stringify(parseForm(ex.form, req.body))), nowLocal(), s.id]);
+  const form = formOf(s, ex);
+  if (!form || s.status === 'revisado' || String(s.expires_at) < nowLocal()) return res.redirect(`${BASE}/exercicios/${s.id}`);
+  await q("UPDATE assignments SET response_enc = ?, responded_at = ?, status = 'respondido' WHERE id = ?", [encrypt(JSON.stringify(parseForm(form, req.body))), nowLocal(), s.id]);
   notify(req.pp.p.owner_id, { title: '📝 Exercício respondido', body: `${P.firstName(req.pp.p)} respondeu “${ex.title}” pelo portal`, url: `/exercicios/envio/${s.id}`, tag: `ex-${s.id}` });
   flash(res, 'Pronto! Suas respostas foram enviadas.');
   res.redirect(`${BASE}/exercicios/${s.id}`);
@@ -521,6 +525,12 @@ r.get('/exercicios/:id/folha.pdf', async (req, res, next) => {
   const file = path.join(Tenancy.filesDir(PRIVATE), byKey(s.exercise_key).pdf || '');
   if (!byKey(s.exercise_key).pdf || !fs.existsSync(file)) return next();
   res.sendFile(file);
+});
+r.get('/exercicios/:id/folha', async (req, res, next) => {
+  const s = await exOf(req);
+  const ex = s && byKey(s.exercise_key);
+  if (!ex?.sheet) return next();
+  send(res, sheet({ ...ex, fields: formOf(s, ex) || ex.fields }, { patient: req.pp.p.social_name || req.pp.p.name }));
 });
 r.use((req, res) => res.redirect(BASE));
 export default r;

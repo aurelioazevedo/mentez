@@ -1984,3 +1984,26 @@ document.addEventListener('click', (e) => {
 
 // Controle deslizante com o valor ao lado (ex.: tamanho da foto do cartão digital)
 document.addEventListener('input', (e) => { const r = e.target.closest?.('[data-range], [data-range-num]'); if (!r) return; const out = r.closest('label')?.querySelector('[data-range-out]'); if (out) out.textContent = r.hasAttribute('data-range-num') ? r.value : `${r.value}px`; });
+
+// ---------- Exercícios: editor de campos do modelo ----------
+(() => {
+  const form = document.getElementById('ex-editor');
+  if (!form) return;
+  const list = form.querySelector('.fe-list'); const tpl = document.getElementById('fe-tpl');
+  let seq = 1000;
+  form.addEventListener('change', (e) => { const sel = e.target.closest('.fe-type'); if (sel) sel.closest('.fe').dataset.type = sel.value; });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fe]'); if (!b) return;
+    const act = b.dataset.fe; const row = b.closest('.fe');
+    if (act === 'add') {
+      const box = document.createElement('div'); box.innerHTML = tpl.innerHTML.replace(/__i__/g, String(seq++));
+      const el = box.firstElementChild; list.appendChild(el); el.querySelector('input,textarea')?.focus();
+    } else if (act === 'del' && row) { if (list.children.length > 1) row.remove(); }
+    else if (act === 'up' && row?.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
+    else if (act === 'down' && row?.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
+  });
+  // a ordem na tela vira a ordem dos campos
+  form.addEventListener('submit', () => {
+    [...list.children].forEach((row, i) => row.querySelectorAll('[name^="fields["]').forEach((el) => { el.name = el.name.replace(/^fields\[[^\]]+\]/, `fields[${i}]`); }));
+  });
+})();

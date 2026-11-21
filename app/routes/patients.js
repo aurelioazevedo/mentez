@@ -10,7 +10,8 @@ import { page, bare, html, raw, money, badge, brDate, brDateTime, label, waLink,
 import { router, send, int, str, dec } from '../lib/router.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
 import { todayLocal, nowLocal, isYmd, longDate } from '../lib/time.js';
-import { EXERCISES, byKey } from '../lib/exercises.js';
+import * as ExLib from '../lib/exlib.js';
+import { byKey, formOf } from '../lib/exlib.js';
 import { FEATURES } from '../lib/html.js';
 import * as Mood from '../lib/mood.js';
 import { renderResponse } from '../lib/forms.js';
@@ -267,8 +268,10 @@ r.get('/:id', async (req, res, next) => {
   const ins = await insForm(p);
   const TABS = [['prontuario', 'Prontuário', clin && isClinician(req.user.role)], ['sessoes', 'Sessões', true], ['exercicios', 'Exercícios', clin && FEATURES.exercicios], ['escalas', 'Escalas', clin], ['humor', 'Humor', clin], ['financeiro', 'Financeiro', fin], ['convenio', 'Convênio', true], ['mensagens', 'WhatsApp', true], ['termos', 'Termos', true], ['documentos', 'Documentos', clin], ['dados', 'Dados', true]].filter((t) => t[2]);
   const tab = TABS.some((t) => t[0] === req.query.aba) ? req.query.aba : TABS[0][0];
-  const interactive = EXERCISES.filter((e) => e.form);
-  const printable = EXERCISES.filter((e) => !e.form);
+  if (tab === 'exercicios') await ExLib.warm();
+  const myModels = tab === 'exercicios' ? ExLib.sendable() : [];
+  const interactive = ExLib.cadernos().filter((e) => e.form);
+  const printable = ExLib.cadernos().filter((e) => !e.form);
 
   send(res, page(req, {
     title: nm(p), active: 'pacientes',
@@ -342,11 +345,13 @@ r.get('/:id', async (req, res, next) => {
     ${tab === 'exercicios' ? html`
     <section class="card">
       <h2>Enviar exercício</h2>
+      ${!myModels.length && !interactive.length && !printable.length ? html`<p class="muted">Nenhum exercício aprovado ainda. <a class="link" href="/exercicios">Monte a biblioteca da clínica</a> a partir da Biblioteca Mentez, do zero ou com IA.</p>` : ''}
       <form method="post" action="/exercicios/enviar" class="form-grid">
         <input type="hidden" name="patient_id" value="${p.id}">
         <label class="fld span2"><span>Folha</span><select name="exercise_key" required>
-          <optgroup label="Interativos — o paciente preenche pelo celular">${interactive.map((e) => html`<option value="${e.key}">${e.bookTitle.split('·')[0]}· ${e.title}</option>`)}</optgroup>
-          <optgroup label="Somente PDF — o paciente baixa e imprime">${printable.map((e) => html`<option value="${e.key}">${e.bookTitle.split('·')[0]}· ${e.title}</option>`)}</optgroup>
+          ${myModels.length ? html`<optgroup label="Exercícios da clínica">${myModels.map((e) => html`<option value="${e.key}">${e.title}</option>`)}</optgroup>` : ''}
+          ${interactive.length ? html`<optgroup label="Interativos — o paciente preenche pelo celular">${interactive.map((e) => html`<option value="${e.key}">${e.bookTitle.split('·')[0]}· ${e.title}</option>`)}</optgroup>` : ''}
+          ${printable.length ? html`<optgroup label="Somente PDF — o paciente baixa e imprime">${printable.map((e) => html`<option value="${e.key}">${e.bookTitle.split('·')[0]}· ${e.title}</option>`)}</optgroup>` : ''}
         </select></label>
         <label class="fld span2"><span>Orientação para o paciente (opcional)</span><textarea name="instructions" rows="2" maxlength="1000"></textarea></label>
         ${waOn ? html`<label class="fld check span2"><input type="checkbox" name="wa" value="1" ${p.whatsapp_optin && p.phone ? raw('checked') : raw('disabled')}><span>Enviar o link automaticamente pelo WhatsApp${!p.whatsapp_optin ? ' (paciente não autorizou)' : !p.phone ? ' (sem telefone)' : ''}</span></label>` : ''}
@@ -358,7 +363,7 @@ r.get('/:id', async (req, res, next) => {
       const ex = byKey(s.exercise_key);
       const resp = s.response_enc ? JSON.parse(decrypt(s.response_enc)) : null;
       return html`<article class="card"><header class="row-head"><div><b>${ex?.title || s.exercise_key}</b><small class="muted"> · ${ex?.bookTitle || ''} · enviado em ${brDate(s.created_at)}</small></div>${badge(s.status)}<a class="link small" href="/exercicios/envio/${s.id}">abrir</a></header>
-      ${resp && ex?.form ? html`<details><summary>Ver resposta</summary>${renderResponse(ex.form, resp)}</details>` : ''}</article>`;
+      ${resp && formOf(s, ex) ? html`<details><summary>Ver resposta</summary>${renderResponse(formOf(s, ex), resp)}</details>` : ''}</article>`;
     })}` : ''}
 
     ${tab === 'financeiro' ? html`

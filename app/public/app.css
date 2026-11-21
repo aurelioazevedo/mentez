@@ -2505,3 +2505,19 @@ a.mz2-me{text-decoration:none;color:inherit}
 .mood-day.risk .mood-bar{outline:2px solid var(--err)}.mood-emo{font-size:16px}
 .mood-leg{margin:0 0 12px}tr.mood-risk td{background:var(--err-bg)}
 @media (max-width:420px){.pp-checkin h2,.pp-ck-sub{max-width:62%}.pp-ck-emo{font-size:54px}}
+
+/* Exercícios: biblioteca e editor */
+.ex.off { opacity: .6; }
+.ex .ex-actions form { display: inline; }
+.ex-review { border-left: 4px solid var(--warn, #c9861a); }
+.fe-list { display: grid; gap: 12px; margin-bottom: 12px; }
+.fe { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--surface); display: grid; gap: 8px; }
+.fe-h { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.fe-h select { max-width: 280px; }
+.fe-tools { display: flex; gap: 4px; }
+.fe-text, .fe-scale, .fe-checks, .fe-table { display: none; }
+.fe[data-type=info] .fe-label { display: none; }
+.fe[data-type=info] .fe-text { display: grid; }
+.fe[data-type=scale] .fe-scale { display: grid; }
+.fe[data-type=checks] .fe-checks { display: grid; }
+.fe[data-type=table] .fe-table { display: grid; gap: 8px; }
