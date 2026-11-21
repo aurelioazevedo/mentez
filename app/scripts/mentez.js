@@ -33,7 +33,8 @@ try {
   } else if (cmd === 'importar') {
     // Traz uma clínica de um sistema próprio (ex.: importar lorrainy https://sistema.lorrainymendes.com.br --dominio=sistema.lorrainymendes.com.br --legado)
     const [slug, src] = args; if (!slug || !/^https?:\/\//.test(src || '')) die('Uso: importar <endereco> <https://origem> [--dominio=...] [--legado] [--sem-concluir]');
-    const t = await T.bySlug(slug); if (!t) die('Clínica não encontrada na Mentez.');
+    let t = await T.bySlug(slug);
+    if (!t) { t = await T.createTenant({ slug, name: flag('nome') || slug, plan: 'piloto', actor: 'cli:importar' }); console.log(`Clínica criada na Mentez: ${slug} (o banco definitivo vem da importação)`); }
     const file = `/tmp/mz-import-${slug}.bin`;
     const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 12);
     const dbName = `mz_${slug.replace(/-/g, '_')}_${stamp}`.slice(0, 64);
