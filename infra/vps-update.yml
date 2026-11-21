@@ -45,6 +45,12 @@ services:
         chmod 600 /opt/mentez/migracao/migracao.pem
         apk add --no-cache openssl >/dev/null
         echo "MIGRACAO-PUB: $$(openssl pkey -in /opt/mentez/migracao/migracao.pem -pubout | grep -v -- '-----' | tr -d '\n')"
+        # arquivos próprios de clínicas que vêm no repositório (ex.: folhas de exercícios do Dr. Aurélio) → pasta de cada clínica
+        if [ -d /opt/mentez/src/tenant-files ]; then
+          cp -R /opt/mentez/src/tenant-files/. /opt/mentez/files/
+          chown -R 1000:1000 /opt/mentez/files
+          echo "ARQUIVOS: $$(find /opt/mentez/src/tenant-files -name '*.pdf' | wc -l) PDF(s) de clínicas copiados"
+        fi
         REV=$$(git -C /opt/mentez/src log -1 --format='%h')
         echo "SYNC: $$REV $$(git -C /opt/mentez/src log -1 --format='%s')"
         docker build -q -t mentez-app:latest -t mentez-app:$$REV /opt/mentez/src/app
