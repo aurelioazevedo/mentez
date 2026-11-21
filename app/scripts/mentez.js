@@ -45,6 +45,13 @@ try {
       const filesRoot = (await import('node:path')).join(process.env.MENTEZ_FILES_DIR || '/data/files', slug, 'private');
       const r = await Mig.importInto(file, dbName, console.log, filesRoot);
       console.log(`Banco ${dbName}: ${Object.entries(r.counts).length} tabelas, ${Object.values(r.counts).reduce((a, b) => a + b, 0)} linhas (conferido)`);
+      if (flag('ensaio')) {
+        // ensaio: confere que tudo entra no MySQL da Mentez, apaga o banco de teste e devolve a origem ao normal
+        const c2 = await (await import('mysql2/promise')).default.createConnection(T.connConfigFor(undefined));
+        await c2.query(`DROP DATABASE \`${dbName}\``); await c2.end();
+        await Mig.cancel(src);
+        throw Object.assign(new Error('ensaio'), { ensaio: true });
+      }
       const env = {}; if (r.meta.env.SETUP_TOKEN) env.SETUP_TOKEN = r.meta.env.SETUP_TOKEN; if (flag('legado')) env.MENTEZ_BRAND = 'legacy';
       await T.setCoreSecrets(t.id, { SESSION_SECRET: r.meta.env.SESSION_SECRET, ENCRYPTION_KEY: r.meta.env.ENCRYPTION_KEY, env });
       await T.pq("UPDATE tenants SET db_name = ?, plan = 'piloto', billing_status = 'cortesia', status = 'ativa' WHERE id = ?", [dbName, t.id]);
@@ -62,9 +69,12 @@ try {
       if (!flag('sem-concluir')) { const f = await Mig.finish(src, process.env.MENTEZ_IMPORT_TARGET || `https://${slug}.${T.baseDomain()}`); console.log(`Origem agora encaminha para a Mentez: ${JSON.stringify(f)}`); }
       console.log(`IMPORTAR: ok ${dbName}`);
     } catch (e) {
-      console.error(`IMPORTAR: erro ${e.message}`);
-      try { await Mig.cancel(src); console.error('Origem voltou ao normal (cancelado).'); } catch (e2) { console.error(`Não foi possível cancelar na origem: ${e2.message}`); }
-      process.exitCode = 1;
+      if (e.ensaio) console.log('ENSAIO: ok — banco de teste apagado e origem de volta ao normal');
+      else {
+        console.error(`IMPORTAR: erro ${e.message}`);
+        try { await Mig.cancel(src); console.error('Origem voltou ao normal (cancelado).'); } catch (e2) { console.error(`Não foi possível cancelar na origem: ${e2.message}`); }
+        process.exitCode = 1;
+      }
     } finally { try { (await import('node:fs')).unlinkSync(file); } catch { /* sem arquivo */ } }
   } else if (cmd === 'migracao') {
     // migracao <estado|cancelar|concluir> <https://origem> [<endereco>]

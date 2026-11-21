@@ -57,6 +57,11 @@ export async function* readPackage(file) {
   const lines = readline.createInterface({ input: body.pipe(dec).pipe(zlib.createGunzip()), crlfDelay: Infinity });
   for await (const line of lines) if (line) yield JSON.parse(line);
 }
+// Origem em MariaDB → MySQL 8: ordenações que só existem no MariaDB viram utf8mb4_unicode_ci (a mesma das tabelas da Mentez)
+export const toMySQL = (sql) => String(sql)
+  .replace(/utf8mb4_uca1400_[a-z0-9_]+/gi, 'utf8mb4_unicode_ci')
+  .replace(/utf8mb3_uca1400_[a-z0-9_]+/gi, 'utf8mb3_unicode_ci')
+  .replace(/\s+PAGE_CHECKSUM=\d+/gi, '').replace(/\s+TRANSACTIONAL=\d+/gi, '');
 const decode = (v) => (v && typeof v === 'object' ? (v.$b !== undefined ? Buffer.from(v.$b, 'base64') : v.$j !== undefined ? v.$j : v) : v);
 
 // Importa o pacote num banco novo e devolve { db, meta, counts }
@@ -71,7 +76,7 @@ export async function importInto(file, dbName, log = console.log, filesRoot = nu
   let meta = null; let end = null; const counts = {}; let cols = {};
   for await (const m of readPackage(file)) {
     if (m.t === 'meta') meta = m;
-    else if (m.t === 'table') { await c.query(m.create); counts[m.name] = 0; cols[m.name] = null; }
+    else if (m.t === 'table') { await c.query(toMySQL(m.create)); counts[m.name] = 0; cols[m.name] = null; }
     else if (m.t === 'rows' && m.rows.length) {
       const keys = cols[m.name] || (cols[m.name] = Object.keys(m.rows[0]));
       const sql = `INSERT INTO \`${m.name}\` (${keys.map((k) => `\`${k}\``).join(',')}) VALUES ${m.rows.map(() => `(${keys.map(() => '?').join(',')})`).join(',')}`;
