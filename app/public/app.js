@@ -1438,21 +1438,85 @@ document.addEventListener('live:updated', initRecordForm);
 })();
 
 // ---------- Identidade da clínica: envio da logo (arquivo direto, sem formulário de várias partes) ----------
+// ---------- Identidade da clínica: envio de logo, símbolo e favicon ----------
+// A imagem é aberta e redesenhada aqui no navegador (aceita PNG, JPG, WebP, SVG, GIF, AVIF), com as margens transparentes
+// cortadas e o tamanho reduzido; vai sempre como PNG (ou WebP, se o PNG ficar grande). Assim arquivos grandes, com
+// extensão trocada ou em SVG também funcionam.
+const LOGO_SIZES = { logo: [1200, 400], simbolo: [512, 512], favicon: [512, 512] };
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(/heic|heif/i.test(file.type + file.name) ? 'fotos HEIC do iPhone não são aceitas; exporte como PNG ou JPG.' : 'não foi possível abrir este arquivo como imagem. Use PNG, JPG, WebP ou SVG.')); };
+    img.src = url;
+  });
+}
+function trimBox(ctx, w, h) {
+  const d = ctx.getImageData(0, 0, w, h).data; let x0 = w; let y0 = h; let x1 = -1; let y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 < 0 ? [0, 0, w, h] : [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
+}
+async function prepareImage(file, kind) {
+  const img = await loadImage(file);
+  let w = img.naturalWidth || img.width || 1024; let h = img.naturalHeight || img.height || 1024;
+  const svg = /svg/i.test(file.type) || /\.svg$/i.test(file.name);
+  const k = svg ? 2000 / Math.max(w, h) : Math.min(1, 2400 / Math.max(w, h)); // SVG: desenha grande (é vetor)
+  w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
+  const c1 = document.createElement('canvas'); c1.width = w; c1.height = h; const x1 = c1.getContext('2d', { willReadFrequently: true });
+  x1.drawImage(img, 0, 0, w, h);
+  const [bx, by, bw, bh] = trimBox(x1, w, h); // corta as bordas transparentes
+  const [mw, mh] = LOGO_SIZES[kind] || LOGO_SIZES.logo;
+  const out = document.createElement('canvas'); const ctx = out.getContext('2d');
+  if (kind === 'logo') {
+    const s = Math.min(1, mw / bw, mh / bh); out.width = Math.round(bw * s); out.height = Math.round(bh * s);
+    ctx.drawImage(c1, bx, by, bw, bh, 0, 0, out.width, out.height);
+  } else { // quadrado, centralizado (o favicon com uma pequena margem)
+    out.width = mw; out.height = mh; const pad = kind === 'favicon' ? Math.round(mw * 0.06) : 0;
+    const s = Math.min((mw - 2 * pad) / bw, (mh - 2 * pad) / bh); const dw = bw * s; const dh = bh * s;
+    ctx.imageSmoothingQuality = 'high'; ctx.drawImage(c1, bx, by, bw, bh, (mw - dw) / 2, (mh - dh) / 2, dw, dh);
+  }
+  const blob = (type, q) => new Promise((r) => out.toBlob(r, type, q));
+  let b = await blob('image/png');
+  if (!b || b.size > 1.9 * 1048576) b = await blob('image/webp', 0.9);
+  if (!b || b.size > 1.9 * 1048576) b = await blob('image/jpeg', 0.85);
+  if (!b) throw new Error('não foi possível converter a imagem.');
+  return b;
+}
 document.querySelectorAll('[data-logo-file]').forEach((inp) => inp.addEventListener('change', async () => {
   const f = inp.files[0]; if (!f) return;
   const form = inp.closest('[data-logo-form]'); const msg = form.querySelector('[data-logo-msg]');
   const say = (t, bad) => { if (msg) { msg.textContent = t; msg.className = `small ${bad ? 'err-txt' : 'muted'}`; } else if (bad) alert(t); };
-  const type = f.type || (/\.png$/i.test(f.name) ? 'image/png' : /\.jpe?g$/i.test(f.name) ? 'image/jpeg' : /\.webp$/i.test(f.name) ? 'image/webp' : '');
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(type)) { say('Envie a logo em PNG, JPG ou WebP (SVG e PDF não são aceitos).', true); inp.value = ''; return; }
-  if (f.size > 2 * 1024 * 1024) { say(`A logo tem ${(f.size / 1048576).toFixed(1)} MB; o limite é 2 MB. Exporte em tamanho menor.`, true); inp.value = ''; return; }
-  say('Enviando a logo…');
+  if (f.size > 25 * 1048576) { say('O arquivo passa de 25 MB. Exporte a imagem em tamanho menor.', true); inp.value = ''; return; }
+  say('Preparando a imagem…');
   try {
-    const r = await fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': type, Accept: 'application/json' }, body: f });
+    const blob = await prepareImage(f, form.dataset.logoKind || 'logo');
+    say('Enviando…');
+    const r = await fetch(form.action, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': blob.type, Accept: 'application/json' }, body: blob });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.ok) throw new Error(d.error || `erro ${r.status}`);
-    say('Logo salva. Atualizando…'); location.reload();
-  } catch (e) { say(`Não foi possível enviar a logo: ${e.message}`, true); inp.value = ''; }
+    if (!r.ok || !d.ok) throw new Error(d.error || (r.status === 413 ? 'a imagem ficou grande demais.' : `erro ${r.status}`));
+    say('Imagem salva. Atualizando…'); location.reload();
+  } catch (e) { say(`Não foi possível enviar: ${e.message}`, true); inp.value = ''; }
 }));
+
+// ---------- Identidade da clínica: paleta de cores (código ↔ seletor, prévia ao vivo) ----------
+(() => {
+  const box = document.querySelector('[data-palette]'); if (!box) return;
+  const prev = document.querySelector('[data-pal-prev]');
+  const hexes = [...box.querySelectorAll('[data-pal-hex]')]; const picks = [...box.querySelectorAll('[data-pal-pick]')];
+  const ok = (v) => /^#[0-9a-fA-F]{6}$/.test(v);
+  const paint = () => {
+    const v = hexes.map((h) => (ok(h.value.trim()) ? h.value.trim() : h.dataset.palDef));
+    if (prev) { prev.style.setProperty('--p1', v[0]); prev.style.setProperty('--p2', v[1]); prev.style.setProperty('--p3', v[2]); prev.style.setProperty('--p4', v[3]); }
+  };
+  picks.forEach((p, i) => p.addEventListener('input', () => { hexes[i].value = p.value; hexes[i].setCustomValidity(''); paint(); }));
+  hexes.forEach((h, i) => h.addEventListener('input', () => {
+    let v = h.value.trim(); if (v && v[0] !== '#') { v = `#${v}`; h.value = v; }
+    h.setCustomValidity(!v || ok(v) ? '' : 'Use o código da cor com 6 dígitos, ex.: #04857E');
+    if (ok(v)) picks[i].value = v; paint();
+  }));
+  document.querySelector('[data-pal-reset]')?.addEventListener('click', () => { hexes.forEach((h, i) => { h.value = ''; picks[i].value = h.dataset.palDef; }); paint(); });
+  paint();
+})();
 
 // ---------- Painel Mentez: rótulos das colunas (no celular cada linha da tabela vira um cartão) e fechar o menu ----------
 document.querySelectorAll('.mz2-table table').forEach((t) => {

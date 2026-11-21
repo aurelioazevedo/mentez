@@ -95,7 +95,7 @@ app.use((req, res, next) => {
     ...(embeddable ? {} : { 'X-Frame-Options': 'DENY' }),
     'Referrer-Policy': 'same-origin',
     'Permissions-Policy': 'camera=(self), microphone=(self), display-capture=(self), fullscreen=(self), geolocation=(), interest-cohort=()',
-    'Content-Security-Policy': `default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; form-action ${formAction(req)}; frame-ancestors ${embeddable ? `'self' ${EMBED_ORIGINS}` : "'none'"}; base-uri 'none'`,
+    'Content-Security-Policy': `default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; form-action ${formAction(req)}; frame-ancestors ${embeddable ? `'self' ${EMBED_ORIGINS}` : "'none'"}; base-uri 'none'`,
   });
   if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000');
   next();
@@ -119,12 +119,14 @@ app.use(async (req, res, next) => {
   try { t = await Tenancy.byHost(host); } catch (e) { return next(e); }
   if (!t) return res.status(404).send(String(bare('Clínica não encontrada', html`<div class="center-card"><h1>Endereço não encontrado</h1><p>Não há nenhuma clínica neste endereço. Confira o link recebido.</p></div>`)));
   if (t.status !== 'ativa') return res.status(403).send(String(bare('Acesso suspenso', html`<div class="center-card"><h1>Acesso temporariamente suspenso</h1><p>O acesso a esta clínica está suspenso. Fale com a administração da clínica.</p></div>`)));
+  // domínio próprio só nos planos com personalização; fora deles, volta ao endereço da Mentez
+  if (!Tenancy.slugOfHost(host) && !(await Brand.canCustomize(t).catch(() => true))) return res.redirect(302, `https://${t.slug}.${Tenancy.baseDomain()}${req.originalUrl}`);
   Tenancy.run(t, next); // tudo o que vem depois (banco, chaves, caches) é desta clínica
 });
 app.use(Brand.middleware); // identidade da clínica (nome, logo, cores) disponível para todas as páginas
 app.get('/_mentez/entrar', (req, res, next) => autoLogin(req, res).catch(next)); // entrada automática logo depois de criar a conta
 app.use(billingGate); // Mentez: teste grátis, mensalidade em dia ou acesso restrito à tela de assinatura
-app.get(/^\/marca\/(logo|logo-escuro)$/, (req, res, next) => { req.params.tipo = req.params[0]; logoRoute(req, res).catch(next); });
+app.get(/^\/marca\/(logo|logo-escuro|simbolo|simbolo-escuro|favicon)$/, (req, res, next) => { req.params.tipo = req.params[0]; logoRoute(req, res).catch(next); });
 // App instalável (PWA) e notificações push
 app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
 app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').send(JSON.stringify(Brand.manifest()))); // nome e ícones da clínica

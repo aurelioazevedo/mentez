@@ -3,7 +3,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import QRCode from 'qrcode';
 import { q, one, audit } from '../lib/db.js';
-import { page, html, raw, brDateTime, avatar, themeOf, logoTag } from '../lib/html.js';
+import { page, html, raw, brDateTime, avatar, themeOf, logoTag, appLogo } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
 import { can, ROLES, homeFor, isClinician } from '../lib/perm.js';
 import { bare } from '../lib/html.js';
@@ -312,7 +312,7 @@ r.get('/trocar-senha', (req, res) => {
   if (!req.user.must_change_password) return res.redirect('/conta');
   send(res, bare('Crie sua senha', html`
   <div class="auth"><div class="auth-card">
-    ${logoTag('auth-logo')}
+    ${appLogo('auth-logo')}
     <p class="eyebrow">Primeiro acesso</p><h1>Crie sua senha</h1>
     ${req.flash ? html`<div class="flash ${req.flash.type || 'ok'}">${req.flash.text}</div>` : ''}
     <p class="muted">Olá, ${req.user.name.split(' ')[0]}! Troque a senha provisória por uma senha só sua (mínimo 10 caracteres).</p>

@@ -96,7 +96,7 @@ function head(title, theme = '', o = {}) {
 <meta name="theme-color" content="${Brand.get().legacy ? '#47291c' : '#071936'}">
 <meta name="color-scheme" content="${theme === 'dark' ? 'dark' : theme === 'auto' ? 'light dark' : 'light'}">
 <title>${title} · ${o.suffix || Brand.get().appName}</title>
-<link rel="icon" href="${Brand.icon('favicon.png')}">
+<link rel="icon" href="${Brand.icon('favicon.png')}" type="image/png">
 <link rel="manifest" href="${o.manifest || '/manifest.webmanifest'}">
 <link rel="apple-touch-icon" href="${Brand.icon('apple-touch-icon.png')}">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -115,11 +115,18 @@ export function logoTag(cls = '', width = null, b = Brand.get()) {
   const w = width ? raw(` width="${width}"`) : '';
   return html`<img class="${cls} logo-light" src="${b.logoUrl}" alt="${b.short}"${w}><img class="${cls} logo-dark" src="${b.logoDarkUrl}" alt="${b.short}"${w}>`;
 }
+// Logo nas telas do sistema (login, primeiro acesso): a da clínica ou, sem logo enviada, a da Mentez
+export function appLogo(cls = 'auth-logo', b = Brand.get()) {
+  if (b.legacy) return logoTag(cls, null, b);
+  return html`<img class="${cls} logo-light" src="${b.appLogoUrl}" alt="${b.short}"><img class="${cls} logo-dark" src="${b.appLogoDarkUrl}" alt="${b.short}">`;
+}
 function brandLink() {
   const b = Brand.get();
-  if (b.legacy) return raw('<a class="brand" href="/"><img class="logo-light brand-full" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-full" src="/static/img/logo-creme.png" alt="Lorrainy Mendes"><img class="logo-light brand-mini" src="/static/img/simbolo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-mini" src="/static/img/simbolo-creme.png" alt="Lorrainy Mendes"><span>Sistema do consultório</span></a>');
-  const ini = initials(b.short);
-  return html`<a class="brand" href="/">${b.logoUrl ? html`<img class="logo-light brand-full" src="${b.logoUrl}" alt="${b.short}"><img class="logo-dark brand-full" src="${b.logoDarkUrl}" alt="${b.short}">` : html`<span class="brand-word brand-full">${b.short}</span>`}<span class="brand-mark brand-mini" aria-hidden="true">${ini}</span><span>Gestão do consultório · Mentez</span></a>`;
+  if (b.legacy && !b.logo && !b.symbol) return raw('<a class="brand" href="/"><img class="logo-light brand-full" src="/static/img/logo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-full" src="/static/img/logo-creme.png" alt="Lorrainy Mendes"><img class="logo-light brand-mini" src="/static/img/simbolo-terracota.png" alt="Lorrainy Mendes"><img class="logo-dark brand-mini" src="/static/img/simbolo-creme.png" alt="Lorrainy Mendes"><span>Sistema do consultório</span></a>');
+  const full = html`<img class="logo-light brand-full" src="${b.appLogoUrl}" alt="${b.short}"><img class="logo-dark brand-full" src="${b.appLogoDarkUrl}" alt="${b.short}">`;
+  // menu recolhido: o símbolo (logo sem o nome); sem símbolo, as iniciais da clínica
+  const mini = b.symbolUrl ? html`<img class="logo-light brand-mini" src="${b.symbolUrl}" alt="${b.short}"><img class="logo-dark brand-mini" src="${b.symbolDarkUrl}" alt="${b.short}">` : html`<i class="brand-mark brand-mini" aria-hidden="true">${initials(b.short)}</i>`;
+  return html`<a class="brand" href="/">${full}${mini}<span>${b.legacy ? 'Sistema do consultório' : (b.logo ? 'Gestão do consultório · Mentez' : b.short)}</span></a>`;
 }
 
 // Foto do usuário (ou iniciais) — usada na barra superior, na lateral e nas listas.

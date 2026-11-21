@@ -1,17 +1,36 @@
 // Configurações → Identidade da clínica (e as imagens da logo, públicas: aparecem também no portal e nos links do paciente)
 import express from 'express';
 import { audit } from '../lib/db.js';
-import { page, html, raw, logoTag } from '../lib/html.js';
+import { page, html, raw, logoTag, appLogo } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
 import * as Brand from '../lib/brand.js';
 
-// /marca/logo e /marca/logo-escuro (sem login)
+// /marca/logo, /marca/logo-escuro, /marca/simbolo, /marca/simbolo-escuro e /marca/favicon (sem login)
+const ROUTE_KIND = { logo: 'claro', 'logo-escuro': 'escuro', simbolo: 'simbolo', 'simbolo-escuro': 'simbolo-escuro', favicon: 'favicon' };
+const FALLBACK = { logo: 'logo.png', 'logo-escuro': 'logo-dark.png', simbolo: 'simbolo.png', 'simbolo-escuro': 'simbolo.png', favicon: 'favicon.png' };
 export async function logoRoute(req, res) {
-  const f = await Brand.logoFile(req.params.tipo === 'logo-escuro' ? 'escuro' : 'claro');
-  if (!f) { const b = Brand.get(); return b.legacy ? res.redirect('/static/img/logo-terracota.png') : res.sendStatus(404); }
+  const kind = ROUTE_KIND[req.params.tipo] || 'claro';
+  const b = await Brand.load();
+  let f = kind === 'claro' || b.custom !== false ? await Brand.logoFile(kind) : null;
+  if (!f && b.custom !== false && (kind === 'escuro' || kind === 'simbolo-escuro')) f = await Brand.logoFile(kind === 'escuro' ? 'claro' : 'simbolo'); // sem versão escura: a clara
+  if (!f) return res.redirect(b.legacy ? `/static/img/${{ logo: 'logo-terracota.png', 'logo-escuro': 'logo-creme.png', simbolo: 'simbolo-terracota.png', 'simbolo-escuro': 'simbolo-creme.png', favicon: 'favicon.png' }[req.params.tipo]}` : `/static/img/mentez/${FALLBACK[req.params.tipo] || 'logo.png'}`);
   res.set({ 'Content-Type': f.mime, 'Cache-Control': 'public, max-age=604800', 'X-Content-Type-Options': 'nosniff' }).send(f.buf);
 }
 
+const PALETTE = [
+  ['Cor principal', 'botões, links e menu ativo', '#04857E'],
+  ['Cor escura', 'títulos e textos fortes', '#071936'],
+  ['Cor de destaque', 'gradientes, ícones e gráficos', '#5B47C9'],
+  ['Cor clara', 'fundos suaves e etiquetas', '#E6F6EF'],
+];
+// [tipo, rota pública, rótulo, dica, campo da marca, formato]
+const SLOTS = [
+  ['claro', 'logo', 'Logo — fundo claro', 'Logo completa, de preferência horizontal.', 'logo', 'logo'],
+  ['escuro', 'logo-escuro', 'Logo — fundo escuro', 'Opcional: versão clara da logo para o tema escuro.', 'logoDark', 'logo'],
+  ['simbolo', 'simbolo', 'Símbolo (sem o nome)', 'Aparece com o menu recolhido. Formato quadrado.', 'symbol', 'simbolo'],
+  ['simbolo-escuro', 'simbolo-escuro', 'Símbolo — fundo escuro', 'Opcional, para o tema escuro.', 'symbolDark', 'simbolo'],
+  ['favicon', 'favicon', 'Favicon', 'Ícone da aba do navegador e do aplicativo instalado. Quadrado, simples.', 'favicon', 'favicon'],
+];
 export const settings = router();
 const v = (x) => x || '';
 settings.get('/', async (req, res) => {
@@ -37,43 +56,54 @@ settings.get('/', async (req, res) => {
       <label class="fld span2"><span>Endereço do consultório</span><input name="address" maxlength="200" value="${v(b.address)}"></label>
       <label class="fld"><span>Cidade</span><input name="city" maxlength="80" value="${v(b.city)}" placeholder="Goiânia"></label>
       <label class="fld"><span>UF</span><input name="uf" maxlength="2" value="${v(b.uf)}" placeholder="GO"></label>
-      <h2 class="span2">Visual</h2>
-      <label class="fld"><span>Cor de destaque <small class="muted">(botões e links; vazio = padrão)</small></span><span class="brand-color"><input type="color" name="color" value="${b.color || (b.legacy ? '#9c4422' : '#04857E')}">${b.color ? html`<label class="check small"><input type="checkbox" name="color_reset" value="1"> usar a cor padrão</label>` : ''}</span></label>
-      <label class="fld"><span>Nome do sistema <small class="muted">(título das páginas)</small></span><input name="appName" maxlength="80" value="${v(b.appNameSaved)}" placeholder="${b.appName}"></label>
+      <label class="fld span2"><span>Nome do sistema <small class="muted">(título das páginas e do aplicativo)</small></span><input name="appName" maxlength="80" value="${v(b.appNameSaved)}" placeholder="${b.appName}"></label>
+      ${b.custom !== false ? html`<h2 class="span2">Paleta de cores</h2>
+      <p class="span2 muted small">Até 4 cores da clínica ou do profissional. Deixe em branco para usar as cores padrão${b.legacy ? '' : ' da Mentez'}. Os textos dos botões mudam sozinhos para escuro quando a cor principal é muito clara.</p>
+      <div class="span2 pal-grid" data-palette>
+        ${PALETTE.map(([label, hint, def], i) => html`<label class="pal"><span class="pal-sw"><input type="color" value="${b.colors[i] || def}" data-pal-pick="${i}" aria-label="Escolher ${label}"></span>
+          <span class="pal-txt"><b>${label}</b><small class="muted">${hint}</small><input name="colors" value="${b.colors[i] || ''}" placeholder="padrão" maxlength="7" pattern="#[0-9a-fA-F]{6}" data-pal-hex="${i}" data-pal-def="${def}" autocomplete="off" spellcheck="false" aria-label="${label} (código, ex.: #04857E)"></span></label>`)}
+      </div>
+      <div class="span2 pal-prev" data-pal-prev aria-hidden="true"><b class="pp-title">Prévia</b><span class="pp-btn">Botão principal</span><span class="pp-chip">Etiqueta</span><span class="pp-bar"></span></div>
+      <div class="span2"><button type="button" class="btn ghost btn-sm" data-pal-reset>Usar as cores padrão</button></div>` : ''}
       <div class="span2 actions"><button class="btn">Salvar</button></div>
     </form>
-    <section class="card brand-logos">
-      <h2>Logo</h2>
-      <p class="muted small">PNG (de preferência com fundo transparente), JPG ou WebP, até 2 MB, de preferência horizontal. A versão para o tema escuro é opcional (logo clara). Nos documentos em PDF entram só PNG e JPG.</p>
+    ${b.custom === false ? html`<section class="card brand-locked"><h2>Logo, cores, favicon e domínio próprio</h2>
+      <p>No seu plano atual o sistema usa a identidade visual da Mentez. Para usar a logo, as cores e o favicon da clínica, e um endereço próprio (ex.: app.suaclinica.com.br), mude para um plano com personalização.</p>
+      <p class="actions"><a class="btn" href="/configuracoes/assinatura">Ver planos</a></p></section>` : html`<section class="card brand-logos">
+      <h2>Logo, símbolo e favicon</h2>
+      <p class="muted small">Envie PNG, JPG, WebP ou SVG — o sistema ajusta o tamanho e converte sozinho. Prefira imagens com fundo transparente. Enquanto não houver imagem, aparece ${b.legacy ? 'a padrão' : 'a da Mentez'}.</p>
       <div class="brand-logo-grid">
-        ${[['claro', 'Fundo claro', b.logo], ['escuro', 'Fundo escuro (opcional)', b.logoDark]].map(([k, l, has]) => html`<form method="post" action="/configuracoes/identidade/logo/${k}" enctype="application/octet-stream" class="brand-logo ${k}" data-logo-form>
-          <b>${l}</b>
-          <div class="brand-logo-prev">${has ? html`<img src="/marca/${k === 'escuro' ? 'logo-escuro' : 'logo'}?v=${has}" alt="Logo atual">` : html`<span class="muted small">Sem logo${k === 'claro' ? ' — o nome da clínica aparece no lugar' : ''}</span>`}</div>
-          <label class="btn ghost btn-sm">Escolher imagem<input type="file" accept="image/png,image/jpeg,image/webp" data-logo-file hidden></label>
+        ${SLOTS.map(([k, route, label, hint, field, shape]) => { const has = b[field]; return html`<form method="post" action="/configuracoes/identidade/logo/${k}" class="brand-logo ${k.includes('escuro') ? 'escuro' : 'claro'} bl-${shape}" data-logo-form data-logo-kind="${shape}">
+          <b>${label}</b><small class="muted">${hint}</small>
+          <div class="brand-logo-prev">${has ? html`<img src="/marca/${route}?v=${has}" alt="${label} atual">` : html`<img src="/marca/${route}" alt="" class="bl-default"><span class="bl-tag">padrão ${b.legacy ? '' : 'Mentez'}</span>`}</div>
+          <label class="btn ghost btn-sm">${has ? 'Trocar imagem' : 'Escolher imagem'}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,image/avif,.png,.jpg,.jpeg,.webp,.svg" data-logo-file hidden></label>
           <p class="small" data-logo-msg role="status"></p>
-          ${has ? html`<button class="btn ghost btn-sm danger-text" name="remover" value="1" formaction="/configuracoes/identidade/logo/${k}/remover" formenctype="application/x-www-form-urlencoded">Remover</button>` : ''}
-        </form>`)}
+          ${has ? html`<button class="btn ghost btn-sm danger-text" name="remover" value="1" formaction="/configuracoes/identidade/logo/${k}/remover">Remover</button>` : ''}
+        </form>`; })}
       </div>
-      <p class="small">Prévia no menu: <span class="brand-prev">${logoTag('brand-prev-img')}</span></p>
-    </section>` }));
+      <p class="small">Prévia no menu: <span class="brand-prev">${appLogo('brand-prev-img')}</span></p>
+    </section>`}` }));
 });
 settings.post('/', async (req, res) => {
   const b = req.body;
   if (!String(b.name || '').trim()) return res.flash('Informe o nome da clínica.', 'err').redirect('/configuracoes/identidade');
-  await Brand.save({ ...b, color: b.color_reset ? '' : b.color });
+  const custom = await Brand.canCustomize();
+  await Brand.save({ ...b, colors: custom && b.colors !== undefined ? [].concat(b.colors) : undefined });
   await audit(req, 'identidade-salvar');
   res.flash('Identidade da clínica salva.').redirect('/configuracoes/identidade');
 });
-// Envio da logo: o navegador manda o arquivo direto (corpo binário), com o tipo no cabeçalho
+// Envio das imagens: o navegador manda o arquivo já convertido (corpo binário), com o tipo no cabeçalho
 settings.post('/logo/:k', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '2200kb' }), async (req, res) => {
-  const k = req.params.k === 'escuro' ? 'escuro' : 'claro';
+  const k = Brand.ASSETS[req.params.k] ? req.params.k : 'claro';
+  if (!(await Brand.canCustomize())) return res.status(402).json({ ok: false, error: 'O seu plano não inclui personalização da logo. Veja os planos em Configurações → Plano e assinatura.' });
   try { await Brand.saveLogo(k, Buffer.isBuffer(req.body) ? req.body : null, String(req.get('content-type') || '').split(';')[0]); }
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   await audit(req, 'identidade-logo', k);
   res.json({ ok: true });
 });
 settings.post('/logo/:k/remover', async (req, res) => {
-  await Brand.removeLogo(req.params.k === 'escuro' ? 'escuro' : 'claro');
-  await audit(req, 'identidade-logo-remover', req.params.k);
-  res.flash('Logo removida.').redirect('/configuracoes/identidade');
+  const k = Brand.ASSETS[req.params.k] ? req.params.k : 'claro';
+  await Brand.removeLogo(k);
+  await audit(req, 'identidade-logo-remover', k);
+  res.flash('Imagem removida.').redirect('/configuracoes/identidade');
 });

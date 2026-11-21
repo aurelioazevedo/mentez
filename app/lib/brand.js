@@ -10,6 +10,7 @@
 //      em tarefas automáticas e rotinas assíncronas, await Brand.load().
 import { getSetting, setSetting } from './db.js';
 import * as Tenancy from './tenancy.js';
+import * as Billing from './billing.js';
 
 const LEGACY = {
   name: 'Consultório Lorrainy Mendes', short: 'Lorrainy Mendes', proName: 'Dra. Lorrainy Mendes', proFirst: 'Dra. Lorrainy', proRole: 'Psicóloga',
@@ -22,6 +23,12 @@ function mentezDefaults() {
   return { name, short: name, proName: '', proFirst: '', proRole: 'Psicologia', crp: '', phone: '', email: '', site: '', instagram: '', city: '', uf: '', address: '', color: '', appName: name, legacy: false };
 }
 export const isMentez = () => Tenancy.multi();
+// O plano da clínica inclui personalização visual e domínio próprio? (sem a plataforma: sempre)
+export async function canCustomize(t = Tenancy.current()) {
+  if (!isMentez()) return true;
+  if (!t) return false;
+  try { return (await Billing.featuresOf(t)).includes('personalizacao'); } catch { return false; }
+}
 const S = Tenancy.scoped({ brand: null, at: 0 });
 const TTL = 30e3;
 
@@ -35,8 +42,21 @@ function finish(b) {
   b.placeSlash = [b.city, b.uf].filter(Boolean).join('/'); // “Goiânia/GO”
   b.signLine = [b.proRole || '', b.crp ? `CRP ${b.crp}` : ''].filter(Boolean).join(' · '); // “Psicóloga · CRP 09/23862”
   b.who = b.proName || b.short || b.name; // como a clínica se apresenta ao paciente
+  // Personalização visual (logo, símbolo, favicon e cores): sistema da Dra. Lorrainy sempre; na Mentez, conforme o plano
+  if (b.custom === false) { b.logo = ''; b.logoDark = ''; b.symbol = ''; b.symbolDark = ''; b.favicon = ''; b.colors = []; b.color = ''; }
+  b.colors = (b.colors && b.colors.length ? b.colors : [b.color || '', '', '', '']).concat(['', '', '', '']).slice(0, 4);
+  b.color = b.colors[0];
+  // logoUrl: logo da própria clínica (documentos, portal e páginas do paciente; vazio = nome em texto)
   b.logoUrl = b.logo ? `/marca/logo?v=${b.logo}` : (b.legacy ? '/static/img/logo-terracota.png' : '');
   b.logoDarkUrl = b.logoDark ? `/marca/logo-escuro?v=${b.logoDark}` : (b.legacy ? '/static/img/logo-creme.png' : b.logoUrl);
+  // appLogo*: telas do sistema (menu, login). Sem logo enviada, a da Mentez.
+  const mz = '/static/img/mentez';
+  b.appLogoUrl = b.logoUrl || `${mz}/logo.png`;
+  b.appLogoDarkUrl = b.logo ? b.logoDarkUrl : (b.logoUrl ? b.logoDarkUrl : `${mz}/logo-dark.png`);
+  // símbolo (logo sem o nome) para o menu recolhido
+  b.symbolUrl = b.symbol ? `/marca/simbolo?v=${b.symbol}` : (b.legacy ? '/static/img/simbolo-terracota.png' : (b.logo ? '' : `${mz}/simbolo.png`));
+  b.symbolDarkUrl = b.symbolDark ? `/marca/simbolo-escuro?v=${b.symbolDark}` : (b.legacy ? '/static/img/simbolo-creme.png' : b.symbolUrl);
+  b.faviconUrl = b.favicon ? `/marca/favicon?v=${b.favicon}` : '';
   return b;
 }
 export async function load(force = false) {
@@ -51,7 +71,9 @@ export async function load(force = false) {
     name: fin.name || pick('name', base.name), city: fin.city || pick('city', base.city), phone: fin.phone || pick('phone', base.phone),
     email: fin.email || pick('email', base.email), address: fin.address || pick('address', base.address),
   };
-  for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'appName']) b[k] = pick(k, b[k]);
+  for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'symbol', 'symbolDark', 'favicon', 'appName']) b[k] = pick(k, b[k]);
+  b.colors = Array.isArray(saved.colors) ? saved.colors : [];
+  b.custom = await canCustomize();
   if (!saved.appName && saved.short) b.appName = isMentez() ? saved.short : `Sistema ${saved.short}`;
   b.appNameSaved = saved.appName || '';
   S.brand = finish(b); S.at = Date.now();
@@ -65,9 +87,12 @@ export function middleware(req, res, next) { load().then(() => next(), next); }
 export async function save(b) {
   const cur = JSON.parse((await getSetting('brand')) || '{}');
   const s = (v, n) => String(v ?? '').trim().slice(0, n);
-  const color = /^#[0-9a-fA-F]{6}$/.test(String(b.color || '')) ? b.color : '';
+  const hex = (v) => (/^#[0-9a-fA-F]{6}$/.test(String(v || '')) ? String(v).toLowerCase() : '');
+  const colors = b.colors === undefined ? [...(cur.colors || [cur.color || ''])] : [].concat(b.colors).slice(0, 4).map(hex);
+  while (colors.length < 4) colors.push('');
+  const color = colors[0];
   const next = { ...cur, short: s(b.short, 80), proName: s(b.proName, 120), proFirst: s(b.proFirst, 60), proRole: s(b.proRole, 60), crp: s(b.crp, 30),
-    site: s(b.site, 120).replace(/^https?:\/\//, '').replace(/\/+$/, ''), instagram: s(b.instagram, 60), uf: s(b.uf, 2).toUpperCase(), whatsapp: s(b.whatsapp, 40), color, appName: s(b.appName, 80) };
+    site: s(b.site, 120).replace(/^https?:\/\//, '').replace(/\/+$/, ''), instagram: s(b.instagram, 60), uf: s(b.uf, 2).toUpperCase(), whatsapp: s(b.whatsapp, 40), color, colors, appName: s(b.appName, 80) };
   await setSetting('brand', JSON.stringify(next));
   const fin = JSON.parse((await getSetting('fin_clinic')) || '{}');
   await setSetting('fin_clinic', JSON.stringify({ ...fin, name: s(b.name, 160), city: s(b.city, 80), phone: s(b.phone, 40), email: s(b.email, 120), address: s(b.address, 200) }));
@@ -75,31 +100,43 @@ export async function save(b) {
   return load(true);
 }
 
-// ---------- logo (PNG, JPEG ou WebP, até 2 MB; PNG e JPEG também entram nos PDFs) ----------
+// ---------- imagens da marca (PNG, JPEG ou WebP, até 2 MB) ----------
+// claro/escuro: logo completa; simbolo/simbolo-escuro: logo sem o nome (menu recolhido); favicon: ícone da aba e do aplicativo.
+// O navegador já converte e reduz a imagem antes de enviar (public/app.js); aqui só conferimos.
+export const ASSETS = {
+  claro: { setting: 'brand_logo', field: 'logo', label: 'logo' },
+  escuro: { setting: 'brand_logo_dark', field: 'logoDark', label: 'logo para fundo escuro' },
+  simbolo: { setting: 'brand_symbol', field: 'symbol', label: 'símbolo' },
+  'simbolo-escuro': { setting: 'brand_symbol_dark', field: 'symbolDark', label: 'símbolo para fundo escuro' },
+  favicon: { setting: 'brand_favicon', field: 'favicon', label: 'favicon' },
+};
+const asset = (kind) => ASSETS[kind] || ASSETS.claro;
 export async function saveLogo(kind, buf, mime) {
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) throw new Error('Envie a logo em PNG, JPG ou WebP.');
-  if (!buf?.length || buf.length > 2 * 1024 * 1024) throw new Error('A logo precisa ter até 2 MB.');
+  const a = asset(kind);
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) throw new Error('Envie a imagem em PNG, JPG ou WebP.');
+  if (!buf?.length || buf.length > 2 * 1024 * 1024) throw new Error('A imagem precisa ter até 2 MB.');
   // confere a assinatura do arquivo (não confia só no tipo informado pelo navegador)
   const sig = buf.subarray(0, 12);
   const real = sig[0] === 0x89 && sig[1] === 0x50 ? 'image/png' : sig[0] === 0xff && sig[1] === 0xd8 ? 'image/jpeg' : sig.toString('latin1', 0, 4) === 'RIFF' && sig.toString('latin1', 8, 12) === 'WEBP' ? 'image/webp' : null;
-  if (real !== mime) throw new Error('O arquivo não parece ser uma imagem PNG, JPG ou WebP válida.');
-  const key = kind === 'escuro' ? 'brand_logo_dark' : 'brand_logo';
-  await setSetting(key, JSON.stringify({ mime, data: buf.toString('base64') }));
+  if (!real) throw new Error('O arquivo não parece ser uma imagem PNG, JPG ou WebP válida.');
+  await setSetting(a.setting, JSON.stringify({ mime: real, data: buf.toString('base64') }));
   const cur = JSON.parse((await getSetting('brand')) || '{}');
-  cur[kind === 'escuro' ? 'logoDark' : 'logo'] = Date.now().toString(36);
+  cur[a.field] = Date.now().toString(36);
   await setSetting('brand', JSON.stringify(cur));
   S.brand = null;
 }
 export async function removeLogo(kind) {
-  await setSetting(kind === 'escuro' ? 'brand_logo_dark' : 'brand_logo', null);
+  const a = asset(kind);
+  await setSetting(a.setting, null);
   const cur = JSON.parse((await getSetting('brand')) || '{}');
-  delete cur[kind === 'escuro' ? 'logoDark' : 'logo'];
+  delete cur[a.field];
   await setSetting('brand', JSON.stringify(cur));
   S.brand = null;
 }
 export async function logoFile(kind = 'claro') {
   try {
-    const raw = await getSetting(kind === 'escuro' ? 'brand_logo_dark' : 'brand_logo');
+    if (kind === 'claro' && !(await load()).logo) return null; // fora do plano, a logo enviada não aparece nos documentos
+    const raw = await getSetting(asset(kind).setting);
     if (!raw) return null;
     const o = JSON.parse(raw);
     return o?.data ? { mime: o.mime, buf: Buffer.from(o.data, 'base64') } : null;
@@ -107,15 +144,22 @@ export async function logoFile(kind = 'claro') {
 }
 
 // Ícones do aplicativo: os da Dra. Lorrainy no sistema dela; os da Mentez nas clínicas da plataforma
-export const icon = (file) => (isMentez() ? `/static/img/mentez/${file}` : `/static/img/${file}`);
+export const icon = (file) => {
+  const b = get();
+  if (b.faviconUrl && /^(favicon|apple-touch-icon|app-192|app-512)/.test(file)) return b.faviconUrl;
+  return isMentez() ? `/static/img/mentez/${file}` : `/static/img/${file}`;
+};
 // Manifesto do aplicativo instalável (nome e ícones da clínica)
 export function manifest({ start = '/', scope = '/', suffix = '' } = {}) {
   const b = get();
+  const icons = b.faviconUrl
+    ? [{ src: b.faviconUrl, sizes: '512x512', type: 'image/png', purpose: 'any' }]
+    : [{ src: icon('app-192.png'), sizes: '192x192', type: 'image/png' }, { src: icon('app-512.png'), sizes: '512x512', type: 'image/png' }, { src: icon('app-maskable-512.png'), sizes: '512x512', type: 'image/png', purpose: 'maskable' }];
   return {
     name: suffix ? `${b.short} · ${suffix}` : b.appName, short_name: (b.legacy && !suffix ? 'Consultório' : b.short).slice(0, 24), description: b.legacy ? 'Sistema de gestão do consultório — Lorrainy Mendes, Psicóloga' : `${b.name} · gestão pela Mentez`,
     start_url: start, scope, id: start, display: 'standalone', lang: 'pt-BR',
-    background_color: b.legacy ? '#f6f0e8' : '#F5F7FC', theme_color: b.legacy ? '#47291c' : '#071936',
-    icons: [{ src: icon('app-192.png'), sizes: '192x192', type: 'image/png' }, { src: icon('app-512.png'), sizes: '512x512', type: 'image/png' }, { src: icon('app-maskable-512.png'), sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
+    background_color: b.legacy ? '#f6f0e8' : '#F5F7FC', theme_color: b.colors[1] || (b.legacy ? '#47291c' : '#071936'),
+    icons,
   };
 }
 
@@ -127,6 +171,11 @@ function shade(hex, f) {
   const m = c.map((v) => Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f))));
   return `#${m.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
+function lum(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f((n >> 16) & 255) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
+}
 export function themeCss(b = get()) {
   const out = [];
   if (!b.legacy) {
@@ -135,6 +184,15 @@ export function themeCss(b = get()) {
     out.push('@media (prefers-color-scheme: dark){:root[data-theme="auto"]{--terracota:#07C6BC;--terracota-d:#3BD6CD;--creme:#132C57;--creme-deep:#1E3663;--marrom:#C9D2E3;--marrom-deep:#F5F7FC;--bg:#071936;--bg2:#0D2246;--ink:#F5F7FC;--muted:#A9B5CA;--line:#1E3663;--card:#0D2246;--surface:#0D2246;--surface-2:#132C57}}');
     out.push('h1,h2,h3{font-weight:700;letter-spacing:-.01em}');
   }
-  if (b.color) out.push(`:root,.letter{--terracota:${b.color};--terracota-d:${shade(b.color, -0.2)};--terracota-l:${shade(b.color, 0.25)}}`);
+  // Paleta da clínica (até 4 cores): 1 principal (botões, links, menu ativo), 2 escura (títulos e textos fortes),
+  // 3 de destaque (gradientes, ícones e gráficos), 4 clara (fundos suaves e etiquetas). Vazias = cores padrão.
+  const [c1, c2, c3, c4] = b.colors || [b.color];
+  if (c1) out.push(`:root,.letter{--terracota:${c1};--terracota-d:${shade(c1, -0.2)};--terracota-l:${shade(c1, 0.25)}}`);
+  if (c2) out.push(`:root:not([data-theme="dark"]),.letter{--marrom-deep:${c2};--marrom:${shade(c2, 0.2)};--ink:${c2};--strong-bg:${c2}}`);
+  if (c3) out.push(`:root,.letter{--musgo:${c3};--strong-accent:${c3}}`);
+  if (c4) out.push(`:root:not([data-theme="dark"]),.letter{--creme:${c4};--creme-deep:${shade(c4, -0.12)}}`);
+  if (c2 || c4) out.push('@media (prefers-color-scheme: dark){:root[data-theme="auto"]{' + (c2 ? '--marrom-deep:#F5F7FC;--marrom:#C9D2E3;--ink:#F5F7FC;--strong-bg:#132C57;' : '') + (c4 ? '--creme:#132C57;--creme-deep:#1E3663;' : '') + '}}');
+  // contraste mínimo do texto branco sobre a cor principal (botões)
+  if (c1 && lum(c1) > 0.3) out.push(`.btn:not(.ghost),.side nav a.on,.ag-views a.on{color:#0D2246 !important}`);
   return out.join('\n');
 }
