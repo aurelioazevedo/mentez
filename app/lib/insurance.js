@@ -3,6 +3,11 @@
 import { q, one } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
 import { todayLocal, addDays } from './time.js';
+import * as Billing from './billing.js';
+import * as Tenancy from './tenancy.js';
+
+// Tipo do módulo na clínica atual (liberado no Painel da Mentez): 'integrado', 'simples' ou null (sem convênio)
+export const mode = () => Billing.insModeOf(Tenancy.current());
 
 export const COPAY = { nenhuma: 'Sem coparticipação', percentual: 'Percentual da sessão (%)', fixo: 'Valor fixo por sessão (R$)' };
 export const TISS_VERSIONS = ['4.03.00', '4.02.00', '4.01.00'];

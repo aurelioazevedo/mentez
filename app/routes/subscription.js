@@ -31,10 +31,10 @@ export async function features(req, res, next) {
   const hit = Billing.FEATURE_PATHS.find(([r]) => r.test(req.path));
   if (!hit) return next();
   const feats = await Billing.featuresOf(t);
-  if (feats.includes(hit[1])) return next();
-  const plans = (await Billing.plans()).filter((p) => p.public && p.features.includes(hit[1]));
+  if (Billing.has(feats, hit[1])) return next();
+  const plans = (await Billing.plans()).filter((p) => p.public && Billing.has(p.features, hit[1]));
   res.status(402);
-  send(res, page(req, { title: 'Recurso de outro plano', active: '', body: html`<section class="card center-card"><h1>${Billing.FEATURES[hit[1]]}</h1>
+  send(res, page(req, { title: 'Recurso de outro plano', active: '', body: html`<section class="card center-card"><h1>${Billing.FEATURES[hit[1]] || 'Convênios'}</h1>
     <p>Este recurso não está no seu plano atual.${plans.length ? ` Está incluído no plano ${plans.map((p) => p.name).join(' e ')}.` : ''}</p>
     <p class="actions">${can(req.user, 'usuarios') ? html`<a class="btn" href="/configuracoes/assinatura">Ver planos</a>` : html`<span class="muted">Fale com a administração da clínica.</span>`}<a class="btn ghost" href="/">Voltar</a></p></section>` }));
 }

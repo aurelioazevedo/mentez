@@ -25,6 +25,7 @@ const parseBr = (v, def) => { const s = String(v ?? '').trim(); if (!s) return d
 export const settings = router();
 settings.get('/', async (req, res) => {
   const list = await Ins.list();
+  const simple = (await Ins.mode()) === 'simples';
   send(res, page(req, { title: 'Convênios', active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Convênios</h1>
       <p class="muted">Ligue os convênios em que a clínica ou os profissionais são credenciados e cadastre a tabela de valores. Depois, a carteirinha e a autorização ficam na ficha do paciente, e cada sessão marca se é particular ou convênio.</p></div>
       <div class="ph-actions"><a class="btn" href="/configuracoes/convenios/novo">+ Outro convênio</a><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
@@ -34,18 +35,18 @@ settings.get('/', async (req, res) => {
         <td>${i.requires_auth ? `${i.sessions_per_auth} sessões / ${i.auth_days} dias` : 'não exige'}</td>
         <td>${i.copay_mode === 'nenhuma' ? '—' : i.copay_mode === 'percentual' ? `${brl(i.copay_value)}%` : money(i.copay_value)}</td>
         <td class="num">${i.plans}</td><td><a class="btn ghost btn-sm" href="/configuracoes/convenios/${i.id}">${i.active ? 'Editar' : 'Configurar'}</a></td></tr>`)}</tbody></table></div></section>
-    ${await tissCard()}
-    <p class="muted small">Valores, regras de autorização e prazos estão no contrato com cada operadora. O faturamento em lote (XML TISS) fica em Financeiro → Convênios.</p>` }));
+    ${simple ? '' : await tissCard()}
+    <p class="muted small">Valores, regras de autorização e prazos estão no contrato com cada operadora. ${simple ? 'O que cada convênio deve à clínica, mês a mês, fica em Financeiro → Convênios.' : 'O faturamento em lote (XML TISS) fica em Financeiro → Convênios.'}</p>` }));
 });
-function insForm(i, ps) {
+function insForm(i, ps, simple = false) {
   return html`<form method="post" class="card stack" id="ins-form">
     <div class="form-grid">
       <label class="fld"><span>Nome</span><input name="name" value="${i.name || ''}" maxlength="80" required></label>
       <label class="fld check"><input type="checkbox" name="active" value="1" ${ck(i.active)}><span><b>Credenciado</b> (aparece na ficha e na agenda)</span></label>
-      <label class="fld"><span>Registro ANS da operadora</span><input name="ans_code" value="${i.ans_code || ''}" maxlength="20" inputmode="numeric"></label>
-      <label class="fld"><span>Código do prestador (na operadora)</span><input name="provider_code" value="${i.provider_code || ''}" maxlength="40"></label>
+      ${simple ? html`<input type="hidden" name="ans_code" value="${i.ans_code || ''}"><input type="hidden" name="provider_code" value="${i.provider_code || ''}"><input type="hidden" name="send_via" value="${i.send_via || 'portal'}">` : html`<label class="fld"><span>Registro ANS da operadora</span><input name="ans_code" value="${i.ans_code || ''}" maxlength="20" inputmode="numeric"></label>
+      <label class="fld"><span>Código do prestador (na operadora)</span><input name="provider_code" value="${i.provider_code || ''}" maxlength="40"></label>`}
       <label class="fld"><span>Quem é credenciado</span><select name="credential"><option value="clinica" ${sel(i.credential, 'clinica')}>A clínica (recebe da operadora)</option><option value="profissional" ${sel(i.credential, 'profissional')}>Cada profissional (recebe direto)</option></select></label>
-      <label class="fld"><span>Envio das guias</span><select name="send_via">${Object.entries(Ins.VIA).map(([k, l]) => html`<option value="${k}" ${sel(i.send_via, k)}>${l}</option>`)}</select></label>
+      ${simple ? '' : html`<label class="fld"><span>Envio das guias</span><select name="send_via">${Object.entries(Ins.VIA).map(([k, l]) => html`<option value="${k}" ${sel(i.send_via, k)}>${l}</option>`)}</select></label>`}
       <label class="fld"><span>Portal da operadora</span><input name="portal_url" value="${i.portal_url || ''}" maxlength="300" placeholder="https://…"></label>
       <label class="fld"><span>Telefone de autorização</span><input name="phone" value="${i.phone || ''}" maxlength="40"></label>
     </div>
@@ -64,13 +65,13 @@ function insForm(i, ps) {
       <label class="fld"><span>Percentual ou valor</span><input name="copay_value" inputmode="decimal" value="${i.copay_value ? brl(i.copay_value) : ''}"></label>
       <label class="fld"><span>Dia de fechamento do mês</span><input type="number" name="close_day" min="1" max="31" value="${i.close_day || ''}"></label>
       <label class="fld"><span>Prazo de pagamento (dias)</span><input type="number" name="pay_days" min="0" max="180" value="${i.pay_days ?? 30}"></label>
-      <label class="fld"><span>Prazo para recurso de glosa (dias)</span><input type="number" name="appeal_days" min="1" max="365" value="${i.appeal_days ?? 30}"></label>
+      ${simple ? html`<input type="hidden" name="appeal_days" value="${i.appeal_days ?? 30}">` : html`<label class="fld"><span>Prazo para recurso de glosa (dias)</span><input type="number" name="appeal_days" min="1" max="365" value="${i.appeal_days ?? 30}"></label>`}
     </div>
-    <h2>Faturamento (TISS)</h2>
+    ${simple ? html`<input type="hidden" name="tiss_version" value="${i.tiss_version || '4.03.00'}"><input type="hidden" name="guide_mode" value="${i.guide_mode || 'sessao'}">` : html`<h2>Faturamento (TISS)</h2>
     <div class="form-grid">
       <label class="fld"><span>Versão do padrão TISS</span><select name="tiss_version">${Ins.TISS_VERSIONS.map((v) => html`<option value="${v}" ${sel(i.tiss_version || '4.03.00', v)}>${v}</option>`)}</select></label>
       <label class="fld"><span>Guias no lote</span><select name="guide_mode"><option value="sessao" ${sel(i.guide_mode, 'sessao')}>Uma guia por sessão</option><option value="autorizacao" ${sel(i.guide_mode, 'autorizacao')}>Uma guia por autorização (sessões como itens)</option></select></label>
-    </div>
+    </div>`}
     <label class="fld"><span>Observações</span><textarea name="notes" rows="2" maxlength="1000">${i.notes || ''}</textarea></label>
     <div class="actions"><button class="btn">Salvar</button><a class="btn ghost" href="/configuracoes/convenios">Voltar</a></div>
   </form>
@@ -82,14 +83,14 @@ function insForm(i, ps) {
           <form method="post" action="/configuracoes/convenios/${i.id}/procedimento/${x.id}/remover" class="inline" data-confirm="Remover este procedimento da tabela?"><button class="btn ghost btn-sm">Remover</button></form></td></tr>`)}</tbody></table></div>`
       : html`<p class="flash warn">Sem tabela: as sessões deste convênio ainda não geram valor a receber.</p>`}
     <form method="post" action="/configuracoes/convenios/${i.id}/procedimento" class="form-grid">
-      <label class="fld"><span>Código TUSS <small class="muted">(do contrato)</small></span><input name="tuss_code" maxlength="20" inputmode="numeric"></label>
+      <label class="fld"><span>Código TUSS <small class="muted">(${simple ? 'opcional' : 'do contrato'})</small></span><input name="tuss_code" maxlength="20" inputmode="numeric"></label>
       <label class="fld"><span>Procedimento</span><input name="description" maxlength="160" value="${ps.length ? '' : 'Sessão de psicoterapia individual'}" required></label>
       <label class="fld"><span>Valor (R$)</span><input name="value" inputmode="decimal" required></label>
       <label class="fld check"><input type="checkbox" name="is_default" value="1" ${ps.length ? '' : raw('checked')}><span>Procedimento padrão</span></label>
       <div class="span2 actions"><button class="btn ghost">Adicionar à tabela</button></div>
     </form></section>` : ''}`;
 }
-settings.get('/novo', (req, res) => send(res, page(req, { title: 'Novo convênio', active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Convênios</p><h1>Novo convênio</h1></div></header>${insForm({ active: 1 }, [])}` })));
+settings.get('/novo', async (req, res) => send(res, page(req, { title: 'Novo convênio', active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Convênios</p><h1>Novo convênio</h1></div></header>${insForm({ active: 1 }, [], (await Ins.mode()) === 'simples')}` })));
 settings.post('/novo', async (req, res) => {
   const r = await Ins.save(null, req.body);
   if (!r.ok) return res.flash(r.error, 'err').redirect('/configuracoes/convenios/novo');
@@ -98,7 +99,7 @@ settings.post('/novo', async (req, res) => {
 });
 settings.get('/:id', async (req, res, next) => {
   const i = await Ins.get(int(req.params.id)); if (!i) return next();
-  send(res, page(req, { title: i.name, active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Convênios</p><h1>${i.name}</h1></div></header>${insForm(i, await Ins.procs(i.id))}${await wsCard(i)}` }));
+  send(res, page(req, { title: i.name, active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Convênios</p><h1>${i.name}</h1></div></header>${await (async () => { const simple = (await Ins.mode()) === 'simples'; return html`${insForm(i, await Ins.procs(i.id), simple)}${simple ? '' : await wsCard(i)}`; })()}` }));
 });
 settings.post('/:id', async (req, res, next) => {
   const i = await Ins.get(int(req.params.id)); if (!i) return next();
@@ -120,7 +121,7 @@ export async function patientTab(req, p) {
   const B = `/convenios/paciente/${p.id}`;
   const procsBy = {}; for (const i of active) procsBy[i.id] = await Ins.procs(i.id);
   const current = plans.filter((x) => x.active);
-  const wb = await wsPatientBits(p, plans);
+  const wb = (await Ins.mode()) === 'simples' ? { elig: {}, reqs: [], auth: {} } : await wsPatientBits(p, plans);
   return html`${alerts.map((t) => html`<div class="flash warn">${t}</div>`)}
     ${!active.length ? html`<div class="flash info">Nenhum convênio credenciado ainda. ${can(req.user, 'usuarios') ? html`<a href="/configuracoes/convenios">Ligar os convênios em Configurações → Convênios</a>.` : 'Peça à administração para ligar em Configurações → Convênios.'}</div>` : ''}
     <section class="card" id="carteirinhas"><h2>Carteirinhas</h2>
@@ -271,8 +272,56 @@ const demoUpload = () => html`<section class="card"><h2>Retorno da operadora</h2
   <label class="btn ghost file-btn"><input type="file" accept=".xml,text/xml,application/xml" data-upload="/financeiro/convenios/demonstrativo" hidden>⬆ Enviar demonstrativo (XML)</label>
   <p class="muted small" data-upload-msg></p></section>`;
 
+// ---------- Convênio simples: o que cada convênio deve no mês e a baixa do recebimento (sem TISS) ----------
+async function simpleMonth(insurerId, ym) {
+  return q(`SELECT x.id, x.amount, x.paid_at, a.id appt_id, a.starts_at, a.status, p.name, p.social_name, au.password
+    FROM payments x JOIN appointments a ON a.id = x.appointment_id JOIN patients p ON p.id = x.patient_id LEFT JOIN insurer_auths au ON au.id = a.auth_id
+    WHERE x.origin = 'convenio' AND x.insurer_id = ? AND DATE_FORMAT(a.starts_at, '%Y-%m') = ? AND a.status <> 'cancelada' ORDER BY a.starts_at`, [insurerId, ym]);
+}
+async function simpleBilling(req, res, ym) {
+  const ins = await Ins.list(true);
+  const cards = [];
+  for (const i of ins) cards.push({ i, rows: await simpleMonth(i.id, ym) });
+  const tot = (xs) => xs.reduce((a, x) => a + Number(x.amount || 0), 0);
+  const nm = (x) => x.social_name || x.name;
+  send(res, page(req, { title: 'Financeiro · Convênios', active: 'financeiro', body: html`<header class="ph"><div><p class="eyebrow">Financeiro · ${monthName(ym)}</p><h1>Convênios</h1>
+      <p class="muted">As sessões por convênio no mês e quanto cada operadora deve à clínica. Envie a relação de atendimentos no portal ou no formato que a operadora pedir e, quando o pagamento cair, dê baixa aqui.</p></div>
+      <div class="ph-actions"><a class="btn ghost" href="?mes=${addMonths(ym, -1)}">←</a><a class="btn ghost" href="?mes=${addMonths(ym, 1)}">→</a><button class="btn ghost" data-print>Imprimir</button><a class="btn ghost" href="/configuracoes/convenios">Configurar</a></div></header>
+    ${finTabs(req, 'convenios', { key: 'clinica' })}
+    ${!ins.length ? html`<div class="flash info">Nenhum convênio credenciado. Ligue em <a href="/configuracoes/convenios">Configurações → Convênios</a>.</div>` : ''}
+    ${cards.map(({ i, rows }) => { const open = rows.filter((x) => !x.paid_at); const paid = rows.filter((x) => x.paid_at); return html`<section class="card ins-simple" data-ins="${i.id}">
+      <header class="row-head"><h2>${i.name}</h2><span class="muted small">${rows.length} sessão(ões) · ${money(tot(rows))}</span></header>
+      <div class="tiss-nums"><div><b>${money(tot(open))}</b><small>a receber · ${open.length} sessão(ões)</small></div><div><b>${money(tot(paid))}</b><small>recebido · ${paid.length}</small></div></div>
+      ${rows.length ? html`<form method="post" action="/financeiro/convenios/receber">
+        <input type="hidden" name="mes" value="${ym}">
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th class="no-print"></th><th>Data</th><th>Paciente</th><th>Senha</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>
+          ${rows.map((x) => html`<tr><td class="no-print">${x.paid_at ? '' : html`<input type="checkbox" name="ids" value="${x.id}" checked aria-label="Selecionar">`}</td><td><a href="/agenda/${x.appt_id}">${brDate(x.starts_at)} ${String(x.starts_at).slice(11, 16)}</a></td><td>${nm(x)}</td><td class="mono">${x.password || '—'}</td><td class="num">${money(x.amount)}</td>
+            <td>${x.paid_at ? html`<span class="badge b-realizada">recebido em ${brDate(x.paid_at)}</span>` : x.status === 'realizada' ? html`<span class="badge b-aguardando">a receber</span>` : html`<span class="badge b-agendada">${x.status}</span>`}</td></tr>`)}
+        </tbody><tfoot><tr><th class="no-print"></th><th colspan="3">Total</th><th class="num">${money(tot(rows))}</th><th></th></tr></tfoot></table></div>
+        ${open.length ? html`<div class="actions no-print"><label class="fld inline"><span>Recebido em</span><input type="date" name="data" value="${todayLocal()}" required></label><button class="btn">Dar baixa nas selecionadas</button></div>` : ''}
+      </form>` : html`<p class="muted small">Nenhuma sessão por este convênio no mês.</p>`}
+      ${paid.length ? html`<form method="post" action="/financeiro/convenios/desfazer-recebimento" class="no-print" data-confirm="Desfazer a baixa de ${paid.length} sessão(ões) de ${i.name} neste mês?"><input type="hidden" name="mes" value="${ym}"><input type="hidden" name="insurer_id" value="${i.id}"><button class="btn ghost btn-sm">Desfazer baixas do mês</button></form>` : ''}
+    </section>`; })}` }));
+}
+billing.post('/receber', async (req, res) => {
+  const ym = isYm(req.body.mes) ? req.body.mes : todayLocal().slice(0, 7);
+  const ids = [].concat(req.body.ids || []).map(int).filter((n) => n > 0);
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.data || '')) ? req.body.data : todayLocal();
+  if (!ids.length) return res.flash('Selecione as sessões recebidas.', 'err').redirect(`/financeiro/convenios?mes=${ym}`);
+  const r = await q(`UPDATE payments SET paid_at = ?, method = COALESCE(method, 'transferencia') WHERE id IN (${ids.map(() => '?').join(',')}) AND origin = 'convenio' AND paid_at IS NULL`, [`${day} 12:00:00`, ...ids]);
+  await audit(req, 'convenio-simples-receber', ids.join(','));
+  res.flash(`Baixa feita em ${r.affectedRows} sessão(ões).`).redirect(`/financeiro/convenios?mes=${ym}`);
+});
+billing.post('/desfazer-recebimento', async (req, res) => {
+  const ym = isYm(req.body.mes) ? req.body.mes : todayLocal().slice(0, 7);
+  const r = await q(`UPDATE payments x JOIN appointments a ON a.id = x.appointment_id SET x.paid_at = NULL WHERE x.origin = 'convenio' AND x.insurer_id = ? AND DATE_FORMAT(a.starts_at, '%Y-%m') = ? AND x.paid_at IS NOT NULL`, [int(req.body.insurer_id), ym]);
+  await audit(req, 'convenio-simples-desfazer', `insurer:${int(req.body.insurer_id)}:${ym}`);
+  res.flash(`Baixa desfeita em ${r.affectedRows} sessão(ões).`).redirect(`/financeiro/convenios?mes=${ym}`);
+});
+
 billing.get('/', async (req, res) => {
   const ym = isYm(req.query.mes) ? req.query.mes : addMonths(todayLocal().slice(0, 7), -1);
+  if ((await Ins.mode()) === 'simples') return simpleBilling(req, res, ym);
   const ins = await Ins.list(true);
   const cards = [];
   for (const i of ins) {

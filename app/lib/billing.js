@@ -12,7 +12,7 @@ import * as T from './tenancy.js';
 
 export const FEATURES = {
   teleconsulta: 'Teleconsulta própria', ia_sessao: 'IA na sessão (transcrição e rascunho)', atendente: 'Atendente virtual no WhatsApp',
-  nfse: 'Nota fiscal de serviço (NFS-e)', convenios: 'Convênios e TISS', tv: 'Painel de chamadas (TV da recepção)', locacao: 'Locação de salas', portal: 'Portal do paciente',
+  nfse: 'Nota fiscal de serviço (NFS-e)', convenios: 'Convênio integrado (TISS, lotes XML e webservice)', convenios_simples: 'Convênio simples (sem integração com as operadoras)', tv: 'Painel de chamadas (TV da recepção)', locacao: 'Locação de salas', portal: 'Portal do paciente',
   personalizacao: 'Personalização (logo, cores, favicon e domínio próprio)',
 };
 // Partes do sistema que dependem de cada recurso (rotas e telas de configuração)
@@ -22,7 +22,11 @@ export const FEATURE_PATHS = [
   [/^\/(sessao-ia|configuracoes\/sessao-ia)(\/|$)/, 'ia_sessao'],
   [/^\/(atendimento|configuracoes\/agente)(\/|$)/, 'atendente'],
   [/^\/(financeiro\/notas|configuracoes\/nfse|conta\/fiscal\/nfse)(\/|$)/, 'nfse'],
-  [/^\/(convenios|configuracoes\/convenios|financeiro\/convenios)(\/|$)/, 'convenios'],
+  // convênio: as partes de integração (TISS, lotes, glosas, webservice) só no integrado; o resto também no simples
+  [/^\/financeiro\/convenios\/(lote|recurso|demonstrativo|demonstrativos|glosas)(\/|$)/, 'convenios'],
+  [/^\/configuracoes\/convenios\/(tiss|\d+\/(webservice|certificado))(\/|$)/, 'convenios'],
+  [/^\/convenios\/paciente\/\d+\/(elegibilidade|pedir-autorizacao|pedido)(\/|$)/, 'convenios'],
+  [/^\/(convenios|configuracoes\/convenios|financeiro\/convenios)(\/|$)/, 'convenios_any'],
   [/^\/configuracoes\/tv(\/|$)/, 'tv'],
   [/^\/(locacao|configuracoes\/locacao)(\/|$)/, 'locacao'],
   [/^\/(portal-paciente|configuracoes\/portal)(\/|$)/, 'portal'],
@@ -38,7 +42,7 @@ export const TRIAL_DAYS = () => Number(process.env.MENTEZ_TRIAL_DAYS || 14);
 export const GRACE_DAYS = () => Number(process.env.MENTEZ_GRACE_DAYS || 10);
 
 const COLS = [
-  ['trial_ends_at', 'DATETIME NULL'], ['billing_status', "VARCHAR(20) NOT NULL DEFAULT 'cortesia'"], ['asaas_customer', 'VARCHAR(40) NULL'],
+  ['trial_ends_at', 'DATETIME NULL'], ['ins_mode', 'VARCHAR(10) NULL'], ['billing_status', "VARCHAR(20) NOT NULL DEFAULT 'cortesia'"], ['asaas_customer', 'VARCHAR(40) NULL'],
   ['asaas_subscription', 'VARCHAR(40) NULL'], ['paid_until', 'DATE NULL'], ['overdue_since', 'DATE NULL'], ['owner_phone', 'VARCHAR(40) NULL'],
   ['owner_crp', 'VARCHAR(30) NULL'], ['payer_doc_enc', 'TEXT NULL'], ['signup_ip', 'VARCHAR(64) NULL'], ['extra_pros', 'INT NOT NULL DEFAULT 0'],
 ];
@@ -78,10 +82,24 @@ export async function plans(force = false) {
 export const clearPlans = () => { pcache = null; };
 export async function planOf(t) { const all = await plans(); return all.find((p) => p.key === t?.plan) || all.find((p) => p.key === 'profissional') || all[0]; }
 // Durante o teste grátis: recursos do plano Profissional (ou do plano escolhido, se maior)
+// O tipo do módulo de convênio pode ser definido por clínica no Painel (tenants.ins_mode), acima do plano:
+// integrado | simples | nenhum; vazio = o que o plano dá.
+export const INS_MODES = { '': 'Conforme o plano', integrado: 'Convênio integrado (TISS e webservice)', simples: 'Convênio simples (sem integração)', nenhum: 'Sem módulo de convênio' };
 export async function featuresOf(t) {
   const p = await planOf(t);
-  if (accessOf(t).state === 'teste') { const pro = (await plans()).find((x) => x.key === 'profissional'); return [...new Set([...(p?.features || []), ...(pro?.features || [])])]; }
-  return p?.features || [];
+  let f = p?.features || [];
+  if (accessOf(t).state === 'teste') { const pro = (await plans()).find((x) => x.key === 'profissional'); f = [...new Set([...f, ...(pro?.features || [])])]; }
+  const m = t?.insMode;
+  if (m) { f = f.filter((x) => x !== 'convenios' && x !== 'convenios_simples'); if (m === 'integrado') f.push('convenios'); if (m === 'simples') f.push('convenios_simples'); }
+  return f;
+}
+// O recurso está liberado? (convenios_any = qualquer um dos dois módulos de convênio)
+export const has = (feats, k) => (k === 'convenios_any' ? feats.includes('convenios') || feats.includes('convenios_simples') : feats.includes(k));
+// Tipo do convênio da clínica atual: 'integrado', 'simples' ou null
+export async function insModeOf(t) {
+  if (!T.multi() || !t) return 'integrado';
+  const f = await featuresOf(t);
+  return f.includes('convenios') ? 'integrado' : f.includes('convenios_simples') ? 'simples' : null;
 }
 export async function maxPros(t) { const p = await planOf(t); return (p?.maxPros || 1) + Number(t?.extraPros || 0); }
 export const monthly = (plan, extra = 0) => Number(plan.price) + Number(extra || 0) * Number(plan.extraPro || 0);

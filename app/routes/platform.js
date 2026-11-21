@@ -478,6 +478,11 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
         <button class="btn ghost btn-sm" name="acao" value="cortesia" data-confirm="Marcar como cortesia? A clínica deixa de ser cobrada pela Mentez.">Cortesia</button>
         <button class="btn ghost btn-sm" name="acao" value="teste7">Teste + 7 dias</button>
       </form>
+      <form method="post" action="/clinicas/${t.id}/convenio" class="actions" id="convenio">
+        <label class="fld inline"><span>Módulo de convênio</span><select name="ins_mode">${Object.entries(Billing.INS_MODES).map(([k, l]) => html`<option value="${k}" ${(t.insMode || '') === k ? raw('selected') : ''}>${l}</option>`)}</select></label>
+        <button class="btn ghost btn-sm">Salvar</button>
+        <small class="muted">Agora: ${await (async () => { const m = await Billing.insModeOf(t); return m === 'integrado' ? 'integrado' : m === 'simples' ? 'simples' : 'sem convênio'; })()}. O simples tem cadastro dos convênios, carteirinhas, autorizações, sessão por convênio e o controle do que cada operadora deve; o integrado acrescenta TISS, lotes XML, glosas, recursos e webservice.</small>
+      </form>
     </section>
     ${await (async () => { const r = await resourcesOf(t, req.query.atualizar === '1'); const wc = await T.run(t, () => W.config()).catch(() => null); return html`<section class="card" id="recursos"><h2>Recursos e integrações</h2>
       ${r?._err ? html`<p class="flash err">Não foi possível ler: ${r._err}</p>` : html`<ul class="mz2-res-list">${RES_COLS.map(([k, label]) => html`<li><span class="mz2-dot ${r?.[k]?.tone || 'off'}"></span><b>${label}</b><span class="muted small">${r?.[k]?.label || '—'}</span></li>`)}</ul>`}
@@ -494,6 +499,13 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
       <form method="post" action="/clinicas/${t.id}/dominio" class="inline-form"><input name="domain" required placeholder="app.clinica.com.br" maxlength="190"><button class="btn ghost">Adicionar domínio</button></form>
     </section>
     <section class="card flush"><h2 class="pad">Histórico</h2>${hist.length ? html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Quando</th><th>Ação</th><th>Quem</th><th>Detalhe</th></tr></thead><tbody>${hist.map((h) => html`<tr><td>${brDateTime(h.created_at)}</td><td>${h.action}</td><td>${h.actor || '—'}</td><td class="small">${h.detail || ''}</td></tr>`)}</tbody></table></div>` : html`<p class="muted pad">Sem registros.</p>`}</section>`));
+});
+handle.post('/clinicas/:id/convenio', need, async (req, res, next) => {
+  const t = await tenantOf(req); if (!t) return next();
+  const m = Object.keys(Billing.INS_MODES).includes(req.body.ins_mode) ? req.body.ins_mode : '';
+  await T.pq('UPDATE tenants SET ins_mode = ? WHERE id = ?', [m || null, t.id]); T.clearCache();
+  await log(req, 'clinica-convenio', t.id, Billing.INS_MODES[m]);
+  res.flash(`Módulo de convênio: ${Billing.INS_MODES[m]}.`).redirect(`/clinicas/${t.id}#convenio`);
 });
 handle.post('/clinicas/:id/convite', need, async (req, res, next) => {
   const t = await tenantOf(req); if (!t) return next();

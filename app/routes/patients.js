@@ -4,6 +4,7 @@ import express from 'express';
 import { q, one, audit } from '../lib/db.js';
 import { cpfValid, cpfFmt, docFmt, docValid, phoneFmt } from '../lib/br.js';
 import { patientTab as insuranceTab } from './insurance.js';
+import { mode as InsMode } from '../lib/insurance.js';
 import { attendanceBanner } from './recepcao.js';
 import { patientTab as scalesTab } from './scales.js';
 import { page, bare, html, raw, money, badge, brDate, brDateTime, label, waLink, logoTag } from '../lib/html.js';
@@ -266,7 +267,7 @@ r.get('/:id', async (req, res, next) => {
   const waOn = WA.ready(await WA.config());
   const onWait = can(req.user, 'agenda') ? await one("SELECT id FROM waitlist WHERE patient_id = ? AND status = 'aguardando'", [p.id]) : null;
   const ins = await insForm(p);
-  const TABS = [['prontuario', 'Prontuário', clin && isClinician(req.user.role)], ['sessoes', 'Sessões', true], ['exercicios', 'Exercícios', clin && FEATURES.exercicios], ['escalas', 'Escalas', clin], ['humor', 'Humor', clin], ['financeiro', 'Financeiro', fin], ['convenio', 'Convênio', true], ['mensagens', 'WhatsApp', true], ['termos', 'Termos', true], ['documentos', 'Documentos', clin], ['dados', 'Dados', true]].filter((t) => t[2]);
+  const TABS = [['prontuario', 'Prontuário', clin && isClinician(req.user.role)], ['sessoes', 'Sessões', true], ['exercicios', 'Exercícios', clin && FEATURES.exercicios], ['escalas', 'Escalas', clin], ['humor', 'Humor', clin], ['financeiro', 'Financeiro', fin], ['convenio', 'Convênio', !!(await InsMode())], ['mensagens', 'WhatsApp', true], ['termos', 'Termos', true], ['documentos', 'Documentos', clin], ['dados', 'Dados', true]].filter((t) => t[2]);
   const tab = TABS.some((t) => t[0] === req.query.aba) ? req.query.aba : TABS[0][0];
   if (tab === 'exercicios') await ExLib.warm();
   const myModels = tab === 'exercicios' ? ExLib.sendable() : [];
