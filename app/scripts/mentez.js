@@ -14,7 +14,7 @@ import * as Mig from '../lib/migration.js';
 import { migrate, q, one } from '../lib/db.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
-const VALUED = new Set(['--email', '--nome', '--dominio']);
+const VALUED = new Set(['--email', '--nome', '--dominio', '--manter']);
 const flag = (n) => { const i = rest.indexOf(`--${n}`); return i < 0 ? null : VALUED.has(`--${n}`) ? rest[i + 1] || null : true; };
 const args = rest.filter((x, i) => !x.startsWith('--') && !VALUED.has(rest[i - 1]));
 const die = (m) => { console.error(m); process.exit(1); };
@@ -92,6 +92,32 @@ try {
       }
       for (const u of await q('SELECT id, name, email, role, is_master, active FROM users ORDER BY id')) console.log(`U:${u.id}|${u.name}|${u.email}|${u.role}|master=${u.is_master}|ativo=${u.active}`);
     });
+  } else if (cmd === 'limpar-teste') {
+    // Apaga dados de uso criados em testes (pacientes, agenda, financeiro, CRM, conversas, documentos…) e os usuários fora da lista.
+    // Mantém configurações e chaves (settings), etapas, categorias, regras, convênios, horários, TVs e o uso da IA.
+    // Uso: limpar-teste <endereco> --manter email1,email2   (faz cópia de segurança antes, em Dados e demonstração)
+    const t = await T.bySlug(args[0]); if (!t) die('Clínica não encontrada.');
+    const keep = String(flag('manter') || '').toLowerCase().split(',').map((x) => x.trim()).filter(Boolean);
+    if (!keep.length) die('Informe --manter com os e-mails dos usuários que ficam.');
+    const Maint = await import('../lib/maint.js');
+    await T.run(t, async () => {
+      const kept = await q('SELECT id, name, email, is_master FROM users WHERE LOWER(email) IN (?)', [keep]);
+      if (kept.length !== keep.length) die(`Usuários não encontrados: ${keep.filter((e) => !kept.some((u) => u.email.toLowerCase() === e)).join(', ')}`);
+      const actor = kept.find((u) => u.is_master) || kept[0];
+      if (!actor.is_master) await q('UPDATE users SET is_master = 1 WHERE id = ?', [actor.id]);
+      const drop = (await q('SELECT id FROM users WHERE id NOT IN (?)', [kept.map((u) => u.id)])).map((u) => u.id);
+      const r = await Maint.wipe({ groups: ['agenda', 'pacientes', 'financeiro', 'crm'], userIds: drop, reassignTo: actor.id, actor: { id: actor.id } });
+      if (!r.ok) die(r.error);
+      console.log(`Limpo pelo módulo de manutenção (cópia de segurança nº ${r.backupId}): ${r.label}`);
+      const EXTRA = ['booking_requests', 'consent_links', 'live_events', 'monitor_alerts', 'notify_log', 'payment_events', 'portal_codes', 'portal_sessions', 'psy_docs', 'record_drafts', 'records', 'relay_msgs', 'scale_apps', 'session_rec', 'site_wa_clicks', 'surveys', 'tele_rooms', 'tele_signals', 'tv_calls', 'tv_counters', 'tv_campaign_stats', 'waitlist', 'waitlist_slots', 'waitlist_offers', 'assignments', 'audit_log'];
+      const conn = await (await import('../lib/db.js')).db().getConnection(); // a mesma conexão para as checagens de chave desligadas
+      try {
+        await conn.query('SET FOREIGN_KEY_CHECKS = 0');
+        for (const tb of EXTRA) { try { const [x] = await conn.query(`DELETE FROM \`${tb}\``); if (x.affectedRows) console.log(`  ${tb}: ${x.affectedRows} apagada(s)`); } catch (e) { if (!/doesn't exist/.test(e.message)) console.log(`  ${tb}: ${e.message}`); } }
+      } finally { await conn.query('SET FOREIGN_KEY_CHECKS = 1'); conn.release(); }
+      for (const u of await q('SELECT id, name, email, role, is_master FROM users')) console.log(`Ficou: ${u.name} <${u.email}> ${u.role}${u.is_master ? ' (master)' : ''}`);
+    });
+    await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', ['cli', 'clinica-limpar-teste', t.id, `mantidos: ${keep.join(', ')}`]);
   } else if (cmd === 'whatsapp') {
     // Cria a instância do WhatsApp na Evolution da Mentez para clínicas que ainda não têm (ou só para uma)
     const list = args[0] ? [await T.bySlug(args[0])].filter(Boolean) : await T.active();
