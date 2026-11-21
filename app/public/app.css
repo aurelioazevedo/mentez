@@ -2357,3 +2357,18 @@ label.ask-opt:has(input:focus-visible) { outline: 2px solid var(--terracota); ou
   .mz2-res td::before{content:none !important}
   .mz2-card.mz2-res{background:#fff;border:1px solid #E7EAF0;padding:12px}
 }
+
+/* Painel Mentez: equipe e minha conta */
+.mz2-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px}
+.mz2-grid2 .stack{margin-top:10px}
+.mz2-roles{list-style:none;padding:0;margin:10px 0;display:grid;gap:10px}
+.mz2-roles li{display:grid;gap:2px;padding:10px 12px;border:1px solid #E7EAF0;border-radius:12px}
+.mz2-roles li span{font-size:13px;color:#4F5E74}
+.mz2-actions{white-space:nowrap}
+.mz2-actions form{display:inline-block;margin:0 4px 4px 0}
+.mz2-table td .inline{display:inline-flex;gap:6px;margin:0}
+.mz2-table td select{padding:6px 8px;border-radius:10px;font-size:13px}
+.mz2-invite .copy{margin-top:10px}
+.mz2-invite{border:1px solid #07C6BC;background:#F0FBFA;margin-bottom:16px}
+a.mz2-me{text-decoration:none;color:inherit}
+@media (max-width:620px){.mz2-actions{white-space:normal}}

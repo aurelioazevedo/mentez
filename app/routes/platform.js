@@ -48,13 +48,17 @@ async function ensureTables() {
     session_version INT NOT NULL DEFAULT 1, last_login_at DATETIME NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   await T.pq(`CREATE TABLE IF NOT EXISTS platform_settings (k VARCHAR(60) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  // equipe: papel, situação e convite por link (só o hash do código fica guardado)
+  for (const [c, d] of [['role', "VARCHAR(20) NOT NULL DEFAULT 'admin'"], ['active', 'TINYINT(1) NOT NULL DEFAULT 1'], ['invite_hash', 'CHAR(64) NULL'], ['invite_expires', 'DATETIME NULL'], ['invited_by', 'VARCHAR(190) NULL'], ['phone', 'VARCHAR(40) NULL']]) {
+    try { await T.pq(`ALTER TABLE platform_users ADD COLUMN ${c} ${d}`); } catch (e) { if (!/Duplicate column/i.test(e.message)) throw e; }
+  }
 }
 let ready = null;
 handle.use((req, res, next) => { (ready ||= ensureTables().then(() => Billing.migrate())).then(() => next(), next); });
 handle.use((req, res, next) => {
   const s = unsign(parseCookies(req)[COOKIE]);
   if (!s) return next();
-  T.pone('SELECT id, name, email, session_version FROM platform_users WHERE id = ?', [s.uid]).then((u) => { if (u && u.session_version === s.sv) req.admin = u; next(); }, next);
+  T.pone('SELECT id, name, email, phone, role, active, session_version FROM platform_users WHERE id = ?', [s.uid]).then((u) => { if (u && u.active && u.session_version === s.sv) req.admin = u; next(); }, next);
 });
 const log = (req, action, tenantId = null, detail = null) => T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', [req.admin?.email || 'anônimo', action, tenantId, detail ? String(detail).slice(0, 500) : null]).catch(() => {});
 
@@ -77,11 +81,28 @@ const ICON = {
   site: SV('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"/>'),
   baixar: SV('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
   cal: SV('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+  equipe: SV('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3.2 3-5 5.5-5s4.7 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.4.2 4.2 1.9 5 4.8"/>'),
 };
 const MENU = [
   ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec']]],
-  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança (Asaas)', 'cobranca'], ['/historico', 'Histórico', 'historico']]],
+  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança (Asaas)', 'cobranca'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
+// Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
+const ROLES = {
+  admin: { label: 'Administrador', desc: 'Acesso a tudo, inclusive equipe, planos e cobrança.' },
+  financeiro: { label: 'Financeiro', desc: 'Visão geral, clínicas (consulta), assinaturas e faturas, planos e cobrança.' },
+  suporte: { label: 'Suporte', desc: 'Visão geral, clínicas (convites, domínios, WhatsApp), testes grátis e recursos ativos. Sem valores de cobrança.' },
+};
+// [método ou *, caminho, papéis]: a primeira regra que casa decide; sem regra, todos os papéis
+const RULES = [
+  ['*', /^\/equipe(\/|$)/, ['admin']],
+  ['*', /^\/(faturas|planos|cobranca)(\/|$|\.)/, ['admin', 'financeiro']],
+  ['POST', /^\/clinicas\/\d+\/assinatura$/, ['admin', 'financeiro']],
+  ['POST', /^\/clinicas(\/|$)/, ['admin', 'suporte']],
+  ['GET', /^\/clinicas\/nova$/, ['admin', 'suporte']],
+  ['*', /^\/(testes|recursos)(\/|$)/, ['admin', 'suporte']],
+];
+const allowed = (role, method, path) => { const r = RULES.find(([m, re]) => (m === '*' || m === method) && re.test(path)); return !r || r[2].includes(role || 'admin'); };
 const LOGO = (dark = false) => raw(`<img class="mz2-logo" src="/static/img/mentez/${dark ? 'logo-dark' : 'logo'}.png" alt="Mentez" width="150" height="31">`);
 const initialsOf = (n) => String(n || '').trim().split(/\s+/).filter(Boolean).map((x, i, a) => (i === 0 || i === a.length - 1 ? x[0] : '')).join('').toUpperCase().slice(0, 2);
 let counts = { at: 0, v: {} };
@@ -110,11 +131,11 @@ function layout(req, title, body) {
     <aside class="mz2-side" id="mz2-side">
       <label for="mz2-menu" class="mz2-close" aria-label="Fechar menu">×</label>
       <a class="mz2-brand" href="/">${LOGO()}</a>
-      ${MENU.map(([g, items]) => html`<p class="mz2-grp">${g}</p><nav class="mz2-nav">${items.map(([href, label, ic, cnt]) => html`<a href="${href}" class="${act === href ? 'on' : ''}">${ICON[ic]}<span>${label}</span>${cnt && c[cnt] ? html`<b>${c[cnt]}</b>` : ''}</a>`)}</nav>`)}
+      ${MENU.map(([g, items]) => [g, items.filter(([href]) => allowed(req.admin.role, 'GET', href))]).filter(([, items]) => items.length).map(([g, items]) => html`<p class="mz2-grp">${g}</p><nav class="mz2-nav">${items.map(([href, label, ic, cnt]) => html`<a href="${href}" class="${act === href ? 'on' : ''}">${ICON[ic]}<span>${label}</span>${cnt && c[cnt] ? html`<b>${c[cnt]}</b>` : ''}</a>`)}</nav>`)}
       <p class="mz2-grp">GERAL</p>
       <nav class="mz2-nav"><a href="https://mentez.com.br" target="_blank" rel="noopener">${ICON.site}<span>Site da Mentez</span></a>
         <form method="post" action="/sair"><button type="submit">${ICON.sair}<span>Sair</span></button></form></nav>
-      <div class="mz2-promo"><b>Nova clínica</b><span>Crie uma clínica e envie o convite de primeiro acesso.</span><a href="/clinicas/nova">Criar clínica</a></div>
+      ${allowed(req.admin.role, 'GET', '/clinicas/nova') ? html`<div class="mz2-promo"><b>Nova clínica</b><span>Crie uma clínica e envie o convite de primeiro acesso.</span><a href="/clinicas/nova">Criar clínica</a></div>` : ''}
     </aside>
     <div class="mz2-col">
       <header class="mz2-top">
@@ -122,14 +143,20 @@ function layout(req, title, body) {
         <a class="mz2-toplogo" href="/">${LOGO()}</a>
         <form class="mz2-search" action="/clinicas" method="get" role="search">${ICON.busca}<input type="search" name="q" placeholder="Buscar clínica, endereço ou e-mail" aria-label="Buscar clínica" value="${req.path === '/clinicas' ? str(req.query.q, 80) : ''}"><kbd>⌘ K</kbd></form>
         <div class="mz2-tools"><a class="mz2-ic" href="/historico" title="Histórico">${ICON.sino}</a><a class="mz2-ic" href="/termos-de-uso" title="Termos de uso">${ICON.ajuda}</a>
-          <span class="mz2-me" title="${req.admin.email}"><i>${initialsOf(req.admin.name)}</i><span><b>${req.admin.name}</b><small>Equipe Mentez</small></span></span></div>
+          <a class="mz2-me" href="/minha-conta" title="Minha conta · ${req.admin.email}"><i>${initialsOf(req.admin.name)}</i><span><b>${req.admin.name}</b><small>${ROLES[req.admin.role]?.label || 'Equipe Mentez'}</small></span></a></div>
       </header>
       <main class="mz2-main">${flash}${body}</main>
-      <nav class="mz2-tabbar" aria-label="Atalhos">${[['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas'], ['/faturas', 'Faturas', 'faturas'], ['/testes', 'Testes', 'testes']].map(([h, l, ic]) => html`<a href="${h}" class="${act === h ? 'on' : ''}">${ICON[ic]}<span>${l}</span></a>`)}<label for="mz2-menu">${SV('<path d="M4 7h16M4 12h16M4 17h16"/>')}<span>Menu</span></label></nav>
+      <nav class="mz2-tabbar" aria-label="Atalhos">${[['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas'], ['/faturas', 'Faturas', 'faturas'], ['/testes', 'Testes', 'testes']].filter(([h]) => allowed(req.admin.role, 'GET', h)).map(([h, l, ic]) => html`<a href="${h}" class="${act === h ? 'on' : ''}">${ICON[ic]}<span>${l}</span></a>`)}<label for="mz2-menu">${SV('<path d="M4 7h16M4 12h16M4 17h16"/>')}<span>Menu</span></label></nav>
     </div>
   </div></div>`, 'bare mz2-body', req, { suffix: 'Painel Mentez' });
 }
-const need = (req, res, next) => { if (!req.admin) return res.redirect('/inicio'); menuCounts().then((v) => { req.menuCounts = v; next(); }, () => next()); };
+const need = (req, res, next) => {
+  if (!req.admin) return res.redirect('/inicio');
+  menuCounts().then((v) => { req.menuCounts = v; }, () => {}).then(() => {
+    if (allowed(req.admin.role, req.method, req.path)) return next();
+    res.status(403); send(res, layout(req, 'Sem acesso', html`<section class="card center-card"><h1>Sem acesso</h1><p>O seu papel (${ROLES[req.admin.role]?.label || req.admin.role}) não inclui esta área. Fale com um administrador da Mentez.</p><p><a class="btn" href="/">Voltar</a></p></section>`));
+  });
+};
 mountSignup(handle, layout);
 handle.get('/inicio', (req, res) => (req.admin ? res.redirect('/') : send(res, layout(req, 'Mentez', html`<section class="card mzp-auth mzp-choose"><h1>Bem-vindo à Mentez</h1>
   <form method="get" action="/ir" class="stack"><label class="fld"><span>Entrar na minha clínica</span><span class="mzp-slug"><input name="c" required placeholder="suaclinica" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" autocomplete="off"><small>.${T.baseDomain()}</small></span></label><button class="btn">Ir para a minha clínica</button></form>
@@ -167,7 +194,7 @@ handle.get('/entrar', (req, res) => {
 });
 handle.post('/entrar', RL.limit({ name: 'painel-login', windowMs: 15 * 60e3, max: 10 }), async (req, res) => {
   const u = await T.pone('SELECT * FROM platform_users WHERE email = ?', [str(req.body.email, 190).toLowerCase()]);
-  const good = u && await bcrypt.compare(String(req.body.password || ''), u.password_hash);
+  const good = u && u.active && u.password_hash && u.password_hash.startsWith('$2') && await bcrypt.compare(String(req.body.password || ''), u.password_hash);
   if (!good) { await log(req, 'painel-login-falhou', null, req.body.email); return res.flash('E-mail ou senha incorretos.', 'err').redirect('/entrar'); }
   await T.pq('UPDATE platform_users SET last_login_at = NOW() WHERE id = ?', [u.id]);
   setCookie(res, sign({ uid: u.id, sv: u.session_version, exp: Date.now() + HOURS * 3600e3 }), HOURS * 3600);
@@ -233,10 +260,11 @@ handle.get('/', need, async (req, res) => {
   const first = String(req.admin.name || '').split(' ')[0];
   const hour = Number(new Date(Date.now() - 3 * 3600e3).toISOString().slice(11, 13));
   const today = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  const fin = allowed(req.admin.role, 'GET', '/faturas'); // valores de receita só para quem vê as faturas
   send(res, layout(req, 'Visão geral', html`<div class="mz2-hello"><div><h1>${hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'}, ${first}</h1><p>Receita, clínicas e alertas da Mentez hoje.</p></div>
       <div class="mz2-hello-act"><span class="mz2-pill">${ICON.cal}${brDate(today)}</span><a class="mz2-btn dark" href="/clinicas.csv">${ICON.baixar}Exportar</a></div></div>
     <div class="mz2-grid">
-      <section class="mz2-card mz2-hero"><header><span class="mz2-cardic">${ICON.cobranca}</span><h2>Receita recorrente</h2><span class="mz2-pill sm">mensal</span></header>
+      ${fin ? html`      <section class="mz2-card mz2-hero"><header><span class="mz2-cardic">${ICON.cobranca}</span><h2>Receita recorrente</h2><span class="mz2-pill sm">mensal</span></header>
         <strong class="mz2-big">${money(mrr)}</strong>
         <p class="mz2-trend"><span class="mz2-delta-l">${paying.length} clínica(s) pagante(s)${newPaying ? ` · ${newPaying} nova(s) no mês` : ''}</span></p>
         <div class="mz2-hero-act"><a class="mz2-btn pri" href="/clinicas/nova">${ICON.nova}Nova clínica</a><a class="mz2-btn soft" href="/faturas">${ICON.faturas}Ver faturas</a></div>
@@ -244,16 +272,16 @@ handle.get('/', need, async (req, res) => {
         <div class="mz2-mini">${plans.filter((p) => p.public).map((p) => { const n = paying.filter((x) => x.t.plan === p.key).length; return html`<div class="mz2-minicard"><span>${p.name}</span><b>${n}</b><small>${money(n * p.price)}/mês</small></div>`; })}
           <div class="mz2-minicard"><span>Cortesia</span><b>${acc.filter((x) => x.a.state === 'cortesia').length}</b><small>sem cobrança</small></div></div>
       </section>
-      <section class="mz2-card mz2-kpi"><header><span class="mz2-cardic">${ICON.faturas}</span><h2>Recebido no mês</h2></header><strong class="mz2-big sm">${money(gotNow)}</strong><p class="mz2-trend">${trend(pct(gotNow, gotPrev))}</p></section>
+      <section class="mz2-card mz2-kpi"><header><span class="mz2-cardic">${ICON.faturas}</span><h2>Recebido no mês</h2></header><strong class="mz2-big sm">${money(gotNow)}</strong><p class="mz2-trend">${trend(pct(gotNow, gotPrev))}</p></section>` : ''}
       <section class="mz2-card mz2-kpi"><header><span class="mz2-cardic">${ICON.testes}</span><h2>Testes em andamento</h2></header><strong class="mz2-big sm">${trials.length}</strong><p class="mz2-trend"><span class="mz2-delta ${trials.some((x) => x.a.daysLeft <= 5) ? 'warn' : ''}">${trials.filter((x) => x.a.daysLeft <= 5).length} terminam em até 5 dias</span></p></section>
-      <section class="mz2-card mz2-chart"><header><span class="mz2-cardic">${ICON.geral}</span><h2>Receita recebida por mês</h2><span class="mz2-legend"><i></i>Recebido</span><span class="mz2-pill sm">${year}</span></header>
+      ${fin ? html`      <section class="mz2-card mz2-chart"><header><span class="mz2-cardic">${ICON.geral}</span><h2>Receita recebida por mês</h2><span class="mz2-legend"><i></i>Recebido</span><span class="mz2-pill sm">${year}</span></header>
         <div class="mz2-bars" role="img" aria-label="Receita recebida por mês em ${year}">
           <div class="mz2-yaxis">${[1, 0.75, 0.5, 0.25, 0].map((f) => html`<span>${money(top * f).replace(',00', '')}</span>`)}</div>
           <div class="mz2-cols">${byMonth.map((v, i) => html`<div class="mz2-colw ${i === curM ? 'on' : ''}" title="${MONTHS[i]}: ${money(v)}">${i === curM ? html`<span class="mz2-tip ${i >= 8 ? 'left' : ''}" style="bottom:calc(${Math.max(3, Math.round((v / top) * 82))}% + 30px)"><small>Recebido</small><b>${money(v)}</b></span>` : ''}<i style="height:${Math.max(3, Math.round((v / top) * 82))}%"></i><span>${MONTHS[i]}</span></div>`)}</div>
         </div>
         ${byMonth.every((v) => !v) ? html`<p class="mz2-empty">Ainda não há pagamentos confirmados pelo Asaas neste ano.</p>` : ''}
       </section>
-      <section class="mz2-card mz2-kpi"><header><span class="mz2-cardic">${ICON.cobranca}</span><h2>Em atraso</h2></header><strong class="mz2-big sm">${money(lateValue)}</strong><p class="mz2-trend"><span class="mz2-delta ${late.length ? 'down' : 'up'}">${late.length} clínica(s)</span></p></section>
+      <section class="mz2-card mz2-kpi"><header><span class="mz2-cardic">${ICON.cobranca}</span><h2>Em atraso</h2></header><strong class="mz2-big sm">${money(lateValue)}</strong><p class="mz2-trend"><span class="mz2-delta ${late.length ? 'down' : 'up'}">${late.length} clínica(s)</span></p></section>` : ''}
       <section class="mz2-card mz2-funnel"><header><span class="mz2-cardic">${ICON.nova}</span><h2>Funil do teste grátis</h2><span class="mz2-pill sm">30 dias</span></header>
         ${fun.map(([l, n]) => html`<div class="mz2-fstep"><div><span>${l}</span><b>${n}</b></div><span class="mz2-track"><i style="width:${fun[0][1] ? Math.round((n / fun[0][1]) * 100) : 0}%"></i></span></div>`)}
         ${!signups.length ? html`<p class="mz2-empty">Nenhum cadastro pelo site nos últimos 30 dias.</p>` : ''}
@@ -565,6 +593,134 @@ handle.post('/cobranca/webhook', need, async (req, res) => {
   try { await Billing.registerWebhook(await Billing.config(), `https://${req.get('host')}/webhooks/asaas`, req.admin.email); await log(req, 'cobranca-webhook'); res.flash('Webhook registrado no Asaas.'); } catch (e) { res.flash(e.message, 'err'); }
   res.redirect('/cobranca');
 });
+// ---------- equipe (usuários do painel) ----------
+const inviteHash = (code) => crypto.createHash('sha256').update(String(code)).digest('hex');
+async function newInvite(id, by) {
+  const code = crypto.randomBytes(24).toString('base64url');
+  await T.pq('UPDATE platform_users SET invite_hash = ?, invite_expires = DATE_ADD(NOW(), INTERVAL 7 DAY), invited_by = ? WHERE id = ?', [inviteHash(code), by, id]);
+  return code;
+}
+const inviteUrl = (req, code) => `https://${req.get('host')}/convite-equipe/${code}`;
+const adminsLeft = async (exceptId) => Number((await T.pone("SELECT COUNT(*) n FROM platform_users WHERE role = 'admin' AND active = 1 AND id <> ?", [exceptId])).n);
+handle.get('/equipe', need, async (req, res) => {
+  const list = await T.pq('SELECT id, name, email, phone, role, active, last_login_at, created_at, invite_expires, password_hash FROM platform_users ORDER BY active DESC, name');
+  const link = str(req.query.link, 300);
+  const pending = (u) => !String(u.password_hash || '').startsWith('$2');
+  send(res, layout(req, 'Equipe e usuários', html`<div class="mz2-hello"><div><h1>Equipe e usuários</h1><p>Quem acessa o Painel da Mentez e o que cada pessoa pode fazer. Os usuários das clínicas são cadastrados por cada clínica, no sistema dela.</p></div></div>
+    ${link ? html`<section class="mz2-card mz2-invite"><header><span class="mz2-cardic">${ICON.equipe}</span><h2>Link de acesso</h2></header>
+      <p>Envie este link à pessoa por um canal privado (WhatsApp ou e-mail). Ela cria a própria senha. O link vale 7 dias e funciona uma vez só; não fica guardado aqui.</p>
+      <div class="copy"><input readonly value="${link}" id="invlink"><button class="btn" type="button" data-copy="#invlink">Copiar</button></div></section>` : ''}
+    <section class="mz2-card mz2-table"><header><span class="mz2-cardic">${ICON.equipe}</span><h2>Usuários do painel</h2><span class="mz2-pill sm">${list.filter((u) => u.active).length} ativo(s)</span></header>
+      <div class="mz2-tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Último acesso</th><th>Situação</th><th>Ações</th></tr></thead><tbody>
+      ${list.map((u) => { const me = u.id === req.admin.id; return html`<tr><td><span class="mz2-av">${initialsOf(u.name)}</span>${u.name}${me ? html` <small class="muted">(você)</small>` : ''}</td><td class="mz2-mono">${u.email}</td>
+        <td>${me ? (ROLES[u.role]?.label || u.role) : html`<form method="post" action="/equipe/${u.id}/papel" class="inline"><select name="role" data-autosubmit aria-label="Papel de ${u.name}">${Object.entries(ROLES).map(([k, r]) => html`<option value="${k}" ${k === u.role ? raw('selected') : ''}>${r.label}</option>`)}</select><noscript><button class="chip">Salvar</button></noscript></form>`}</td>
+        <td>${u.last_login_at ? brDateTime(u.last_login_at) : '—'}</td>
+        <td>${!u.active ? html`<span class="mz2-chip err">Desativado</span>` : pending(u) ? html`<span class="mz2-chip warn">Convite enviado${u.invite_expires ? ` · até ${brDate(u.invite_expires)}` : ''}</span>` : html`<span class="mz2-chip ok">Ativo</span>`}</td>
+        <td class="mz2-actions">${me ? html`<a class="mz2-link" href="/minha-conta">Minha conta</a>` : html`
+          <form method="post" action="/equipe/${u.id}/convite"><button class="chip" data-confirm="${pending(u) ? 'Gerar um novo link de acesso? O anterior deixa de valer.' : `Gerar um link para ${u.name} criar uma nova senha? A senha atual continua valendo até o link ser usado.`}">${pending(u) ? 'Novo link' : 'Redefinir senha'}</button></form>
+          <form method="post" action="/equipe/${u.id}/situacao"><button class="chip" data-confirm="${u.active ? `Desativar ${u.name}? A pessoa sai do painel na hora.` : `Reativar ${u.name}?`}">${u.active ? 'Desativar' : 'Reativar'}</button></form>`}</td></tr>`; })}
+      </tbody></table></div></section>
+    <div class="mz2-grid2">
+      <section class="mz2-card"><header><span class="mz2-cardic">${ICON.nova}</span><h2>Adicionar usuário</h2></header>
+        <form method="post" action="/equipe" class="stack">
+          <label class="fld"><span>Nome</span><input name="name" required maxlength="120" autocomplete="off"></label>
+          <label class="fld"><span>E-mail</span><input type="email" name="email" required maxlength="190" autocomplete="off"></label>
+          <label class="fld"><span>WhatsApp (opcional)</span><input name="phone" maxlength="40" inputmode="tel" autocomplete="off"></label>
+          <label class="fld"><span>Papel</span><select name="role">${Object.entries(ROLES).map(([k, r]) => html`<option value="${k}" ${k === 'suporte' ? raw('selected') : ''}>${r.label}</option>`)}</select></label>
+          <button class="btn">Adicionar e gerar link de acesso</button></form></section>
+      <section class="mz2-card"><header><span class="mz2-cardic">${ICON.ajuda}</span><h2>Papéis</h2></header>
+        <ul class="mz2-roles">${Object.values(ROLES).map((r) => html`<li><b>${r.label}</b><span>${r.desc}</span></li>`)}</ul>
+        <p class="muted small">Toda ação fica no Histórico com o nome de quem fez. Desativar tira a pessoa do painel na hora, em todos os aparelhos.</p></section>
+    </div>`));
+});
+handle.post('/equipe', need, async (req, res) => {
+  const name = str(req.body.name, 120).trim(); const email = str(req.body.email, 190).trim().toLowerCase(); const role = ROLES[req.body.role] ? req.body.role : 'suporte';
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.flash('Informe nome e e-mail válidos.', 'err').redirect('/equipe');
+  if (await T.pone('SELECT id FROM platform_users WHERE email = ?', [email])) return res.flash('Já existe um usuário com este e-mail.', 'err').redirect('/equipe');
+  const r = await T.pq("INSERT INTO platform_users (name, email, phone, password_hash, role, active) VALUES (?,?,?,'',?,1)", [name, email, str(req.body.phone, 40) || null, role]);
+  const code = await newInvite(r.insertId, req.admin.email);
+  await log(req, 'equipe-adicionar', null, `${email} · ${role}`);
+  res.flash(`${name} adicionado(a) como ${ROLES[role].label}.`).redirect(`/equipe?link=${encodeURIComponent(inviteUrl(req, code))}`);
+});
+async function teamTarget(req) { const u = await T.pone('SELECT * FROM platform_users WHERE id = ?', [int(req.params.id)]); return u && u.id !== req.admin.id ? u : null; }
+handle.post('/equipe/:id/papel', need, async (req, res) => {
+  const u = await teamTarget(req); const role = req.body.role;
+  if (!u || !ROLES[role]) return res.redirect('/equipe');
+  if (u.role === 'admin' && role !== 'admin' && u.active && !(await adminsLeft(u.id))) return res.flash('É preciso manter pelo menos um administrador ativo.', 'err').redirect('/equipe');
+  await T.pq('UPDATE platform_users SET role = ? WHERE id = ?', [role, u.id]);
+  await log(req, 'equipe-papel', null, `${u.email} → ${role}`);
+  res.flash(`${u.name} agora é ${ROLES[role].label}.`).redirect('/equipe');
+});
+handle.post('/equipe/:id/situacao', need, async (req, res) => {
+  const u = await teamTarget(req); if (!u) return res.redirect('/equipe');
+  if (u.active && u.role === 'admin' && !(await adminsLeft(u.id))) return res.flash('É preciso manter pelo menos um administrador ativo.', 'err').redirect('/equipe');
+  await T.pq('UPDATE platform_users SET active = ?, session_version = session_version + 1, invite_hash = IF(? = 0, NULL, invite_hash) WHERE id = ?', [u.active ? 0 : 1, u.active ? 0 : 1, u.id]);
+  await log(req, u.active ? 'equipe-desativar' : 'equipe-reativar', null, u.email);
+  res.flash(u.active ? `${u.name} foi desativado(a) e saiu do painel.` : `${u.name} foi reativado(a).`).redirect('/equipe');
+});
+handle.post('/equipe/:id/convite', need, async (req, res) => {
+  const u = await teamTarget(req); if (!u || !u.active) return res.redirect('/equipe');
+  const code = await newInvite(u.id, req.admin.email);
+  await log(req, 'equipe-link', null, u.email);
+  res.redirect(`/equipe?link=${encodeURIComponent(inviteUrl(req, code))}`);
+});
+// link de acesso (público): a pessoa cria a própria senha
+async function byInvite(code) { return T.pone('SELECT * FROM platform_users WHERE invite_hash = ? AND invite_expires > NOW() AND active = 1', [inviteHash(code)]); }
+handle.get('/convite-equipe/:code', async (req, res) => {
+  const u = await byInvite(req.params.code);
+  if (!u) return send(res, layout(req, 'Link inválido', html`<section class="card mzp-auth"><h1>Link inválido ou vencido</h1><p>Peça um novo link a um administrador da Mentez.</p></section>`));
+  send(res, layout(req, 'Criar senha', html`<section class="card mzp-auth"><h1>Olá, ${u.name.split(' ')[0]}!</h1><p class="muted small">Crie sua senha para entrar no Painel da Mentez com o e-mail <b>${u.email}</b>.</p>
+    <form method="post" class="stack"><label class="fld"><span>Nova senha (mínimo 12 caracteres)</span><input type="password" name="password" minlength="12" required autocomplete="new-password"></label>
+      <label class="fld"><span>Repita a senha</span><input type="password" name="password2" minlength="12" required autocomplete="new-password"></label><button class="btn">Criar senha e entrar</button></form></section>`));
+});
+handle.post('/convite-equipe/:code', RL.limit({ name: 'painel-convite', windowMs: 10 * 60e3, max: 10 }), async (req, res) => {
+  const u = await byInvite(req.params.code); const back = `/convite-equipe/${encodeURIComponent(req.params.code)}`;
+  if (!u) return res.redirect(back);
+  const pw = String(req.body.password || '');
+  if (pw.length < 12) return res.flash('A senha precisa ter pelo menos 12 caracteres.', 'err').redirect(back);
+  if (pw !== String(req.body.password2 || '')) return res.flash('As senhas não conferem.', 'err').redirect(back);
+  await T.pq('UPDATE platform_users SET password_hash = ?, invite_hash = NULL, invite_expires = NULL, session_version = session_version + 1, last_login_at = NOW() WHERE id = ?', [await bcrypt.hash(pw, 12), u.id]);
+  const fresh = await T.pone('SELECT * FROM platform_users WHERE id = ?', [u.id]);
+  setCookie(res, sign({ uid: u.id, sv: fresh.session_version, exp: Date.now() + HOURS * 3600e3 }), HOURS * 3600);
+  req.admin = fresh; await log(req, 'equipe-senha-criada', null, u.email);
+  res.flash('Senha criada. Bem-vindo(a) ao Painel da Mentez!').redirect('/');
+});
+// minha conta
+handle.get('/minha-conta', need, (req, res) => {
+  const u = req.admin;
+  send(res, layout(req, 'Minha conta', html`<div class="mz2-hello"><div><h1>Minha conta</h1><p>${u.email} · ${ROLES[u.role]?.label || u.role}</p></div></div>
+    <div class="mz2-grid2">
+      <section class="mz2-card"><header><span class="mz2-cardic">${ICON.equipe}</span><h2>Dados</h2></header>
+        <form method="post" action="/minha-conta" class="stack"><label class="fld"><span>Nome</span><input name="name" required maxlength="120" value="${u.name}"></label>
+          <label class="fld"><span>WhatsApp</span><input name="phone" maxlength="40" inputmode="tel" value="${u.phone || ''}"></label><button class="btn">Salvar</button></form></section>
+      <section class="mz2-card"><header><span class="mz2-cardic">${ICON.ajuda}</span><h2>Senha</h2></header>
+        <form method="post" action="/minha-conta/senha" class="stack"><label class="fld"><span>Senha atual</span><input type="password" name="current" required autocomplete="current-password"></label>
+          <label class="fld"><span>Nova senha (mínimo 12 caracteres)</span><input type="password" name="password" minlength="12" required autocomplete="new-password"></label>
+          <label class="fld"><span>Repita a nova senha</span><input type="password" name="password2" minlength="12" required autocomplete="new-password"></label><button class="btn">Trocar senha</button></form>
+        <form method="post" action="/minha-conta/sair-todos"><button class="btn ghost" data-confirm="Sair do painel em todos os aparelhos, inclusive este?">Sair de todos os aparelhos</button></form></section>
+    </div>`));
+});
+handle.post('/minha-conta', need, async (req, res) => {
+  const name = str(req.body.name, 120).trim(); if (!name) return res.redirect('/minha-conta');
+  await T.pq('UPDATE platform_users SET name = ?, phone = ? WHERE id = ?', [name, str(req.body.phone, 40) || null, req.admin.id]);
+  res.flash('Dados salvos.').redirect('/minha-conta');
+});
+handle.post('/minha-conta/senha', need, RL.limit({ name: 'painel-senha', windowMs: 15 * 60e3, max: 10 }), async (req, res) => {
+  const u = await T.pone('SELECT * FROM platform_users WHERE id = ?', [req.admin.id]);
+  if (!(await bcrypt.compare(String(req.body.current || ''), u.password_hash || ''))) return res.flash('Senha atual incorreta.', 'err').redirect('/minha-conta');
+  const pw = String(req.body.password || '');
+  if (pw.length < 12) return res.flash('A nova senha precisa ter pelo menos 12 caracteres.', 'err').redirect('/minha-conta');
+  if (pw !== String(req.body.password2 || '')) return res.flash('As senhas não conferem.', 'err').redirect('/minha-conta');
+  await T.pq('UPDATE platform_users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?', [await bcrypt.hash(pw, 12), u.id]);
+  setCookie(res, sign({ uid: u.id, sv: u.session_version + 1, exp: Date.now() + HOURS * 3600e3 }), HOURS * 3600); // continua logado aqui; outros aparelhos saem
+  await log(req, 'equipe-senha-trocada', null, u.email);
+  res.flash('Senha trocada. Os outros aparelhos saíram do painel.').redirect('/minha-conta');
+});
+handle.post('/minha-conta/sair-todos', need, async (req, res) => {
+  await T.pq('UPDATE platform_users SET session_version = session_version + 1 WHERE id = ?', [req.admin.id]);
+  setCookie(res, '', 0); res.redirect('/entrar');
+});
+
 handle.get('/historico', need, async (req, res) => {
   const rows = await T.pq('SELECT a.*, t.name tname FROM platform_audit a LEFT JOIN tenants t ON t.id = a.tenant_id ORDER BY a.id DESC LIMIT 200');
   send(res, layout(req, 'Histórico', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Histórico</h1></div></header>
