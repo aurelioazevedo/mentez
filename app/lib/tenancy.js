@@ -12,6 +12,7 @@
 // Sem MENTEZ_PLATFORM_DB o sistema funciona como antes, com uma clínica só (variáveis DB_* do ambiente).
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
+import path from 'node:path';
 import mysql from 'mysql2/promise';
 
 const als = new AsyncLocalStorage();
@@ -25,6 +26,8 @@ export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
 // ---------- contexto da requisição ----------
 export const current = () => als.getStore()?.tenant || null;
+// Arquivos fora do banco (ex.: PDFs dos cadernos de exercícios): na Mentez, uma pasta por clínica em MENTEZ_FILES_DIR
+export const filesDir = (fallback, sub = 'private') => (multi() && current() ? path.join(process.env.MENTEZ_FILES_DIR || '/data/files', current().slug, sub) : fallback);
 export const run = (tenant, fn) => als.run({ tenant }, fn);
 // Configuração da clínica atual (sobrepõe a do ambiente): PUBLIC_URL, SESSION_SECRET, ENCRYPTION_KEY…
 export function env(name) {
@@ -62,6 +65,7 @@ function connConfig(database) {
   if (process.env.MENTEZ_DB_URL) { const u = new URL(process.env.MENTEZ_DB_URL); return { host: u.hostname, port: Number(u.port || 3306), user: decodeURIComponent(u.username), password: decodeURIComponent(u.password), database }; }
   return { host: process.env.MENTEZ_DB_HOST || process.env.DB_HOST, port: Number(process.env.MENTEZ_DB_PORT || process.env.DB_PORT || 3306), user: process.env.MENTEZ_DB_USER || process.env.DB_USER, password: process.env.MENTEZ_DB_PASSWORD || process.env.DB_PASSWORD, database };
 }
+export const connConfigFor = (database) => connConfig(database);
 function makePool(database, limit) {
   const p = mysql.createPool({ ...connConfig(database), waitForConnections: true, connectionLimit: limit, maxIdle: 2, idleTimeout: 60000, charset: 'utf8mb4', timezone: 'Z', dateStrings: true });
   p.pool.on('connection', (conn) => conn.query("SET time_zone = '-03:00'"));
@@ -199,6 +203,17 @@ export async function setSecretEnv(tenantId, name, value) {
   if (!row) throw new Error('Clínica não encontrada.');
   const sec = unseal(row.secrets_enc); sec.env = sec.env || {};
   if (value === null || value === undefined || value === '') delete sec.env[name]; else sec.env[name] = value;
+  await pq('UPDATE tenants SET secrets_enc = ? WHERE id = ?', [seal(sec), tenantId]);
+  clearCache();
+}
+// Troca as chaves da clínica (ex.: ao trazer uma clínica de outro servidor, para as sessões e os dados cifrados continuarem valendo)
+export async function setCoreSecrets(tenantId, { SESSION_SECRET, ENCRYPTION_KEY, env = {} }) {
+  const row = await pone('SELECT secrets_enc FROM tenants WHERE id = ?', [tenantId]);
+  if (!row) throw new Error('Clínica não encontrada.');
+  const sec = unseal(row.secrets_enc);
+  if (SESSION_SECRET) sec.SESSION_SECRET = SESSION_SECRET;
+  if (ENCRYPTION_KEY) sec.ENCRYPTION_KEY = ENCRYPTION_KEY;
+  sec.env = { ...(sec.env || {}), ...env };
   await pq('UPDATE tenants SET secrets_enc = ? WHERE id = ?', [seal(sec), tenantId]);
   clearCache();
 }

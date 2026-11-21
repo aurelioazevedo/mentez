@@ -262,7 +262,7 @@ const FOLHAS = path.join(__dirname, 'private');
 app.get('/folhas/:dir/:file', requirePerm('prontuario'), (req, res) => {
   const { dir, file } = req.params;
   if (!/^folhas(-ilustradas|-tematicas)?$/.test(dir) || !/^[a-z0-9-]+\.pdf$/.test(file)) return res.sendStatus(404);
-  const p = path.join(FOLHAS, dir, file);
+  const p = path.join(Tenancy.filesDir(FOLHAS), dir, file);
   if (!fs.existsSync(p)) return res.sendStatus(404);
   res.sendFile(p);
 });

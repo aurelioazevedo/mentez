@@ -211,7 +211,7 @@ portal.post('/:token', async (req, res) => {
 portal.get('/:token/folha.pdf', async (req, res) => {
   const s = await byToken(req.params.token);
   if (!s) return res.sendStatus(404);
-  const file = path.join(PRIVATE, byKey(s.exercise_key).pdf);
+  const file = path.join(Tenancy.filesDir(PRIVATE), byKey(s.exercise_key).pdf);
   if (!fs.existsSync(file)) return res.sendStatus(404);
   res.sendFile(file);
 });

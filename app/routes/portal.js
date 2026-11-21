@@ -436,7 +436,7 @@ r.post('/exercicios/:id', async (req, res, next) => {
 r.get('/exercicios/:id/folha.pdf', async (req, res, next) => {
   const s = await exOf(req);
   if (!s) return next();
-  const file = path.join(PRIVATE, byKey(s.exercise_key).pdf || '');
+  const file = path.join(Tenancy.filesDir(PRIVATE), byKey(s.exercise_key).pdf || '');
   if (!byKey(s.exercise_key).pdf || !fs.existsSync(file)) return next();
   res.sendFile(file);
 });

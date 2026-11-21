@@ -126,7 +126,7 @@ function brandLink() {
   const full = html`<img class="logo-light brand-full" src="${b.appLogoUrl}" alt="${b.short}"><img class="logo-dark brand-full" src="${b.appLogoDarkUrl}" alt="${b.short}">`;
   // menu recolhido: o símbolo (logo sem o nome); sem símbolo, as iniciais da clínica
   const mini = b.symbolUrl ? html`<img class="logo-light brand-mini" src="${b.symbolUrl}" alt="${b.short}"><img class="logo-dark brand-mini" src="${b.symbolDarkUrl}" alt="${b.short}">` : html`<i class="brand-mark brand-mini" aria-hidden="true">${initials(b.short)}</i>`;
-  return html`<a class="brand" href="/">${full}${mini}<span>${b.legacy ? 'Sistema do consultório' : (b.logo ? 'Gestão do consultório · Mentez' : b.short)}</span></a>`;
+  return html`<a class="brand" href="/">${full}${mini}${b.legacy ? html`<span>Sistema do consultório</span>` : ''}</a>`;
 }
 
 // Foto do usuário (ou iniciais) — usada na barra superior, na lateral e nas listas.

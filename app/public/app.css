@@ -2320,7 +2320,7 @@ label.ask-opt:has(input:focus-visible) { outline: 2px solid var(--terracota); ou
 .bl-default{opacity:.55}
 .bl-tag{position:absolute;right:8px;bottom:6px;font-size:11px;color:#8A90A0;background:rgba(255,255,255,.85);padding:1px 7px;border-radius:999px}
 .brand-locked{border:1px dashed var(--terracota-l)}
-.brand .brand-full{max-height:46px;width:auto;max-width:100%}
+.brand .brand-full{height:auto;max-height:46px;width:auto;max-width:100%;align-self:flex-start;object-fit:contain;object-position:left center}
 @media (min-width:861px){
   .side-min .brand img.brand-mini{width:46px;height:46px;object-fit:contain}
   :root:root .side-min .brand .brand-mark.brand-mini{display:inline-flex !important}

@@ -30,6 +30,19 @@ services:
           printf 'AUTHENTICATION_API_KEY=%s\nPOSTGRES_PASSWORD=%s\nDATABASE_CONNECTION_URI=postgresql://evolution:%s@evodb:5432/evolution?schema=public\n' "$$K" "$$P" "$$P" > /opt/mentez/evolution.env
           echo "EVOLUTION: chaves criadas"
         fi
+        # par de chaves para trazer clínicas de outros servidores (a pública vai no código do sistema antigo; a privada fica aqui)
+        mkdir -p /opt/mentez/keys /opt/mentez/files
+        chown 1000:1000 /opt/mentez/files
+        if [ ! -f /opt/mentez/keys/migracao.pem ]; then
+          apk add --no-cache openssl >/dev/null
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /opt/mentez/keys/migracao.pem 2>/dev/null
+          chown 1000:1000 /opt/mentez/keys/migracao.pem && chmod 600 /opt/mentez/keys/migracao.pem
+          echo "MIGRACAO: chaves criadas"
+        fi
+        if [ -f /opt/mentez/keys/migracao.pem ]; then
+          apk add --no-cache openssl >/dev/null
+          echo "MIGRACAO-PUB: $$(openssl pkey -in /opt/mentez/keys/migracao.pem -pubout | grep -v -- '-----' | tr -d '\n')"
+        fi
         REV=$$(git -C /opt/mentez/src log -1 --format='%h')
         echo "SYNC: $$REV $$(git -C /opt/mentez/src log -1 --format='%s')"
         docker build -q -t mentez-app:latest -t mentez-app:$$REV /opt/mentez/src/app

@@ -23,6 +23,9 @@ services:
       PORT: "3000"
       MENTEZ_EVOLUTION_URL: http://evolution:8080
       MENTEZ_INTERNAL_URL: http://app:3000
+      MENTEZ_FILES_DIR: /data/files
+    volumes:
+      - /opt/mentez/files:/data/files:ro   # arquivos de cada clínica fora do banco (ex.: PDFs dos cadernos)
     depends_on:
       db: { condition: service_healthy }
   db:

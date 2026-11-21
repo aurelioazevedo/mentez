@@ -10,10 +10,11 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import * as T from '../lib/tenancy.js';
 import * as Evolution from '../lib/evolution.js';
+import * as Mig from '../lib/migration.js';
 import { migrate, q, one } from '../lib/db.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
-const VALUED = new Set(['--email', '--nome']);
+const VALUED = new Set(['--email', '--nome', '--dominio']);
 const flag = (n) => { const i = rest.indexOf(`--${n}`); return i < 0 ? null : VALUED.has(`--${n}`) ? rest[i + 1] || null : true; };
 const args = rest.filter((x, i) => !x.startsWith('--') && !VALUED.has(rest[i - 1]));
 const die = (m) => { console.error(m); process.exit(1); };
@@ -29,6 +30,48 @@ try {
     await T.run(t, () => migrate());
     console.log(`Clínica criada: ${t.name} → ${t.env.PUBLIC_URL} (banco ${t.db_name})`);
     if (Evolution.enabled()) { const r = await T.run(t, () => Evolution.provision(t)).catch((e) => ({ ok: false, reason: e.message })); console.log(r.ok ? `WhatsApp: instância ${r.instance}` : `WhatsApp: ${r.reason}`); }
+  } else if (cmd === 'importar') {
+    // Traz uma clínica de um sistema próprio (ex.: importar lorrainy https://sistema.lorrainymendes.com.br --dominio=sistema.lorrainymendes.com.br --legado)
+    const [slug, src] = args; if (!slug || !/^https:\/\//.test(src || '')) die('Uso: importar <endereco> <https://origem> [--dominio=...] [--legado] [--sem-concluir]');
+    const t = await T.bySlug(slug); if (!t) die('Clínica não encontrada na Mentez.');
+    const file = `/tmp/mz-import-${slug}.bin`;
+    const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 12);
+    const dbName = `mz_${slug.replace(/-/g, '_')}_${stamp}`.slice(0, 64);
+    try {
+      console.log(`Origem: ${JSON.stringify(await Mig.state(src))}`);
+      console.log('Exportando (o sistema de origem fica em “atualização” até o fim)…');
+      const n = await Mig.download(src, file); console.log(`Pacote: ${(n / 1048576).toFixed(1)} MB`);
+      const filesRoot = (await import('node:path')).join(process.env.MENTEZ_FILES_DIR || '/data/files', slug, 'private');
+      const r = await Mig.importInto(file, dbName, console.log, filesRoot);
+      console.log(`Banco ${dbName}: ${Object.entries(r.counts).length} tabelas, ${Object.values(r.counts).reduce((a, b) => a + b, 0)} linhas (conferido)`);
+      const env = {}; if (r.meta.env.SETUP_TOKEN) env.SETUP_TOKEN = r.meta.env.SETUP_TOKEN; if (flag('legado')) env.MENTEZ_BRAND = 'legacy';
+      await T.setCoreSecrets(t.id, { SESSION_SECRET: r.meta.env.SESSION_SECRET, ENCRYPTION_KEY: r.meta.env.ENCRYPTION_KEY, env });
+      await T.pq("UPDATE tenants SET db_name = ?, plan = 'piloto', billing_status = 'cortesia', status = 'ativa' WHERE id = ?", [dbName, t.id]);
+      T.clearCache();
+      const t2 = await T.bySlug(slug);
+      await T.run(t2, () => migrate());
+      const dom = flag('dominio');
+      if (dom) {
+        await T.pq('UPDATE tenant_domains SET is_primary = 0 WHERE tenant_id = ?', [t.id]);
+        await T.pq('INSERT INTO tenant_domains (domain, tenant_id, is_primary, verified_at) VALUES (?,?,1,NOW()) ON DUPLICATE KEY UPDATE tenant_id = VALUES(tenant_id), is_primary = 1, verified_at = COALESCE(verified_at, NOW())', [dom, t.id]);
+      }
+      await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', ['cli', 'clinica-importar', t.id, `${src} → ${dbName}`]);
+      const check = await T.run(t2, async () => (await one('SELECT (SELECT COUNT(*) FROM users) u, (SELECT COUNT(*) FROM patients) p, (SELECT COUNT(*) FROM appointments) a')));
+      console.log(`Na Mentez: ${check.u} usuários, ${check.p} pacientes, ${check.a} agendamentos`);
+      if (!flag('sem-concluir')) { const f = await Mig.finish(src, `https://${slug}.${T.baseDomain()}`); console.log(`Origem agora encaminha para a Mentez: ${JSON.stringify(f)}`); }
+      console.log(`IMPORTAR: ok ${dbName}`);
+    } catch (e) {
+      console.error(`IMPORTAR: erro ${e.message}`);
+      try { await Mig.cancel(src); console.error('Origem voltou ao normal (cancelado).'); } catch (e2) { console.error(`Não foi possível cancelar na origem: ${e2.message}`); }
+      process.exitCode = 1;
+    } finally { try { (await import('node:fs')).unlinkSync(file); } catch { /* sem arquivo */ } }
+  } else if (cmd === 'migracao') {
+    // migracao <estado|cancelar|concluir> <https://origem> [<endereco>]
+    const [acao, src, slug] = args;
+    if (acao === 'estado') console.log(JSON.stringify(await Mig.state(src)));
+    else if (acao === 'cancelar') console.log(JSON.stringify(await Mig.cancel(src)));
+    else if (acao === 'concluir') console.log(JSON.stringify(await Mig.finish(src, `https://${slug}.${T.baseDomain()}`)));
+    else die('Uso: migracao <estado|cancelar|concluir> <https://origem> [<endereco>]');
   } else if (cmd === 'whatsapp') {
     // Cria a instância do WhatsApp na Evolution da Mentez para clínicas que ainda não têm (ou só para uma)
     const list = args[0] ? [await T.bySlug(args[0])].filter(Boolean) : await T.active();

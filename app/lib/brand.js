@@ -23,6 +23,8 @@ function mentezDefaults() {
   return { name, short: name, proName: '', proFirst: '', proRole: 'Psicologia', crp: '', phone: '', email: '', site: '', instagram: '', city: '', uf: '', address: '', color: '', appName: name, legacy: false };
 }
 export const isMentez = () => Tenancy.multi();
+// Identidade “legada” (a da Dra. Lorrainy): no sistema de uma clínica só, e na Mentez para a clínica marcada com MENTEZ_BRAND=legacy
+export const legacyBrand = () => !Tenancy.multi() || Tenancy.env('MENTEZ_BRAND') === 'legacy';
 // O plano da clínica inclui personalização visual e domínio próprio? (sem a plataforma: sempre)
 export async function canCustomize(t = Tenancy.current()) {
   if (!isMentez()) return true;
@@ -61,7 +63,7 @@ function finish(b) {
 }
 export async function load(force = false) {
   if (!force && S.brand && Date.now() - S.at < TTL) return S.brand;
-  const base = isMentez() ? mentezDefaults() : { ...LEGACY };
+  const base = legacyBrand() ? { ...LEGACY } : mentezDefaults();
   let saved = {}; let fin = {};
   try { saved = JSON.parse((await getSetting('brand')) || '{}'); } catch { /* padrão */ }
   try { fin = JSON.parse((await getSetting('fin_clinic')) || '{}'); } catch { /* padrão */ }
@@ -74,13 +76,13 @@ export async function load(force = false) {
   for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'symbol', 'symbolDark', 'favicon', 'appName']) b[k] = pick(k, b[k]);
   b.colors = Array.isArray(saved.colors) ? saved.colors : [];
   b.custom = await canCustomize();
-  if (!saved.appName && saved.short) b.appName = isMentez() ? saved.short : `Sistema ${saved.short}`;
+  if (!saved.appName && saved.short) b.appName = legacyBrand() ? `Sistema ${saved.short}` : saved.short;
   b.appNameSaved = saved.appName || '';
   S.brand = finish(b); S.at = Date.now();
   return S.brand;
 }
 // Leitura imediata (páginas): o middleware já carregou; sem carga ainda, usa os padrões.
-export function get() { return S.brand || finish(isMentez() ? mentezDefaults() : { ...LEGACY }); }
+export function get() { return S.brand || finish(legacyBrand() ? { ...LEGACY } : mentezDefaults()); }
 export function middleware(req, res, next) { load().then(() => next(), next); }
 
 // Grava a ficha (os campos de recibo continuam também em fin_clinic, usados pelo financeiro)
@@ -147,7 +149,7 @@ export async function logoFile(kind = 'claro') {
 export const icon = (file) => {
   const b = get();
   if (b.faviconUrl && /^(favicon|apple-touch-icon|app-192|app-512)/.test(file)) return b.faviconUrl;
-  return isMentez() ? `/static/img/mentez/${file}` : `/static/img/${file}`;
+  return legacyBrand() ? `/static/img/${file}` : `/static/img/mentez/${file}`;
 };
 // Manifesto do aplicativo instalável (nome e ícones da clínica)
 export function manifest({ start = '/', scope = '/', suffix = '' } = {}) {
