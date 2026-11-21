@@ -6,6 +6,10 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import * as T from '../lib/tenancy.js';
 import * as Domains from '../lib/domains.js';
+import * as Evolution from '../lib/evolution.js';
+import * as Brand from '../lib/brand.js';
+import { statusItems } from './config.js';
+import * as W from '../lib/whatsapp.js';
 import { q, one, migrate } from '../lib/db.js';
 import { bare, html, raw, brDate, brDateTime } from '../lib/html.js';
 import { router, send, str, int, flash } from '../lib/router.js';
@@ -62,6 +66,7 @@ const ICON = {
   nova: SV('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'),
   faturas: SV('<path d="M7 3h10a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/>'),
   testes: SV('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>'),
+  recursos: SV('<path d="M3 12h4l3-8 4 16 3-8h4"/>'),
   planos: SV('<path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/>'),
   cobranca: SV('<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>'),
   historico: SV('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'),
@@ -74,7 +79,7 @@ const ICON = {
   cal: SV('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
 };
 const MENU = [
-  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes']]],
+  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec']]],
   ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança (Asaas)', 'cobranca'], ['/historico', 'Histórico', 'historico']]],
 ];
 const LOGO = (dark = false) => raw(`<img class="mz2-logo" src="/static/img/mentez/${dark ? 'logo-dark' : 'logo'}.png" alt="Mentez" width="150" height="31">`);
@@ -83,7 +88,7 @@ let counts = { at: 0, v: {} };
 async function menuCounts() {
   if (Date.now() - counts.at < 30e3) return counts.v;
   const all = await T.all();
-  const v = { clinicas: all.length, testes: all.filter((t) => Billing.accessOf(t).state === 'teste').length };
+  const v = { clinicas: all.length, testes: all.filter((t) => Billing.accessOf(t).state === 'teste').length, alertasRec: [...resCache.values()].filter((e) => Object.values(e.v || {}).some((x) => x?.tone === 'err')).length };
   counts = { at: Date.now(), v }; return v;
 }
 function activeOf(path) {
@@ -302,6 +307,85 @@ handle.get('/faturas', need, async (req, res) => {
     </tbody></table></div>` : html`<p class="mz2-empty">Nenhum aviso de pagamento ainda. Configure o Asaas em Cobrança.</p>`}</section>`));
 });
 // ---------- testes grátis ----------
+// ---------- Recursos ativos: o que cada clínica tem ligado (WhatsApp, domínio, integrações…) ----------
+// Lê a mesma situação da tela de Configurações de cada clínica (rodando no banco dela). Guardado por 5 minutos.
+const RES_COLS = [
+  ['evolution', 'Instância Evolution', 'Evolution'], ['dominio', 'Domínio próprio', 'Domínio'], ['google', 'Google Agenda', 'Google'], ['whatsapp', 'WhatsApp', 'WhatsApp'],
+  ['agente', 'Atendente virtual (IA)', 'Atendente IA'], ['monitor', 'Monitoramento de alertas', 'Alertas'], ['tv', 'Painel de chamada (TV)', 'TV'],
+  ['agendamento-online', 'Agendamento online', 'Agendamento'], ['cobranca', 'Cobrança online', 'Cobrança'], ['lembretes', 'Lembretes por e-mail e SMS', 'E-mail/SMS'],
+  ['assinatura-digital', 'Assinatura digital', 'Assinatura'], ['convenios', 'Convênios', 'Convênio'], ['nfse', 'Nota fiscal (NFS-e)', 'NFS-e'], ['teleconsulta', 'Teleconsulta', 'Teleconsulta'],
+  ['aniversarios', 'Mensagem de aniversário', 'Aniversário'], ['locacao', 'Locação de espaço', 'Locação'], ['portal', 'Portal do paciente', 'Portal'], ['sessao-ia', 'IA na sessão', 'IA sessão'], ['backup', 'Backup', 'Backup'],
+];
+// situação → tom: on (ligado e funcionando), warn (ligado com pendência), err (com problema), off (desligado)
+const TONE = { realizada: 'on', confirmada: 'warn', agendada: 'warn', falta: 'err', cancelada: 'off' };
+const resCache = new Map();
+let evoCache = { at: 0, v: null, err: null };
+async function evoAll(fresh = false) {
+  if (!Evolution.enabled()) return { v: null, err: 'não configurada neste servidor' };
+  if (!fresh && Date.now() - evoCache.at < 60e3) return evoCache;
+  try { evoCache = { at: Date.now(), v: await Evolution.listAll(), err: null }; } catch (e) { evoCache = { at: Date.now(), v: null, err: e.message }; }
+  return evoCache;
+}
+async function resourcesOf(t, fresh = false) {
+  const hit = resCache.get(t.id);
+  if (!fresh && hit && Date.now() - hit.at < 5 * 60e3) return hit.v;
+  const evo = await evoAll(fresh);
+  const v = await T.run(t, async () => {
+    await Brand.load(true);
+    const items = await statusItems({ master: true });
+    const by = {};
+    for (const it of items) by[it.key === 'assinatura' && it.title === 'Assinatura digital' ? 'assinatura-digital' : it.key] = { tone: TONE[it.status[0]] || 'off', label: it.status[1] };
+    // “ligado” só quando está em uso de verdade
+    if (by.tv && /^0 TV/.test(by.tv.label)) by.tv = { tone: 'off', label: 'Nenhuma TV conectada' };
+    if (by.nfse && /Aguardando CNPJ/.test(by.nfse.label)) by.nfse.tone = 'off';
+    // instância Evolution
+    const wc = await W.config().catch(() => null);
+    if (wc?.url && !wc.managed) by.evolution = { tone: 'on', label: 'Evolution própria da clínica' };
+    else if (!wc?.managed) by.evolution = { tone: Evolution.enabled() ? 'err' : 'off', label: Evolution.enabled() ? 'Sem instância' : 'Evolution da Mentez desligada' };
+    else { const i = evo.v?.get(wc.instance); by.evolution = !evo.v ? { tone: 'warn', label: `${wc.instance} · Evolution sem resposta` } : !i ? { tone: 'err', label: `${wc.instance} não existe na Evolution` } : i.status === 'open' ? { tone: 'on', label: `${wc.instance} · conectada${i.number ? ` · ${i.number.replace(/^55/, '')}` : ''}` } : { tone: 'warn', label: `${wc.instance} · ${i.status === 'connecting' ? 'aguardando QR code' : 'desconectada'}` }; }
+    const ds = await Domains.list(t.id).catch(() => []);
+    const on = ds.find((d) => d.verified_at && d.https_at);
+    by.dominio = on ? { tone: 'on', label: on.domain + (on.is_primary ? ' · principal' : '') } : ds.length ? { tone: 'warn', label: `${ds[0].domain} · ${Domains.stateOf(ds[0]).label}` } : { tone: 'off', label: 'Não usa' };
+    return by;
+  }).catch((e) => ({ _err: e.message }));
+  resCache.set(t.id, { at: Date.now(), v });
+  return v;
+}
+// até 4 clínicas ao mesmo tempo
+async function mapLimit(list, n, fn) { const out = []; let i = 0; await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => { while (i < list.length) { const k = i++; out[k] = await fn(list[k]); } })); return out; }
+
+handle.get('/recursos', need, async (req, res) => {
+  const fresh = req.query.atualizar === '1';
+  const list = (await T.all()).filter((t) => t.status !== 'cancelada');
+  const evo = await evoAll(fresh);
+  const rows = await mapLimit(list, 4, (t) => resourcesOf(t, fresh));
+  const f = String(req.query.r || '');
+  const counts = RES_COLS.map(([k]) => rows.reduce((n, r) => n + (['on', 'warn'].includes(r?.[k]?.tone) ? 1 : 0), 0));
+  const errs = RES_COLS.map(([k]) => rows.reduce((n, r) => n + (r?.[k]?.tone === 'err' ? 1 : 0), 0));
+  const show = list.map((t, i) => ({ t, r: rows[i] })).filter((x) => !f || (x.r?.[f] && x.r[f].tone !== 'off'));
+  const dot = (x, label) => (x ? html`<span class="mz2-dot ${x.tone}" title="${label}: ${x.label}" aria-label="${label}: ${x.label}"></span>` : html`<span class="mz2-dot off" title="${label}: sem dados"></span>`);
+  send(res, layout(req, 'Recursos ativos', html`<div class="mz2-hello"><div><h1>Recursos ativos</h1><p>O que cada clínica tem ligado e funcionando. Passe o mouse (ou toque) em um ponto para ver o detalhe.</p></div>
+      <div class="mz2-hello-act"><a class="mz2-btn soft" href="/recursos?atualizar=1${f ? `&r=${f}` : ''}">Atualizar agora</a></div></div>
+    <section class="mz2-card"><header><span class="mz2-cardic">${ICON.recursos}</span><h2>Resumo</h2><span class="mz2-pill sm">${list.length} clínica(s)</span>
+      ${Evolution.enabled() ? html`<span class="mz2-pill sm ${evo.err ? 'err' : ''}">Evolution: ${evo.err ? `sem resposta (${evo.err})` : `${evo.v?.size || 0} instância(s)`}</span>` : html`<span class="mz2-pill sm">Evolution da Mentez desligada</span>`}</header>
+      <div class="mz2-res-sum">${RES_COLS.map(([k, label], i) => html`<a class="mz2-res-it ${f === k ? 'on' : ''}" href="/recursos${f === k ? '' : `?r=${k}`}"><span>${label}</span><b>${counts[i]}<small>/${list.length}</small></b>${errs[i] ? html`<em>${errs[i]} com problema</em>` : ''}</a>`)}</div>
+      <p class="mz2-legend-row"><span class="mz2-dot on"></span> ligado <span class="mz2-dot warn"></span> pendente <span class="mz2-dot err"></span> com problema <span class="mz2-dot off"></span> desligado</p></section>
+    <section class="mz2-card mz2-table mz2-res">${show.length ? html`<div class="mz2-tw"><table><thead><tr><th>Clínica</th>${RES_COLS.map(([, , short]) => html`<th class="mz2-rot"><span>${short}</span></th>`)}</tr></thead><tbody>
+      ${show.map(({ t, r }) => html`<tr><td><a href="/clinicas/${t.id}#recursos"><span class="mz2-av">${initialsOf(t.name)}</span>${t.name}</a>${r?._err ? html`<br><small class="mz2-err">${r._err}</small>` : ''}</td>${RES_COLS.map(([k, label]) => html`<td class="mz2-c">${dot(r?.[k], label)}</td>`)}</tr>`)}
+    </tbody></table></div>` : html`<p class="mz2-empty">Nenhuma clínica com este recurso ligado.</p>`}</section>`));
+});
+handle.post('/clinicas/:id/whatsapp', need, async (req, res, next) => {
+  const t = await tenantOf(req); if (!t) return next();
+  try {
+    const r = await T.run(t, () => Evolution.provision(t, { force: req.body.forcar === '1' }));
+    if (!r.ok) throw new Error(r.reason);
+    await log(req, 'whatsapp-instancia', t.id, `${r.instance}${r.created ? ' criada' : ' reaproveitada'}`);
+    resCache.delete(t.id); evoCache.at = 0;
+    res.flash(`Instância ${r.instance} ${r.created ? 'criada' : 'pronta'}. A clínica lê o QR code no painel dela.`);
+  } catch (e) { res.flash(`WhatsApp: ${e.message}`, 'err'); }
+  res.redirect(`/clinicas/${t.id}#recursos`);
+});
+
 handle.get('/testes', need, async (req, res) => {
   const all = await T.all();
   const rows = await T.pq("SELECT id, owner_crp, owner_phone, owner_email, owner_name, trial_ends_at, created_at FROM tenants WHERE billing_status = 'teste' OR (trial_ends_at IS NOT NULL AND trial_ends_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) ORDER BY trial_ends_at");
@@ -327,6 +411,7 @@ handle.post('/clinicas/nova', need, async (req, res) => {
   try {
     const t = await T.createTenant({ slug: req.body.slug, name: str(req.body.name, 160), ownerName: str(req.body.owner_name, 160) || null, ownerEmail: str(req.body.owner_email, 190) || null, plan: str(req.body.plan, 30) || 'piloto', actor: req.admin.email });
     await T.run(t, () => migrate()); // createTenant já registra no histórico
+    Evolution.provisionLater(t, req.admin.email); // instância do WhatsApp da clínica
     res.flash(`Clínica criada: ${t.name}. Gere o convite de primeiro acesso abaixo e envie ao responsável.`).redirect(`/clinicas/${t.id}`);
   } catch (e) { res.flash(e.message, 'err').redirect('/clinicas/nova'); }
 });
@@ -366,6 +451,12 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
         <button class="btn ghost btn-sm" name="acao" value="teste7">Teste + 7 dias</button>
       </form>
     </section>
+    ${await (async () => { const r = await resourcesOf(t, req.query.atualizar === '1'); const wc = await T.run(t, () => W.config()).catch(() => null); return html`<section class="card" id="recursos"><h2>Recursos e integrações</h2>
+      ${r?._err ? html`<p class="flash err">Não foi possível ler: ${r._err}</p>` : html`<ul class="mz2-res-list">${RES_COLS.map(([k, label]) => html`<li><span class="mz2-dot ${r?.[k]?.tone || 'off'}"></span><b>${label}</b><span class="muted small">${r?.[k]?.label || '—'}</span></li>`)}</ul>`}
+      <p class="actions"><a class="btn ghost btn-sm" href="/clinicas/${t.id}?atualizar=1#recursos">Atualizar</a>
+        ${Evolution.enabled() ? (wc?.url && !wc.managed ? html`<form method="post" action="/clinicas/${t.id}/whatsapp"><input type="hidden" name="forcar" value="1"><button class="btn ghost btn-sm" data-confirm="A clínica usa uma Evolution própria. Trocar pela Evolution da Mentez? Ela terá de ler um novo QR code.">Usar a Evolution da Mentez</button></form>`
+          : html`<form method="post" action="/clinicas/${t.id}/whatsapp"><button class="btn ghost btn-sm">${wc?.managed ? 'Refazer a instância do WhatsApp' : 'Criar instância do WhatsApp'}</button></form>`) : ''}</p>
+    </section>`; })()}
     <section class="card"><h2>Domínios próprios</h2>
       <p class="muted small">O endereço <b>${t.slug}.${T.baseDomain()}</b> sempre funciona. A própria clínica cadastra o domínio em Configurações → Domínio próprio e cria no DNS um registro <b>A</b> (ou <b>CNAME</b> para ${t.slug}.${T.baseDomain()}) apontando para <b>${(await Domains.serverIps().catch(() => ({ v4: [] }))).v4[0] || 'o IP do servidor'}</b>. O domínio só abre a clínica depois que o DNS aponta para cá; o HTTPS é emitido sozinho.</p>
       ${domains.length ? html`<ul class="list">${domains.map((d) => { const st = Domains.stateOf(d); return html`<li><div class="maint-bk"><span><b>${d.domain}</b> <span class="badge b-${st.badge}">${st.label}</span> ${d.is_primary ? html`<span class="badge b-realizada">principal</span>` : ''}<small>cadastrado em ${brDate(d.created_at)}${d.checked_at ? ` · verificado em ${brDateTime(d.checked_at)}` : ''}${d.last_check ? ` · ${d.last_check}` : ''}</small></span>

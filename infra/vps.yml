@@ -16,11 +16,13 @@ services:
     image: mentez-app:latest   # montada na VPS por infra/vps-update.yml
     pull_policy: never
     restart: unless-stopped
-    env_file: /opt/mentez/.env
+    env_file: [/opt/mentez/.env, /opt/mentez/evolution.env]
     environment:
       MENTEZ_DB_HOST: db
       MENTEZ_DB_PORT: "3306"
       PORT: "3000"
+      MENTEZ_EVOLUTION_URL: http://evolution:8080
+      MENTEZ_INTERNAL_URL: http://app:3000
     depends_on:
       db: { condition: service_healthy }
   db:
@@ -35,4 +37,52 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
       interval: 10s
       retries: 12
-volumes: {caddy_data: {}, caddy_config: {}, db_data: {}}
+  # WhatsApp: Evolution API da Mentez (uma instância por clínica), só na rede interna, sem porta pública.
+  # Não guarda mensagens, contatos nem conversas (o histórico fica no banco de cada clínica).
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    env_file: /opt/mentez/evolution.env
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      SERVER_URL: http://evolution:8080
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_CLIENT_NAME: mentez
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+      CONFIG_SESSION_PHONE_CLIENT: Mentez
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      QRCODE_LIMIT: "30"
+      DEL_INSTANCE: "false"
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      LOG_LEVEL: ERROR,WARN
+      LOG_BAILEYS: error
+      TELEMETRY_ENABLED: "false"
+      LANGUAGE: pt-BR
+    volumes:
+      - evolution_instances:/evolution/instances
+    depends_on:
+      evodb: { condition: service_healthy }
+  evodb:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: /opt/mentez/evolution.env
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_DB: evolution
+    volumes:
+      - evodb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      retries: 12
+volumes: {caddy_data: {}, caddy_config: {}, db_data: {}, evolution_instances: {}, evodb_data: {}}

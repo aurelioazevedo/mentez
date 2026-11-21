@@ -50,7 +50,8 @@ const ICONS = {
 };
 const ic = (k) => raw(`<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k] || ICONS.termos}</svg>`); // sem ícone próprio: usa um genérico
 
-r.get('/', async (req, res) => {
+// Situação de cada integração/recurso da clínica atual (tela de Configurações e monitoramento no Painel Mentez)
+export async function statusItems({ master = false } = {}) {
   const wac = await WA.config();
   const waState = WA.ready(wac) ? await WA.connectionState(wac).catch(() => 'erro') : null;
   const gcfg = await G.config();
@@ -128,11 +129,19 @@ r.get('/', async (req, res) => {
       status: ['confirmada', `${today.n} registro(s) hoje${lastAccess ? ` · último: ${lastAccess.name || 'sistema'} ${brDateTime(lastAccess.created_at)}` : ''}`],
     },
   ];
-  if (await Maint.ensureMaster(req.user.id)) {
-    const d = await one('SELECT (SELECT COUNT(*) FROM patients WHERE demo = 1) demo, (SELECT COUNT(*) FROM maint_backups) bk');
+  if (master) {
     const bc = await Backup.config(); const lastB = await one("SELECT status, started_at FROM backup_runs WHERE dest = 'drive' ORDER BY id DESC LIMIT 1");
     items.push({ key: 'backup', href: '/configuracoes/backup', title: 'Backup', desc: 'Cópias de segurança no Google Drive: manual e automático (diário, semanal, mensal), juntos ou separados, e restauração.',
       status: !Backup.connected(bc) ? ['cancelada', 'Google Drive não conectado'] : bc.error || lastB?.status === 'erro' ? ['falta', 'Último backup falhou'] : ['realizada', lastB ? `Último: ${brDateTime(lastB.started_at)}` : 'Conectado · nenhum backup ainda'] });
+  }
+  return items;
+}
+
+r.get('/', async (req, res) => {
+  const master = await Maint.ensureMaster(req.user.id);
+  const items = await statusItems({ master });
+  if (master) {
+    const d = await one('SELECT (SELECT COUNT(*) FROM patients WHERE demo = 1) demo, (SELECT COUNT(*) FROM maint_backups) bk');
     items.push({ key: 'dados', href: '/configuracoes/dados', title: 'Dados e demonstração', desc: 'Limpar pacientes, agenda, financeiro e CRM, excluir usuários, cópias de segurança e dados de exemplo para apresentar.',
       status: d.demo ? ['agendada', `Demonstração carregada · ${d.demo} pacientes de exemplo`] : ['confirmada', `Somente master · ${d.bk} cópia(s) de segurança`] });
   }

@@ -6,8 +6,11 @@ import { router, send, str, int } from '../lib/router.js';
 import { safeEqual } from '../lib/crypto.js';
 import * as W from '../lib/whatsapp.js';
 import * as SiteWA from '../lib/sitewa.js';
+import * as Evolution from '../lib/evolution.js';
 
 const base = (req) => (Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+// Endereço do webhook de respostas: na Evolution da Mentez, pela rede interna; numa Evolution própria, pelo endereço público
+const hookOf = (req, c) => (c?.managed && Tenancy.current() ? Evolution.webhookUrl(Tenancy.current().slug, c.webhookSecret) : `${base(req)}/webhooks/whatsapp/${c.webhookSecret}`);
 const KIND = { aniversario: 'Aniversário', pesquisa: 'Pesquisa de satisfação', lembrete: 'Lembrete', aviso: 'Aviso (2h antes)', confirmacao: 'Confirmação', remarcacao: 'Remarcação', exercicio: 'Exercício', pagamento: 'Pagamento', cobranca: 'Cobrança', lista_espera: 'Lista de espera', teste: 'Teste', recebida: 'Recebida' };
 
 // =====================================================================
@@ -50,7 +53,7 @@ admin.get('/', async (req, res) => {
         <tbody>${swStats.map((r) => html`<tr><td>${r.origin}</td><td>${Number(r.assistente)}</td><td>${Number(r.doutora)}</td><td><b>${Number(r.total)}</b></td></tr>`)}</tbody></table></div>`
       : html`<p class="muted small">Nenhum clique registrado ainda.</p>`}
     </section>`;
-  const hookUrl = c ? `${base(req)}/webhooks/whatsapp/${c.webhookSecret}` : '';
+  const hookUrl = c ? hookOf(req, c) : '';
   const cronUrl = c ? `${base(req)}/tarefas/lembretes/${c.cronToken}` : '';
   const stBadge = !state ? html`<span class="badge b-cancelada">Não configurado</span>`
     : state === 'open' ? html`<span class="badge b-realizada">Conectado</span>`
@@ -63,7 +66,7 @@ admin.get('/', async (req, res) => {
       ${instErr ? html`<p class="flash err">Não foi possível listar as instâncias da Evolution: ${instErr}</p>` : ''}
       <div class="wa-dev-grid">
         <div class="stack">
-          ${instances ? html`<form method="post" action="/configuracoes/whatsapp/instancia" class="fld"><span>Instância usada pelo sistema</span>
+          ${instances && !c.managed ? html`<form method="post" action="/configuracoes/whatsapp/instancia" class="fld"><span>Instância usada pelo sistema</span>
             <span class="inline"><select name="instance" data-autosubmit>${!cur ? html`<option value="">— escolha —</option>` : ''}${instances.map((i) => html`<option value="${i.name}" ${i.name === c.instance ? raw('selected') : ''}>${i.name} — ${stLabel(i.status)}${i.number ? ` · ${fmtNum(i.number)}` : ''}</option>`)}</select>
             <noscript><button class="btn ghost">Usar</button></noscript></span></form>
           <details class="wa-new"><summary>+ Criar nova instância</summary>
@@ -72,7 +75,7 @@ admin.get('/', async (req, res) => {
           ${state === 'open' ? html`
             <div class="wa-ok"><b>✓ WhatsApp conectado</b>
               <span>${cur?.profileName || ''}${cur?.number ? html` · ${fmtNum(cur.number)}` : ''}</span>
-              <small class="muted">Instância “${c.instance}”. Mantenha o celular ligado e com internet.</small></div>
+              <small class="muted">${c.managed ? 'Servidor de WhatsApp da Mentez.' : `Instância “${c.instance}”.`} Mantenha o celular ligado e com internet.</small></div>
             <form method="post" action="/configuracoes/whatsapp/desconectar" data-confirm="Desconectar o WhatsApp “${c.instance}”? Os envios param até ler um novo QR code."><button class="btn ghost danger-text">Desconectar aparelho</button></form>`
           : c.instance && cur ? html`
             <ol class="wa-steps small"><li>Abra o WhatsApp no celular do consultório.</li><li>Toque em <b>⋮ Mais opções</b> (Android) ou <b>Configurações</b> (iPhone) → <b>Dispositivos conectados</b> → <b>Conectar dispositivo</b>.</li><li>Aponte a câmera para o QR code exibido aqui.</li></ol>
@@ -97,13 +100,15 @@ admin.get('/', async (req, res) => {
       <div class="kpi"><span>Falhas</span><b>${Number(stats?.erros || 0)}</b></div>
       <div class="kpi"><span>Lembretes automáticos</span><b>${c?.enabled && (c?.autoReminders || c?.secondReminder) ? [c.autoReminders ? `${c.hours}h` : '', c.secondReminder ? `${c.secondHours}h` : ''].filter(Boolean).join(' + ') + ' antes' : 'desligado'}</b></div>
     </section>
+    ${!c && Evolution.enabled() ? html`<section class="card"><h2>Conectar o WhatsApp</h2><p class="muted small">A Mentez já tem um servidor de WhatsApp pronto para a clínica. Clique para preparar a conexão e depois leia o QR code com o celular da clínica.</p>
+      <form method="post" action="/configuracoes/whatsapp/gerenciada"><button class="btn">Preparar conexão do WhatsApp</button></form></section>` : ''}
     ${device}
     ${siteCard}
     <form method="post" action="/configuracoes/whatsapp" class="card form-grid">
-      <h2 class="span2">Conexão com a Evolution API</h2>
+      ${c?.managed ? html`<h2 class="span2">Conexão</h2><p class="span2 muted small">O servidor do WhatsApp é da Mentez e já está configurado: basta ler o QR code em “Aparelho conectado”.</p>` : html`<h2 class="span2">Conexão com a Evolution API</h2>
       <label class="fld"><span>Endereço da Evolution</span><input name="url" type="url" required value="${c?.url || ''}" placeholder="https://evolution.suaclinica.com.br"></label>
       <label class="fld"><span>Nome da instância</span><input name="instance" required value="${c?.instance || ''}" placeholder="ex.: teste-consultorio"></label>
-      <label class="fld span2"><span>Chave da API (AUTHENTICATION_API_KEY)</span><input type="password" name="apiKey" ${c?.apiKey ? '' : raw('required')} autocomplete="off" placeholder="${c?.apiKey ? 'deixe em branco para manter a atual' : 'cole a chave da Evolution'}"></label>
+      <label class="fld span2"><span>Chave da API (AUTHENTICATION_API_KEY)</span><input type="password" name="apiKey" ${c?.apiKey ? '' : raw('required')} autocomplete="off" placeholder="${c?.apiKey ? 'deixe em branco para manter a atual' : 'cole a chave da Evolution'}"></label>`}
       <label class="fld check span2"><input type="checkbox" name="enabled" value="1" ${!c || c.enabled ? raw('checked') : ''}><span><b>Envios pelo WhatsApp ativados</b> (desmarque para pausar tudo)</span></label>
 
       <h2 class="span2">Lembrete automático</h2>
@@ -119,7 +124,7 @@ admin.get('/', async (req, res) => {
       <h2 class="span2">Textos das mensagens</h2>
       <p class="span2 muted small">Campos disponíveis: <code>${W.PLACEHOLDERS}</code>. Use *asteriscos* para negrito no WhatsApp. Não inclua informações clínicas.</p>
       ${Object.entries(W.TEMPLATE_LABELS).map(([k, l]) => html`<label class="fld span2"><span>${l}</span><textarea name="tpl_${k}" rows="${k === 'lembrete' ? 7 : k === 'aviso' ? 4 : 3}" maxlength="1500">${t[k]}</textarea></label>`)}
-      <div class="span2 actions"><button class="btn">Salvar e conectar</button><span class="muted small">Ao salvar, o webhook de respostas é configurado automaticamente na Evolution.</span></div>
+      <div class="span2 actions"><button class="btn">${c?.managed ? 'Salvar' : 'Salvar e conectar'}</button>${c?.managed ? '' : html`<span class="muted small">Ao salvar, o webhook de respostas é configurado automaticamente na Evolution.</span>`}</div>
     </form>
 
     ${c ? html`
@@ -130,13 +135,13 @@ admin.get('/', async (req, res) => {
           <button class="btn ghost">Enviar teste</button>
         </form>
       </section>
-      <section class="card"><h2>Endereços técnicos</h2>
+      ${c.managed ? '' : html`<section class="card"><h2>Endereços técnicos</h2>
         <p class="small"><b>Webhook de respostas</b> (configurado automaticamente):</p>
         <div class="copy"><input readonly value="${hookUrl}" id="hook"><button class="btn ghost" type="button" data-copy="#hook">Copiar</button></div>
         <p class="small"><b>Tarefa agendada (opcional, reforço):</b> o sistema verifica os lembretes a cada 5 minutos. Para garantir mesmo quando ninguém acessa, crie em hPanel → Avançado → <b>Cron Jobs</b> um comando a cada 15 minutos:</p>
         <div class="copy"><input readonly value="${`curl -fsS ${cronUrl} > /dev/null`}" id="cron"><button class="btn ghost" type="button" data-copy="#cron">Copiar</button></div>
         <p class="muted small">Esses endereços contêm códigos secretos; não compartilhe.</p>
-      </section>
+      </section>`}
     </div>` : ''}
 
     <section class="card flush"><h2 class="pad-h">Últimas mensagens</h2>
@@ -151,16 +156,17 @@ admin.get('/', async (req, res) => {
       <li>Envie apenas para pacientes que autorizaram (campo na ficha do paciente) — o consentimento faz parte do termo LGPD.</li>
       <li>A Evolution usa o WhatsApp Web de forma não oficial: evite volume alto e mensagens em massa para reduzir o risco de bloqueio.</li>
     </ul></section>
-    ${c ? html`<form method="post" action="/configuracoes/whatsapp/remover" class="danger-zone" data-confirm="Remover a configuração do WhatsApp? Os envios automáticos param."><button class="btn danger">Remover configuração</button></form>` : ''}`,
+    ${c && !c.managed ? html`<form method="post" action="/configuracoes/whatsapp/remover" class="danger-zone" data-confirm="Remover a configuração do WhatsApp? Os envios automáticos param."><button class="btn danger">Remover configuração</button></form>` : ''}`,
   }));
 });
 
 admin.post('/', async (req, res) => {
   const b = req.body;
-  const url = str(b.url, 300).replace(/\/+$/, '');
-  if (!/^https?:\/\/[^\s]+$/.test(url)) return res.flash('Endereço da Evolution inválido.', 'err').redirect('/configuracoes/whatsapp');
   const cur = await W.config();
-  const apiKey = str(b.apiKey, 300);
+  const url = cur?.managed ? cur.url : str(b.url, 300).replace(/\/+$/, '');
+  if (!/^https?:\/\/[^\s]+$/.test(url)) return res.flash('Endereço da Evolution inválido.', 'err').redirect('/configuracoes/whatsapp');
+  const apiKey = cur?.managed ? '' : str(b.apiKey, 300);
+  if (cur?.managed) b.instance = cur.instance;
   if (!apiKey && !cur?.apiKey) return res.flash('Informe a chave da API.', 'err').redirect('/configuracoes/whatsapp');
   const templates = {};
   for (const k of Object.keys(W.TEMPLATE_LABELS)) templates[k] = str(b[`tpl_${k}`], 1500) || W.DEFAULT_TEMPLATES[k];
@@ -174,8 +180,8 @@ admin.post('/', async (req, res) => {
   try {
     const st = await W.connectionState(c, true);
     if (st.startsWith('erro')) throw new Error(st.replace(/^erro: /, ''));
-    await W.setWebhook(c, `${base(req)}/webhooks/whatsapp/${c.webhookSecret}`);
-    msg = st === 'open' ? 'Configuração salva, WhatsApp conectado e webhook de respostas ativado.' : `Configuração salva, mas a instância está “${st}”. Leia o QR code no manager da Evolution.`;
+    await W.setWebhook(c, hookOf(req, c));
+    msg = st === 'open' ? 'Configuração salva, WhatsApp conectado e webhook de respostas ativado.' : `Configuração salva, mas o WhatsApp está “${st}”. Leia o QR code em “Aparelho conectado”.`;
     if (st !== 'open') type = 'warn';
   } catch (e) { msg = `Configuração salva, mas não foi possível falar com a Evolution: ${e.message}`; type = 'err'; }
   res.flash(msg, type).redirect('/configuracoes/whatsapp');
@@ -192,7 +198,7 @@ admin.post('/instancia', async (req, res) => {
     const list = await W.listInstances(c);
     if (!list.some((i) => i.name === name)) return res.flash('Instância não encontrada na Evolution.', 'err') && back(res);
     const n = await W.saveConfig({ instance: name });
-    await W.setWebhook(n, `${base(req)}/webhooks/whatsapp/${n.webhookSecret}`).catch(() => {});
+    await W.setWebhook(n, hookOf(req, n)).catch(() => {});
     await audit(req, 'whatsapp-configurar', `instância ${name}`);
     res.flash(`Instância “${name}” selecionada.`);
   } catch (e) { res.flash(`Falha ao falar com a Evolution: ${e.message}`, 'err'); }
@@ -209,10 +215,16 @@ admin.post('/instancia/nova', async (req, res) => {
     if (list.some((i) => i.name.toLowerCase() === name.toLowerCase())) { res.flash('Já existe uma instância com esse nome.', 'err'); return back(res); }
     await W.createInstance(c, name);
     const n = await W.saveConfig({ instance: name });
-    await W.setWebhook(n, `${base(req)}/webhooks/whatsapp/${n.webhookSecret}`).catch(() => {});
+    await W.setWebhook(n, hookOf(req, n)).catch(() => {});
     await audit(req, 'whatsapp-configurar', `nova instância ${name}`);
     res.flash(`Instância “${name}” criada. Agora leia o QR code com o celular.`);
   } catch (e) { res.flash(`Não foi possível criar a instância: ${e.message}`, 'err'); }
+  back(res);
+});
+
+admin.post('/gerenciada', async (req, res) => {
+  try { const r = await Evolution.provision(Tenancy.current()); if (!r.ok) throw new Error(r.reason); await audit(req, 'whatsapp-configurar', `instância Mentez ${r.instance}`); res.flash('Pronto! Agora leia o QR code com o celular da clínica.'); }
+  catch (e) { res.flash(`Não foi possível preparar o WhatsApp: ${e.message}`, 'err'); }
   back(res);
 });
 

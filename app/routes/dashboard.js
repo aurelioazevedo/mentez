@@ -1,4 +1,5 @@
 import { q, one } from '../lib/db.js';
+import * as Tenancy from '../lib/tenancy.js';
 import { page, html, money, badge, brDate, label, initials, icon } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
 import { todayLocal, addDays, startOfWeek, addMonths, isYm } from '../lib/time.js';
@@ -6,6 +7,8 @@ import { can, patientScope, homeFor, proName } from '../lib/perm.js';
 import * as SC from '../lib/schedule.js';
 import { lineChart, barChart, fmtMoney, fmtMoneyShort } from '../lib/charts.js';
 import { forUser as notesFor } from '../lib/notes.js';
+import * as W from '../lib/whatsapp.js';
+import * as Evolution from '../lib/evolution.js';
 
 const r = router();
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -113,12 +116,32 @@ r.get('/', async (req, res) => {
   const tabs = (id) => html`<div class="seg" role="tablist" data-seg="${id}">${[['semana', 'Semana'], ['mes', 'Mês'], ['ano', 'Ano']].map(([k, l], i) => html`<button type="button" role="tab" data-seg-k="${k}" class="${i === 0 ? 'on' : ''}" aria-selected="${i === 0 ? 'true' : 'false'}">${l}</button>`)}</div>`;
   const panes = (id, s, fn, opts) => html`${['semana', 'mes', 'ano'].map((k, i) => html`<div class="seg-pane" data-seg-pane="${id}:${k}" ${i ? 'hidden' : ''}>${fn(s[k], opts)}</div>`)}`;
 
+  // Mentez: WhatsApp da clínica ainda não conectado → QR code aqui mesmo (só para quem administra)
+  let waCard = '';
+  if (Evolution.enabled() && can(u, 'usuarios')) {
+    const wc = await W.config().catch(() => null);
+    const st = wc?.managed ? await W.connectionState(wc, true).catch(() => 'erro') : null;
+    if (wc?.managed && st !== 'open') waCard = html`<section class="card wa-device dash-wa"><div class="wa-dev-grid">
+      <div class="stack"><h2>Conecte o WhatsApp da clínica</h2>
+        <p class="muted small">Com o WhatsApp conectado, o sistema envia lembretes, confirmações e cobranças aos pacientes, e o atendente virtual pode responder.</p>
+        <ol class="wa-steps small"><li>Abra o WhatsApp no celular da clínica.</li><li>Toque em <b>⋮ Mais opções</b> (Android) ou <b>Configurações</b> (iPhone) → <b>Dispositivos conectados</b> → <b>Conectar dispositivo</b>.</li><li>Aponte a câmera para o QR code ao lado.</li></ol>
+        <form class="inline wa-pair" data-wa-pair><input name="numero" inputmode="tel" placeholder="ou conecte pelo número: (62) 9 0000-0000"><button class="btn ghost" type="submit">Gerar código</button></form>
+        <p class="small"><a class="link" href="/configuracoes/whatsapp">Mais opções do WhatsApp</a></p></div>
+      <div class="wa-qr" data-wa-qr data-state="${st === 'close' || st === 'connecting' ? st : ''}">
+        <div class="wa-qr-box"><img alt="QR code para conectar o WhatsApp" hidden><span class="wa-qr-msg muted small">Clique para gerar o QR code</span></div>
+        <p class="wa-code" hidden></p>
+        <button class="btn" type="button" data-wa-qr-btn>Gerar QR code</button>
+        <small class="muted wa-qr-hint">O QR code se renova sozinho; a página atualiza quando conectar.</small></div>
+    </div></section>`;
+    else if (!wc) Evolution.provisionLater(Tenancy.current(), 'painel-clinica'); // clínica antiga sem instância: prepara agora
+  }
   send(res, page(req, {
     title: 'Início', active: 'home',
     body: html`
     <header class="ph dash-h"><div><h1>Dashboard</h1><p class="muted">Bem-vind${u.title === 'Dr.' ? 'o' : 'a'} de volta, ${u.name.split(' ')[0]}! Veja o que acontece hoje.</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/agenda/nova">${icon('agenda')} Nova sessão</a>${can(u, 'cadastro') ? html`<a class="btn" href="/pacientes/novo">${icon('pacientes')} Cadastrar paciente</a>` : ''}</div></header>
 
+    ${waCard}
     <div class="dash">
       <div class="dash-main">
         <section class="kpis dash-kpis">${kpis.map((k) => html`<a class="kpi" href="${k.href}"><span>${k.label}</span><div class="kpi-v"><b>${k.value}</b>${k.trend}</div><small>${k.sub}</small></a>`)}</section>

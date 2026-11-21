@@ -5,10 +5,12 @@ services:
     image: mentez-app:latest
     pull_policy: never
     restart: "no"
-    env_file: /opt/mentez/.env
+    env_file: [/opt/mentez/.env, /opt/mentez/evolution.env]
     environment:
       MENTEZ_DB_HOST: db
       MENTEZ_DB_PORT: "3306"
+      MENTEZ_EVOLUTION_URL: http://evolution:8080
+      MENTEZ_INTERNAL_URL: http://app:3000
     networks: [mentez]
     entrypoint: ["sh", "-c"]
     command:

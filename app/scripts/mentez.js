@@ -9,6 +9,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import * as T from '../lib/tenancy.js';
+import * as Evolution from '../lib/evolution.js';
 import { migrate, q, one } from '../lib/db.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -27,6 +28,11 @@ try {
     const t = await T.createTenant({ slug, name, ownerEmail: flag('email') || null, ownerName: flag('nome') || null });
     await T.run(t, () => migrate());
     console.log(`Clínica criada: ${t.name} → ${t.env.PUBLIC_URL} (banco ${t.db_name})`);
+    if (Evolution.enabled()) { const r = await T.run(t, () => Evolution.provision(t)).catch((e) => ({ ok: false, reason: e.message })); console.log(r.ok ? `WhatsApp: instância ${r.instance}` : `WhatsApp: ${r.reason}`); }
+  } else if (cmd === 'whatsapp') {
+    // Cria a instância do WhatsApp na Evolution da Mentez para clínicas que ainda não têm (ou só para uma)
+    const list = args[0] ? [await T.bySlug(args[0])].filter(Boolean) : await T.active();
+    for (const t of list) { const r = await T.run(t, () => Evolution.provision(t, { force: !!flag('forcar') })).catch((e) => ({ ok: false, reason: e.message })); console.log(`${t.slug}\t${r.ok ? `${r.instance}${r.created ? ' (criada)' : ''}` : r.reason}`); }
   } else if (cmd === 'admin') {
     const [slug, name, email] = args; if (!slug || !name || !email) die('Uso: admin <endereco> "<Nome>" <email>');
     const t = await T.bySlug(slug); if (!t) die('Clínica não encontrada.');

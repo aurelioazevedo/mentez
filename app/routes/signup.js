@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import * as T from '../lib/tenancy.js';
+import * as Evolution from '../lib/evolution.js';
 import * as Billing from '../lib/billing.js';
 import * as Brand from '../lib/brand.js';
 import { q, one, migrate, audit } from '../lib/db.js';
@@ -93,6 +94,7 @@ export function mount(r, layout) {
       return r2.insertId;
     });
     await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', [d.email, 'cadastro-teste', t.id, `${d.slug} · CRP ${d.crp}`]);
+    Evolution.provisionLater(t, `cadastro:${d.email}`); // instância do WhatsApp: a clínica lê o QR code no primeiro acesso
     const scheme = req.protocol === 'http' && process.env.NODE_ENV !== 'production' ? 'http' : 'https';
     const host = new URL(t.env.PUBLIC_URL).host + (scheme === 'http' && req.get('host')?.includes(':') ? `:${req.get('host').split(':')[1]}` : '');
     res.redirect(`${scheme}://${host}/_mentez/entrar?t=${encodeURIComponent(loginToken(t.slug, uid))}`);

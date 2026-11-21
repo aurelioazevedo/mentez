@@ -22,6 +22,14 @@ services:
         else
           git clone --depth 1 --branch main git@github.com:aurelioazevedo/mentez.git /opt/mentez/src
         fi
+        # chaves da Evolution (WhatsApp), geradas uma vez aqui no servidor; nunca passam pelo Git nem pela API
+        if [ ! -f /opt/mentez/evolution.env ]; then
+          K=$$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40)
+          P=$$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)
+          umask 077
+          printf 'AUTHENTICATION_API_KEY=%s\nPOSTGRES_PASSWORD=%s\nDATABASE_CONNECTION_URI=postgresql://evolution:%s@evodb:5432/evolution?schema=public\n' "$$K" "$$P" "$$P" > /opt/mentez/evolution.env
+          echo "EVOLUTION: chaves criadas"
+        fi
         REV=$$(git -C /opt/mentez/src log -1 --format='%h')
         echo "SYNC: $$REV $$(git -C /opt/mentez/src log -1 --format='%s')"
         docker build -q -t mentez-app:latest -t mentez-app:$$REV /opt/mentez/src/app

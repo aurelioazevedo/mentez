@@ -111,16 +111,25 @@ app.get('/_mentez/tls', (req, res, next) => {
   Tenancy.allowCertificate(req.query.domain).then((ok) => res.sendStatus(ok ? 200 : 404), () => res.sendStatus(404));
 });
 app.get('/_mentez/saude', (_req, res) => res.json({ ok: true })); // verificação do contêiner
+// Chamadas internas da Evolution (rede do Docker): /_mentez/t/<clínica>/webhooks/... → a clínica pelo caminho,
+// porque o Host interno (app:3000) não identifica a clínica. Só sem passar pelo proxy (sem X-Forwarded-For).
+app.use((req, res, next) => {
+  const m = /^\/_mentez\/t\/([a-z0-9-]{3,40})(\/webhooks\/.*)$/.exec(req.url);
+  if (!m) return next();
+  if (!Tenancy.multi() || req.get('x-forwarded-for')) return res.sendStatus(404);
+  req.mzSlug = m[1]; req.url = m[2];
+  next();
+});
 app.use(async (req, res, next) => {
   if (!Tenancy.multi()) return next();
   const host = String(req.hostname || '').toLowerCase();
   if (Tenancy.platformHosts().has(host)) return Platform.handle(req, res, next);
   let t = null;
-  try { t = await Tenancy.byHost(host); } catch (e) { return next(e); }
+  try { t = req.mzSlug ? await Tenancy.bySlug(req.mzSlug) : await Tenancy.byHost(host); } catch (e) { return next(e); }
   if (!t) return res.status(404).send(String(bare('Clínica não encontrada', html`<div class="center-card"><h1>Endereço não encontrado</h1><p>Não há nenhuma clínica neste endereço. Confira o link recebido.</p></div>`)));
   if (t.status !== 'ativa') return res.status(403).send(String(bare('Acesso suspenso', html`<div class="center-card"><h1>Acesso temporariamente suspenso</h1><p>O acesso a esta clínica está suspenso. Fale com a administração da clínica.</p></div>`)));
   // domínio próprio só nos planos com personalização; fora deles, volta ao endereço da Mentez
-  if (!Tenancy.slugOfHost(host) && !(await Brand.canCustomize(t).catch(() => true))) return res.redirect(302, `https://${t.slug}.${Tenancy.baseDomain()}${req.originalUrl}`);
+  if (!req.mzSlug && !Tenancy.slugOfHost(host) && !(await Brand.canCustomize(t).catch(() => true))) return res.redirect(302, `https://${t.slug}.${Tenancy.baseDomain()}${req.originalUrl}`);
   Tenancy.run(t, next); // tudo o que vem depois (banco, chaves, caches) é desta clínica
 });
 app.use(Brand.middleware); // identidade da clínica (nome, logo, cores) disponível para todas as páginas
