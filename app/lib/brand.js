@@ -76,7 +76,7 @@ export async function load(force = false) {
     name: fin.name || pick('name', base.name), city: fin.city || pick('city', base.city), phone: fin.phone || pick('phone', base.phone),
     email: fin.email || pick('email', base.email), address: fin.address || pick('address', base.address),
   };
-  for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'symbol', 'symbolDark', 'favicon', 'photo', 'appName']) b[k] = pick(k, b[k]);
+  for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'symbol', 'symbolDark', 'favicon', 'photo', 'photoOrig', 'appName']) b[k] = pick(k, b[k]);
   b.colors = Array.isArray(saved.colors) ? saved.colors : [];
   b.style = saved.style || '';
   b.custom = await canCustomize();
@@ -116,6 +116,7 @@ export const ASSETS = {
   'simbolo-escuro': { setting: 'brand_symbol_dark', field: 'symbolDark', label: 'símbolo para fundo escuro' },
   favicon: { setting: 'brand_favicon', field: 'favicon', label: 'favicon' },
   foto: { setting: 'brand_photo', field: 'photo', label: 'foto do profissional' }, // cartão digital e link na bio
+  'foto-original': { setting: 'brand_photo_orig', field: 'photoOrig', label: 'foto original' }, // para reenquadrar depois (não é pública)
 };
 const asset = (kind) => ASSETS[kind] || ASSETS.claro;
 export async function saveLogo(kind, buf, mime) {

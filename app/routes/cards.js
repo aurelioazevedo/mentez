@@ -181,12 +181,17 @@ pub.get('/links/ir/:i', async (req, res) => {
 export const admin = router();
 const ck = (v) => (v ? raw('checked') : '');
 const tabsOf = (on) => html`<nav class="tabs"><a href="/marketing">Reativação de pacientes</a><a href="/marketing/aniversarios">Aniversários</a><a href="/marketing/cartao" class="${on === 'cartao' ? 'on' : ''}">Cartão digital</a><a href="/marketing/links" class="${on === 'links' ? 'on' : ''}">Link na bio</a></nav>`;
-const photoCard = (b) => html`<section class="card brand-logos"><h2>Foto</h2><p class="muted small">Aparece no cartão digital, no link na bio e no contato salvo no celular. Envie uma foto de rosto; o sistema recorta em quadrado.</p>
-  <form method="post" action="/marketing/foto" class="brand-logo bl-retrato" data-logo-form data-logo-kind="retrato">
-    <div class="brand-logo-prev">${b.photoUrl ? html`<img src="${b.photoUrl}" alt="Foto atual" class="mk-photo">` : html`<span class="muted small">Sem foto: aparecem as iniciais</span>`}</div>
-    <label class="btn ghost btn-sm">${b.photoUrl ? 'Trocar foto' : 'Escolher foto'}<input type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" data-logo-file hidden></label>
-    <p class="small" data-logo-msg role="status"></p>
-    ${b.photoUrl ? html`<button class="btn ghost btn-sm danger-text" formaction="/marketing/foto/remover">Remover</button>` : ''}</form></section>`;
+const photoCard = (b) => html`<section class="card brand-logos"><h2>Foto</h2><p class="muted small">Aparece no cartão digital, no link na bio e no contato salvo no celular. Ao escolher, você ajusta o enquadramento: arraste, aproxime e gire (JPG, PNG ou WebP até 10 MB). O tamanho em que ela aparece em cada página é ajustado mais abaixo.</p>
+  <div class="photo-card mk-photo-card">
+    <div class="photo-prev">${b.photoUrl ? html`<img src="${b.photoUrl}" alt="Foto atual" class="mk-photo">` : html`<span class="muted small">Sem foto: aparecem as iniciais</span>`}</div>
+    <div class="photo-body">
+      <form class="photo-actions" data-photo-form data-photo-upload="/marketing/foto" data-photo-original="/marketing/foto/original">
+        <label class="btn ghost btn-sm">${b.photoUrl ? 'Trocar foto' : 'Escolher foto'}<input type="file" accept="image/jpeg,image/png,image/webp" data-photo-file hidden></label>
+        ${b.photoUrl ? html`<button class="btn ghost btn-sm" type="button" data-photo-reframe="${b.photoOrig ? `/marketing/foto/original?v=${b.photoOrig}` : b.photoUrl}">Reenquadrar foto atual</button>` : ''}
+      </form>
+      ${b.photoUrl ? html`<form method="post" action="/marketing/foto/remover" data-confirm="Remover a foto?"><button class="btn ghost btn-sm danger-text">Remover</button></form>` : ''}
+    </div>
+  </div></section>`;
 const shareCard = (path, label, st) => { const url = `${Cards.base()}${path}`; return html`<section class="card mk-share"><h2>${label}</h2>
   <div class="mk-share-grid"><img src="${path}/qr.svg" alt="QR code de ${url}" class="mk-qr" width="140" height="140">
     <div class="stack"><div class="copy"><input readonly value="${url}" id="mk-url-${path.slice(1)}"><button class="btn ghost" type="button" data-copy="#mk-url-${path.slice(1)}">Copiar</button></div>
@@ -256,4 +261,13 @@ admin.post('/foto', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'
   try { await Brand.saveLogo('foto', Buffer.isBuffer(req.body) ? req.body : null, String(req.get('content-type') || '').split(';')[0]); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   await audit(req, 'marketing-foto'); res.json({ ok: true });
 });
-admin.post('/foto/remover', async (req, res) => { await Brand.removeLogo('foto'); await audit(req, 'marketing-foto-remover'); res.flash('Foto removida.').redirect(req.get('referer')?.includes('/marketing/links') ? '/marketing/links' : '/marketing/cartao'); });
+admin.post('/foto/original', express.raw({ type: ['image/jpeg'], limit: '2200kb' }), async (req, res) => {
+  try { await Brand.saveLogo('foto-original', Buffer.isBuffer(req.body) ? req.body : null, 'image/jpeg'); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  res.json({ ok: true });
+});
+admin.get('/foto/original', async (req, res) => {
+  const f = await Brand.logoFile('foto-original') || await Brand.logoFile('foto');
+  if (!f) return res.sendStatus(404);
+  res.set('Cache-Control', 'private, max-age=300').type(f.mime).send(f.buf);
+});
+admin.post('/foto/remover', async (req, res) => { await Brand.removeLogo('foto'); await Brand.removeLogo('foto-original'); await audit(req, 'marketing-foto-remover'); res.flash('Foto removida.').redirect(req.get('referer')?.includes('/marketing/links') ? '/marketing/links' : '/marketing/cartao'); });

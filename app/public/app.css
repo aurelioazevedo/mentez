@@ -2521,3 +2521,6 @@ a.mz2-me{text-decoration:none;color:inherit}
 .fe[data-type=scale] .fe-scale { display: grid; }
 .fe[data-type=checks] .fe-checks { display: grid; }
 .fe[data-type=table] .fe-table { display: grid; gap: 8px; }
+.mk-photo-card .photo-prev img.mk-photo{width:112px;height:112px;border-radius:50%;object-fit:cover;display:block}
+.mk-photo-card .photo-prev{flex:none;min-width:112px;display:flex;justify-content:center}
+@media (max-width:560px){.mk-photo-card{flex-direction:column;align-items:flex-start}}

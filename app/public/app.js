@@ -441,10 +441,10 @@ function initPage() {
     if (box.dataset.state === 'connecting' || box.dataset.state === 'close') start();
   })();
 
-  // ---------- Foto do perfil: editor para reenquadrar (arrastar, zoom, girar) antes de salvar ----------
-  (() => {
-    const form = document.querySelector('[data-photo-form]');
-    if (!form) return;
+  // ---------- Foto do perfil e foto do cartão/link na bio: editor para reenquadrar (arrastar, zoom, girar) antes de salvar ----------
+  // data-photo-upload: envia o recorte (JPEG) por fetch para esse endereço; sem ele, preenche o campo “photo” e envia o formulário.
+  // data-photo-original: onde guardar a imagem original para reenquadrar depois (padrão: /conta/foto/original).
+  document.querySelectorAll('[data-photo-form]').forEach((form) => {
     const file = form.querySelector('[data-photo-file]');
     const reframe = form.querySelector('[data-photo-reframe]');
     const load = (src, isNew) => { const img = new Image(); img.onload = () => editor(img, isNew); img.onerror = () => alert('Não foi possível abrir essa imagem.'); img.src = src; };
@@ -496,8 +496,8 @@ function initPage() {
       dlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(); });
       dlg.querySelector('[data-ok]').addEventListener('click', async () => {
         const ok = dlg.querySelector('[data-ok]'); ok.disabled = true; ok.textContent = 'Salvando…';
-        // recorte 320×320 conforme o enquadramento
-        const S = 320; const k = S / V;
+        // recorte quadrado conforme o enquadramento (320 px no perfil; 640 px no cartão e link na bio)
+        const S = form.dataset.photoUpload ? 640 : 320; const k = S / V;
         const cv = document.createElement('canvas'); cv.width = S; cv.height = S; const ctx = cv.getContext('2d');
         ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, S, S); ctx.imageSmoothingQuality = 'high';
         ctx.translate(S / 2 + st.x * k, S / 2 + st.y * k); ctx.rotate((st.r * Math.PI) / 180); ctx.scale(scale() * k, scale() * k);
@@ -510,15 +510,22 @@ function initPage() {
             const oc = document.createElement('canvas'); oc.width = Math.round(img.naturalWidth * f); oc.height = Math.round(img.naturalHeight * f);
             const octx = oc.getContext('2d'); octx.fillStyle = '#fff'; octx.fillRect(0, 0, oc.width, oc.height); octx.drawImage(img, 0, 0, oc.width, oc.height);
             const blob = await new Promise((r) => oc.toBlob(r, 'image/jpeg', 0.85));
-            if (blob) await fetch('/conta/foto/original', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+            if (blob) await fetch(form.dataset.photoOriginal || '/conta/foto/original', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
           }
         } catch { /* o original é opcional; o recorte segue */ }
+        if (form.dataset.photoUpload) {
+          const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.88));
+          const r = blob && await fetch(form.dataset.photoUpload, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg', Accept: 'application/json' }, body: blob }).catch(() => null);
+          const d = r ? await r.json().catch(() => ({})) : {};
+          if (!r || !r.ok || !d.ok) { alert(`Não foi possível salvar a foto${d.error ? `: ${d.error}` : '.'}`); ok.disabled = false; ok.textContent = 'Salvar foto'; return; }
+          done(); location.reload(); return;
+        }
         form.photo.value = data;
         done(); form.submit();
       });
       view.focus();
     }
-  })();
+  });
 
   // ---------- Dashboard: abas Semana/Mês/Ano e dica dos gráficos ----------
   document.querySelectorAll('[data-seg]').forEach((seg) => {
