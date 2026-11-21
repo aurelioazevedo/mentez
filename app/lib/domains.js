@@ -92,20 +92,36 @@ export async function zoneOf(domain) {
   return { zone, ns: [], host: parts.length > n ? parts.slice(0, -n).join('.') : '@', provider: 'outro', providerName: '' };
 }
 
-// Confere o DNS de um domínio: { ok, a, aaaa, cname, problems[], zone, host, provider, providerName, expected }
-export async function inspect(domain) {
+// IPs da Cloudflare: aparecem quando o registro está com o proxy ligado (nuvem laranja)
+const CF4 = ['173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22'];
+const ip4 = (ip) => ip.split('.').reduce((n, o) => (n << 8) + Number(o), 0) >>> 0;
+const in4 = (ip, cidr) => { const [base, bits] = cidr.split('/'); const m = bits === '0' ? 0 : (~0 << (32 - Number(bits))) >>> 0; return (ip4(ip) & m) === (ip4(base) & m); };
+export const isCloudflare = (ip) => (ip.includes(':') ? /^(2606:4700|2803:f800|2405:b500|2405:8100|2a06:98c|2c0f:f248):?/i.test(ip) : CF4.some((c) => in4(ip, c)));
+
+// Confere o DNS de um domínio. Vale registro A (IP do servidor) ou CNAME para <clinica>.mentez.com.br.
+// Retorna { ok, a, aaaa, cname, problems[], zone, host, provider, providerName, expected, via, proxied }
+export async function inspect(domain, slug = '') {
   const [ips, z, a, aaaa, cname] = await Promise.all([serverIps(), zoneOf(domain), safe(q('A', domain)), safe(q('AAAA', domain)), safe(q('CNAME', domain))]);
   const problems = [];
   const v4 = ips.v4[0] || '';
-  if (!a.length) problems.push(cname.length ? `O endereço tem um registro CNAME (${cname[0]}) que não leva ao servidor da Mentez. Apague o CNAME e crie o registro A.` : 'Ainda não encontramos o registro A. Se acabou de criar, aguarde alguns minutos (pode levar até algumas horas).');
-  else {
+  const base = T.baseDomain();
+  const target = slug ? `${slug}.${base}` : `app.${base}`;
+  const cn = String(cname[0] || '').replace(/\.$/, '').toLowerCase();
+  const cnameOurs = cn && (cn === base || cn.endsWith(`.${base}`));
+  const proxied = (a.length && a.every(isCloudflare)) || (aaaa.length && aaaa.every(isCloudflare));
+  if (proxied) {
+    problems.push('O registro está com o proxy da Cloudflare ligado (nuvem laranja), por isso o endereço aparece com os IPs da Cloudflare. Na Cloudflare, clique em Editar no registro, mude o “Status do proxy” para “Somente DNS” (nuvem cinza) e salve.');
+  } else if (!a.length) {
+    problems.push(cn && !cnameOurs ? `O endereço tem um registro CNAME para ${cn}, que não é da Mentez. Troque o destino para ${target} (ou apague o CNAME e crie o registro A para ${v4}).` : 'Ainda não encontramos o registro. Se acabou de criar, aguarde alguns minutos (pode levar até algumas horas).');
+  } else {
     const wrong = a.filter((x) => !ips.v4.includes(x));
-    if (wrong.length === a.length) problems.push(`O registro A aponta para ${wrong.join(', ')}. Troque o valor para ${v4}.`);
+    if (cn && !cnameOurs && wrong.length) problems.push(`O CNAME aponta para ${cn}, que não é da Mentez. Troque o destino para ${target}.`);
+    else if (wrong.length === a.length) problems.push(`O registro A aponta para ${wrong.join(', ')}. Troque o valor para ${v4} (ou use um CNAME para ${target}).`);
     else if (wrong.length) problems.push(`Há mais de um registro A para este endereço (${wrong.join(', ')}). Apague os outros e deixe só ${v4}.`);
   }
-  const wrong6 = aaaa.filter((x) => !ips.v6.includes(x));
+  const wrong6 = proxied ? [] : aaaa.filter((x) => !ips.v6.includes(x));
   if (wrong6.length) problems.push(`Existe um registro AAAA (IPv6) apontando para outro servidor (${wrong6.join(', ')}). Apague esse registro AAAA.`);
-  return { ok: !!a.length && !problems.length, a, aaaa, cname, problems, expected: { v4, v6: ips.v6[0] || '' }, ...z };
+  return { ok: !!a.length && !problems.length, a, aaaa, cname, problems, proxied: !!proxied, via: cnameOurs ? 'cname' : 'a', target, expected: { v4, v6: ips.v6[0] || '' }, ...z };
 }
 
 // HTTPS respondendo pela Mentez (o primeiro acesso também faz o Caddy emitir o certificado)
@@ -134,7 +150,8 @@ export function _setHttpsProbe(fn) { httpsProbe = fn; }
 export async function check(domain, tenantId = null) {
   const row = await T.pone(`SELECT * FROM tenant_domains WHERE domain = ?${tenantId ? ' AND tenant_id = ?' : ''}`, tenantId ? [domain, tenantId] : [domain]);
   if (!row) throw new Error('Domínio não encontrado.');
-  const r = await inspect(domain);
+  const t = await T.pone('SELECT slug FROM tenants WHERE id = ?', [row.tenant_id]);
+  const r = await inspect(domain, t?.slug || '');
   let note = r.ok ? '' : r.problems.join(' ');
   if (r.ok && !row.verified_at) { await T.pq('UPDATE tenant_domains SET verified_at = NOW() WHERE domain = ?', [domain]); T.clearCache(); }
   let https = !!row.https_at;
