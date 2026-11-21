@@ -127,9 +127,9 @@ export async function confirmations(f, r) {
 export const VIA = { sistema: 'Equipe (sistema)', agente: 'Atendente virtual (WhatsApp)', online: 'Agendamento online (site)', lista_espera: 'Lista de espera' };
 export async function originOfBookings(f, r) {
   const s = scopeA(f); const [a, b] = dt(r);
-  const rows = await q(`SELECT a.created_via v, COUNT(*) n, AVG(GREATEST(0, DATEDIFF(a.starts_at, a.created_at))) lead FROM appointments a JOIN patients p ON p.id = a.patient_id
+  const rows = await q(`SELECT a.created_via v, COUNT(*) n, AVG(GREATEST(0, DATEDIFF(a.starts_at, a.created_at))) lead_days FROM appointments a JOIN patients p ON p.id = a.patient_id
     WHERE a.created_at >= ? AND a.created_at < ? ${s.sql} GROUP BY v ORDER BY n DESC`, [a, b, ...s.p]);
-  return rows.map((x) => ({ key: x.v, label: VIA[x.v] || x.v, n: num(x.n), lead: Number(x.lead || 0) }));
+  return rows.map((x) => ({ key: x.v, label: VIA[x.v] || x.v, n: num(x.n), lead: Number(x.lead_days || 0) }));
 }
 export async function modalitySplit(f, r) {
   const s = scopeA(f); const [a, b] = dt(r);

@@ -68,7 +68,8 @@ function connConfig(database) {
 export const connConfigFor = (database) => connConfig(database);
 function makePool(database, limit) {
   const p = mysql.createPool({ ...connConfig(database), waitForConnections: true, connectionLimit: limit, maxIdle: 2, idleTimeout: 60000, charset: 'utf8mb4', timezone: 'Z', dateStrings: true });
-  p.pool.on('connection', (conn) => conn.query("SET time_zone = '-03:00'"));
+  // mesmo modo SQL do MariaDB em que o sistema foi escrito (o MySQL 8 liga ONLY_FULL_GROUP_BY por padrão)
+  p.pool.on('connection', (conn) => { conn.query("SET time_zone = '-03:00'"); conn.query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"); });
   return p;
 }
 export function platform() { if (!ppool) ppool = makePool(process.env.MENTEZ_PLATFORM_DB, 4); return ppool; }
