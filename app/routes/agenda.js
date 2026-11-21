@@ -2,8 +2,9 @@ import * as Brand from '../lib/brand.js';
 import express from 'express';
 import * as Notify from '../lib/notify.js';
 import { apptCard as notifyCard } from './notify.js';
-import { q, one, audit } from '../lib/db.js';
-import { page, agendaTabs, html, raw, badge, brDate, brDateTime, label, weekday, waLink, money } from '../lib/html.js';
+import { q, one, audit, getSetting, setSetting } from '../lib/db.js';
+import { encrypt, decrypt } from '../lib/crypto.js';
+import { page, agendaTabs, html, raw, badge, brDate, brDateTime, label, weekday, waLink, money, initials } from '../lib/html.js';
 import { router, send, int, str } from '../lib/router.js';
 import { syncAppointment, syncLater, googleBusy, busyBlocks } from '../lib/google.js';
 import * as WA from '../lib/whatsapp.js';
@@ -65,7 +66,8 @@ async function loadRange(req, start, end, profSel = null) {
   const sc = profSel && !ownOnly(req.user) ? { sql: `${sc0.sql} AND p.owner_id = ? `, params: [...sc0.params, profSel] } : sc0;
   const rows = await q(`SELECT a.*, p.name, p.social_name, p.phone, p.owner_id, p.whatsapp_optin, u.name prof,
       (SELECT x.id FROM payments x WHERE x.appointment_id = a.id ORDER BY x.id DESC LIMIT 1) pay_id,
-      (SELECT x.paid_at IS NOT NULL FROM payments x WHERE x.appointment_id = a.id ORDER BY x.id DESC LIMIT 1) pay_paid FROM appointments a JOIN patients p ON p.id = a.patient_id LEFT JOIN users u ON u.id = p.owner_id
+      (SELECT x.paid_at IS NOT NULL FROM payments x WHERE x.appointment_id = a.id ORDER BY x.id DESC LIMIT 1) pay_paid,
+      (SELECT COUNT(*) FROM appointments z WHERE z.patient_id = a.patient_id AND z.starts_at < a.starts_at AND z.status <> 'cancelada') prev_n FROM appointments a JOIN patients p ON p.id = a.patient_id LEFT JOIN users u ON u.id = p.owner_id
     WHERE a.starts_at >= ? AND a.starts_at < ? ${sc.sql} ORDER BY a.starts_at`, [start, end, ...sc.params]);
   const allPros = ownOnly(req.user) ? [{ id: req.user.id, name: req.user.name, title: req.user.title }] : await q("SELECT id, name, title FROM users WHERE active = 1 AND role IN ('admin','psicologo') AND attends = 1 ORDER BY name");
   const pros = profSel && !ownOnly(req.user) ? allPros.filter((u) => u.id === profSel) : allPros;
@@ -129,7 +131,8 @@ function dayGrid(d, ctxIn, today, opts = {}) {
   from = Math.floor(from / 60) * 60; to = Math.ceil(to / 60) * 60;
   if (opts.range) [from, to] = opts.range; // colunas alinhadas no mesmo intervalo
   if (opts.rangeOnly) return [from, to];
-  const PX = 1.4; // pixels por minuto
+  const PX = opts.px || 1.4; // pixels por minuto
+  const L = opts.week ? 3 : 56; const W = opts.week ? 6 : 60; // margem esquerda e sobra (a semana não repete as horas)
   // colunas para sessões sobrepostas
   const lanes = []; const place = list.map((a) => {
     const s = mins(a.starts_at.slice(11, 16)); const e = s + a.duration_min;
@@ -143,11 +146,70 @@ function dayGrid(d, ctxIn, today, opts = {}) {
     ${work.map((w) => html`<div class="dg-work" style="top:${w.top}px;height:${w.h}px" title="Horário de atendimento"></div>`)}
     ${Array.from({ length: (to - from) / 60 + 1 }, (_, i) => html`<div class="dg-hour" style="top:${i * 60 * PX}px"><span>${hhmm(from + i * 60)}</span></div>`)}
     ${busy.map(({ b, s, e }) => html`<div class="dg-busy" style="top:${(s - from) * PX}px;height:${Math.max(18, (e - s) * PX - 2)}px" title="Compromisso na Google Agenda${b.prof ? ` de ${b.prof}` : ''} (detalhes ocultos)"><span>${hhmm(s)}–${hhmm(e)} · Ocupado (Google)${b.prof ? ` · ${b.prof}` : ''}</span></div>`)}
-    ${place.map(({ a, s, e, lane }) => html`<a href="/agenda/${a.id}" class="dg-ev s-${a.status}" ${ctxData(a)} style="--pro:${proColor(a.owner_id)};top:${(s - from) * PX}px;height:${Math.max(24, (e - s) * PX - 2)}px;left:calc(56px + (100% - 60px) * ${lane / nLanes});width:calc((100% - 60px) / ${nLanes} - 4px)">
-      <b>${a.starts_at.slice(11, 16)}–${hhmm(e)}</b> <span>${nm(a)}</span><small>${label(a.modality)}${ctx.showProf && a.prof ? ` · ${a.prof.split(' ')[0]}` : ''}</small></a>`)}
+    ${place.map(({ a, s, e, lane }) => html`<a href="/agenda/${a.id}" class="dg-ev s-${a.status} ${opts.week ? 'wk-ev' : ''}" ${ctxData(a)} style="--pro:${opts.color ? opts.color(a) : proColor(a.owner_id)};top:${(s - from) * PX}px;height:${Math.max(24, (e - s) * PX - 2)}px;left:calc(${L}px + (100% - ${W}px) * ${lane / nLanes});width:calc((100% - ${W}px) / ${nLanes} - ${opts.week ? 2 : 4}px)" title="${a.starts_at.slice(11, 16)}–${hhmm(e)} · ${nm(a)} · ${label(a.modality)} · ${label(a.status)}">
+      <b>${a.starts_at.slice(11, 16)}–${hhmm(e)}</b> <span>${nm(a)}</span><small>${opts.week ? kindLabel(a) : label(a.modality)}${ctx.showProf && a.prof ? ` · ${a.prof.split(' ')[0]}` : ''}</small></a>`)}
     ${d === today && now >= from && now <= to ? html`<div class="dg-now" style="top:${(now - from) * PX}px" title="Agora"></div>` : ''}
   </div>`;
 }
+
+// =====================================================================
+// Agenda nova: pacientes ao lado, semana em grade de horas, ações no topo, resumo do dia
+// =====================================================================
+// Cores das sessões: por tipo de atendimento (padrão), por paciente ou por profissional
+const KIND_COLORS = { online: '#2F80ED', presencial: '#8065E8', primeira: '#E8A33D', convenio: '#16A37F' };
+const KIND_LABELS = { online: 'On-line', presencial: 'Presencial', primeira: 'Primeira sessão', convenio: 'Convênio' };
+const kindOf = (a) => (Number(a.prev_n) === 0 ? 'primeira' : a.plan_id ? 'convenio' : a.modality === 'online' ? 'online' : 'presencial');
+const kindLabel = (a) => KIND_LABELS[kindOf(a)];
+const PATIENT_COLORS = ['#2F80ED', '#8065E8', '#E8A33D', '#16A37F', '#D9488F', '#0EA5B7', '#C2410C', '#6D28D9', '#0F766E', '#B45309'];
+const colorFn = (mode) => (a) => (mode === 'paciente' ? PATIENT_COLORS[(Number(a.patient_id) * 7) % PATIENT_COLORS.length] : mode === 'profissional' ? proColor(a.owner_id) : KIND_COLORS[kindOf(a)]);
+const cookieOf = (req, name, re) => (new RegExp(`(?:^|;\\s*)${name}=(${re})(?:;|$)`).exec(req.headers.cookie || '') || [])[1];
+const DOW = ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.'];
+
+// Quando é a próxima sessão, em palavras (“hoje às 14h”, “amanhã às 9h”, “em 3 dias”)
+function nextText(at, today) {
+  if (!at) return 'Sem sessão marcada';
+  const d = at.slice(0, 10); const h = at.slice(11, 16).replace(':00', 'h').replace(':', 'h');
+  if (d === today) return `Hoje às ${h}`;
+  if (d === addDays(today, 1)) return `Amanhã às ${h}`;
+  const n = Math.round((Date.parse(`${d}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 864e5);
+  return n <= 7 ? `Em ${n} dias · ${DOW[SC.dow(d)]} ${h}` : `${brDate(d)} às ${h}`;
+}
+async function patientsPanel(req, profSel, filter) {
+  const sc = patientScope(req.user);
+  const extra = profSel && !ownOnly(req.user) ? ' AND p.owner_id = ? ' : ' ';
+  const rows = await q(`SELECT p.id, p.name, p.social_name, p.status, p.birth_date, p.owner_id,
+      (SELECT MIN(a.starts_at) FROM appointments a WHERE a.patient_id = p.id AND a.starts_at >= NOW() AND a.status IN ('agendada','confirmada')) next_at
+    FROM patients p WHERE p.demo = 0 ${filter === 'todos' ? '' : "AND p.status = 'ativo'"} ${sc.sql} ${extra} ORDER BY p.name LIMIT 400`, [...sc.params, ...(profSel && !ownOnly(req.user) ? [profSel] : [])]).catch(() => q(`SELECT p.id, p.name, p.social_name, p.status, p.birth_date, p.owner_id, NULL next_at FROM patients p WHERE 1 = 1 ${sc.sql} ORDER BY p.name LIMIT 400`, sc.params));
+  const active = Number((await one(`SELECT COUNT(*) n FROM patients p WHERE p.status = 'ativo' ${sc.sql} ${extra}`, [...sc.params, ...(profSel && !ownOnly(req.user) ? [profSel] : [])])).n);
+  return { rows, active };
+}
+const notesKey = (uid) => `notes_u${uid}`;
+async function myNotes(uid) { try { const v = await getSetting(notesKey(uid)); return v ? decrypt(v) : ''; } catch { return ''; } }
+
+function weekGrid(days, ctx, today, mode) {
+  const PX = 1.1;
+  const rs = days.map((d) => dayGrid(d, ctx, today, { rangeOnly: true }));
+  const range = [Math.min(7 * 60, ...rs.map((x) => x[0])), Math.max(19 * 60, ...rs.map((x) => x[1]))];
+  const hoursN = (range[1] - range[0]) / 60;
+  return html`<div class="wk" style="--days:${days.length}">
+    <div class="wk-head"><span class="wk-corner"></span>${days.map((d) => {
+      const n = ctx.rows.filter((a) => a.starts_at.slice(0, 10) === d && a.status !== 'cancelada').length;
+      const allDay = dayBusy(ctx, d).filter((b) => b.allDay);
+      return html`<a class="wk-dh ${d === today ? 'today' : ''}" href="/agenda?v=dia&d=${d}" title="Ver o dia"><small>${DOW[SC.dow(d)]}</small><b>${d.slice(8, 10)}/${d.slice(5, 7)}</b><em>${n ? `${n} sessão(ões)` : 'livre'}</em>
+        ${(ctx.offs[d] || []).length ? html`<span class="wk-off">${(ctx.offs[d] || []).map((o) => `${o.name ? `${o.name}: ` : ''}${o.text}`).join(' · ')}</span>` : ''}${allDay.length ? html`<span class="wk-off g">Google: dia todo</span>` : ''}</a>`;
+    })}</div>
+    <div class="wk-body">
+      <div class="wk-times" style="height:${(range[1] - range[0]) * PX}px">${Array.from({ length: hoursN + 1 }, (_, i) => html`<span style="top:${i * 60 * PX}px">${String(range[0] / 60 + i).padStart(2, '0')}h</span>`)}</div>
+      ${days.map((d) => html`<div class="wk-col ${d === today ? 'today' : ''} ${(ctx.offs[d] || []).length && (ctx.offIds[d]?.size || 0) >= ctx.pros.length ? 'off' : ''}">${dayGrid(d, ctx, today, { range, px: PX, week: true, color: colorFn(mode) })}</div>`)}
+    </div>
+  </div>`;
+}
+
+r.post('/notas', express.json({ limit: '64kb' }), async (req, res) => {
+  const text = String(req.body?.text ?? '').slice(0, 20000);
+  await setSetting(notesKey(req.user.id), text ? encrypt(text) : null);
+  res.json({ ok: true });
+});
 
 r.get('/', async (req, res) => {
   const legacyWeek = isYmd(req.query.semana) ? req.query.semana : null;
@@ -155,6 +217,12 @@ r.get('/', async (req, res) => {
   if (VIEWS.includes(req.query.v)) res.append('Set-Cookie', `agenda_v=${view}; Path=/; Max-Age=31536000; SameSite=Lax`);
   const today = todayLocal();
   const ref = isYmd(req.query.d) ? req.query.d : legacyWeek || today;
+  // visual: agenda nova (padrão) ou o anterior; cor das sessões: tipo (padrão), paciente ou profissional
+  if (['nova', 'classica'].includes(req.query.layout)) res.append('Set-Cookie', `agenda_layout=${req.query.layout}; Path=/; Max-Age=31536000; SameSite=Lax`);
+  const layout = ['nova', 'classica'].includes(req.query.layout) ? req.query.layout : cookieOf(req, 'agenda_layout', 'nova|classica') || 'nova';
+  if (['tipo', 'paciente', 'profissional'].includes(req.query.cor)) res.append('Set-Cookie', `agenda_cor=${req.query.cor}; Path=/; Max-Age=31536000; SameSite=Lax`);
+  const colorMode = ['tipo', 'paciente', 'profissional'].includes(req.query.cor) ? req.query.cor : cookieOf(req, 'agenda_cor', 'tipo|paciente|profissional') || 'tipo';
+  const ptFilter = req.query.pacientes === 'todos' ? 'todos' : 'ativos';
   const waOn = WA.ready(await WA.config());
   const url = (v, d) => `/agenda?v=${v}&d=${d}`;
   // Profissional selecionado (Todos ou um só); a escolha fica lembrada neste navegador
@@ -216,6 +284,9 @@ r.get('/', async (req, res) => {
         </div>`;
       })}
     </div>`;
+  } else if (layout === 'nova') {
+    const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+    body = html`<section class="card agx-cal">${weekGrid(days, ctx, today, colorMode)}</section>`;
   } else {
     const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
     body = html`<div class="week">
@@ -233,25 +304,100 @@ r.get('/', async (req, res) => {
     </div>`;
   }
 
+  const tabsAndPros = html`${agendaTabs('semana')}
+    ${!ownOnly(req.user) && ctx.allPros.length > 1 ? html`<nav class="ag-pros" aria-label="Agenda de">
+      <a href="/agenda?v=${view}&d=${ref}&prof=todos" class="${!profSel ? 'on' : ''}">Todos os profissionais</a>
+      ${ctx.allPros.map((u) => html`<a href="/agenda?v=${view}&d=${ref}&prof=${u.id}" class="${profSel === u.id ? 'on' : ''}"><i class="pro-dot" style="background:${proColor(u.id)}"></i>${proName(u)}</a>`)}</nav>` : ''}`;
+  const live = html`<div class="ag-live" ${ctx.pros.length > 1 ? raw('data-multi="1"') : ''} data-agenda data-view="${view}" data-back="${back}" data-wa="${waOn ? 1 : 0}" data-pront="${can(req.user, 'prontuario') ? 1 : 0}" data-fin="${can(req.user, 'financeiro') ? 1 : 0}">${body}</div>`;
+  const viewNav = html`<nav class="seg ag-views" aria-label="Visão da agenda">${[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']].map(([v, l]) => html`<a href="${url(v, ref)}" class="${view === v ? 'on' : ''}" ${view === v ? raw('aria-current="page"') : ''}>${l}</a>`)}</nav>`;
+
+  if (layout === 'nova') {
+    const sc = patientScope(req.user);
+    const [panel, notes, todayStats, gconn] = await Promise.all([
+      patientsPanel(req, profSel, ptFilter), myNotes(req.user.id),
+      one(`SELECT COUNT(*) n, SUM(a.status = 'confirmada' OR a.wa_reply = 'confirmou') conf, SUM(a.status = 'agendada' AND (a.wa_reply IS NULL OR a.wa_reply <> 'confirmou')) pend
+        FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.starts_at >= ? AND a.starts_at < ? AND a.status <> 'cancelada' ${sc.sql}${profSel && !ownOnly(req.user) ? ' AND p.owner_id = ?' : ''}`, [today, addDays(today, 1), ...sc.params, ...(profSel && !ownOnly(req.user) ? [profSel] : [])]),
+      one('SELECT google_refresh_enc IS NOT NULL g FROM users WHERE id = ?', [req.user.id]).then((x) => !!x?.g).catch(() => false),
+    ]);
+    const month = today.slice(5, 7);
+    const bdays = panel.rows.filter((p) => p.birth_date && String(p.birth_date).slice(5, 7) === month).length;
+    const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const voltar = `/agenda?v=${view}&d=${ref}`;
+    const ferPros = ownOnly(req.user) ? [{ id: req.user.id, name: req.user.name, title: req.user.title }] : ctx.allPros;
+    send(res, page(req, {
+      title: 'Agenda', active: 'agenda',
+      body: html`
+      <header class="ph agx-ph"><div><p class="eyebrow">${title}</p><h1>Agenda</h1></div>
+        <div class="ph-actions">${viewNav}
+          <a class="btn ghost" href="${prev}" aria-label="Anterior">←</a><a class="btn ghost" href="${url(view, today)}">Hoje</a><a class="btn ghost" href="${next}" aria-label="Próximo">→</a></div></header>
+      ${tabsAndPros}
+      <div class="agx" data-agx>
+        <aside class="agx-side card" aria-label="Pacientes">
+          <div class="agx-side-h"><h2>Pacientes</h2><a class="btn btn-sm" href="/pacientes/novo">+ Adicionar</a></div>
+          <label class="agx-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" data-pt-search placeholder="Buscar paciente" aria-label="Buscar paciente"></label>
+          <div class="agx-filters">
+            <a class="chip ${ptFilter === 'ativos' ? 'on' : ''}" href="/agenda?v=${view}&d=${ref}&pacientes=ativos">Ativos</a><a class="chip ${ptFilter === 'todos' ? 'on' : ''}" href="/agenda?v=${view}&d=${ref}&pacientes=todos">Todos</a>
+            <button type="button" class="chip" data-pt-bday aria-pressed="false">🎂 Aniversariantes${bdays ? ` (${bdays})` : ''}</button>
+            <select data-pt-sort aria-label="Ordenar pacientes"><option value="next">Próxima sessão</option><option value="name">Nome</option></select>
+          </div>
+          <div class="agx-pts" data-pt-list>${panel.rows.length ? panel.rows.map((p) => html`<a class="pt-item ${p.status !== 'ativo' ? 'muted' : ''}" href="/pacientes/${p.id}" draggable="true" data-drag-patient="${p.id}" data-prof="${p.owner_id || ''}" data-name="${norm(nm(p))}" data-label="${nm(p)}" data-next="${p.next_at || '9999'}" data-bday="${p.birth_date && String(p.birth_date).slice(5, 7) === month ? 1 : 0}" title="Arraste para um horário da agenda para marcar uma sessão">
+              <span class="pt-av" style="--c:${PATIENT_COLORS[(Number(p.id) * 7) % PATIENT_COLORS.length]}">${initials(nm(p))}</span>
+              <span class="pt-t"><b>${nm(p)}</b><small><i class="${p.next_at ? 'on' : ''}"></i>${nextText(p.next_at, today)}</small></span></a>`) : html`<p class="muted small">Nenhum paciente ${ptFilter === 'ativos' ? 'ativo' : ''}.</p>`}
+            <p class="muted small agx-none" hidden>Nenhum paciente encontrado.</p></div>
+          <details class="agx-notes" ${notes ? raw('open') : ''}><summary><b>Minhas notas</b><small data-notes-st>só você vê</small></summary>
+            <textarea data-notes rows="5" maxlength="20000" placeholder="Lembretes, ideias, pendências… (salva sozinho)">${notes}</textarea></details>
+        </aside>
+        <div class="agx-main">
+          <div class="agx-actions">
+            <a class="btn" href="/agenda/nova">+ Agendar sessão</a>
+            <a class="btn ghost" href="/escala${profSel ? `?prof=${profSel}` : ''}">Bloquear horário</a>
+            <button class="btn ghost" type="button" data-open-dialog="agx-ferias">Registrar férias</button>
+            ${gconn ? html`<form method="post" action="/conta/google/sincronizar"><input type="hidden" name="voltar" value="${voltar}"><button class="btn ghost">Sincronizar Google</button></form>` : ''}
+            <button class="btn ghost" type="button" data-agx-expand aria-pressed="false">Expandir</button>
+          </div>
+          <div class="agx-sum">
+            <div><b>${panel.active}</b><span>pacientes ativos</span></div>
+            <div><b>${Number(todayStats?.n || 0)}</b><span>sessões hoje</span></div>
+            <div><b>${Number(todayStats?.conf || 0)}</b><span>confirmadas</span></div>
+            <div class="${Number(todayStats?.pend || 0) ? 'warn' : ''}"><b>${Number(todayStats?.pend || 0)}</b><span>aguardando confirmação</span></div>
+          </div>
+          ${live}
+          <div class="agx-foot">
+            ${colorMode === 'tipo' ? html`<span class="agx-legend">${Object.entries(KIND_LABELS).map(([k, l]) => html`<span><i style="background:${KIND_COLORS[k]}"></i>${l}</span>`)}</span>` : ''}
+            <span class="agx-color">Cor das sessões: ${[['tipo', 'por tipo'], ['paciente', 'por paciente'], ...(ctx.allPros.length > 1 ? [['profissional', 'por profissional']] : [])].map(([k, l]) => html`<a href="/agenda?v=${view}&d=${ref}&cor=${k}" class="${colorMode === k ? 'on' : ''}">${l}</a>`)}</span>
+            <a class="agx-old" href="/agenda?v=${view}&d=${ref}&layout=classica">Voltar ao visual anterior</a>
+          </div>
+          <p class="muted small ag-hint">Clique num horário livre para agendar · arraste uma sessão para remarcar · arraste um paciente da lista para um horário · botão direito (ou segure o dedo) numa sessão para mais ações.</p>
+        </div>
+      </div>
+      <dialog id="agx-ferias" class="agx-dialog"><form method="post" action="/escala/avulsa" class="stack">
+        <h2>Registrar férias</h2>
+        <p class="muted small">Os dias ficam bloqueados na agenda e no agendamento on-line. Se houver sessões marcadas no período, o sistema avisa para você remarcar.</p>
+        ${ferPros.length > 1 ? html`<label class="fld"><span>Profissional</span><select name="prof">${ferPros.map((u) => html`<option value="${u.id}" ${(profSel || req.user.id) === u.id ? raw('selected') : ''}>${proName(u)}</option>`)}</select></label>` : html`<input type="hidden" name="prof" value="${ferPros[0]?.id || req.user.id}">`}
+        <div class="form-grid"><label class="fld"><span>De</span><input type="date" name="de" required min="${today}"></label><label class="fld"><span>Até</span><input type="date" name="ate" required min="${today}"></label></div>
+        <label class="fld"><span>Motivo</span><input name="motivo" maxlength="120" value="Férias"></label>
+        <input type="hidden" name="voltar" value="${voltar}">
+        <div class="actions"><button class="btn">Bloquear período</button><button class="btn ghost" type="button" data-close-dialog>Cancelar</button></div>
+      </form></dialog>`,
+    }));
+    return;
+  }
+
   send(res, page(req, {
     title: 'Agenda', active: 'agenda',
     body: html`
     <header class="ph"><div><p class="eyebrow">${title}</p><h1>Agenda</h1></div>
       <div class="ph-actions">
-        <nav class="seg ag-views" aria-label="Visão da agenda">${[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']].map(([v, l]) => html`<a href="${url(v, ref)}" class="${view === v ? 'on' : ''}" ${view === v ? raw('aria-current="page"') : ''}>${l}</a>`)}</nav>
+        ${viewNav}
         <a class="btn ghost" href="${prev}" aria-label="Anterior">←</a><a class="btn ghost" href="${url(view, today)}">Hoje</a><a class="btn ghost" href="${next}" aria-label="Próximo">→</a>
         <a class="btn" href="/agenda/nova">+ Agendar</a>
       </div></header>
-    ${agendaTabs('semana')}
-    ${!ownOnly(req.user) && ctx.allPros.length > 1 ? html`<nav class="ag-pros" aria-label="Agenda de">
-      <a href="/agenda?v=${view}&d=${ref}&prof=todos" class="${!profSel ? 'on' : ''}">Todos os profissionais</a>
-      ${ctx.allPros.map((u) => html`<a href="/agenda?v=${view}&d=${ref}&prof=${u.id}" class="${profSel === u.id ? 'on' : ''}"><i class="pro-dot" style="background:${proColor(u.id)}"></i>${proName(u)}</a>`)}</nav>` : ''}
-    <div class="ag-live" ${ctx.pros.length > 1 ? raw('data-multi="1"') : ''} data-agenda data-view="${view}" data-back="${back}" data-wa="${waOn ? 1 : 0}" data-pront="${can(req.user, 'prontuario') ? 1 : 0}" data-fin="${can(req.user, 'financeiro') ? 1 : 0}">${body}</div>
-    <p class="muted small ag-hint">Dica: clique num horário livre para agendar · arraste uma sessão para remarcar · botão direito (ou segure o dedo) numa sessão para mais ações.</p>`,
+    ${tabsAndPros}
+    ${live}
+    <p class="muted small ag-hint">Dica: clique num horário livre para agendar · arraste uma sessão para remarcar · botão direito (ou segure o dedo) numa sessão para mais ações. · <a class="link" href="/agenda?v=${view}&d=${ref}&layout=nova">Experimentar a agenda nova</a></p>`,
   }));
 });
 
-// ---------- nova sessão ----------
 async function patientOptions(req, selected, prof = null) {
   const sc0 = patientScope(req.user);
   const sc = prof && !ownOnly(req.user) ? { sql: `${sc0.sql} AND p.owner_id = ? `, params: [...sc0.params, prof] } : sc0;

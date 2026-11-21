@@ -933,6 +933,25 @@ document.querySelectorAll('[data-side-toggle]').forEach((b) => b.addEventListene
     confirmMove(it, date, time);
   });
 
+  // ---------- agenda nova: arrastar um paciente da lista para um horário → marcar sessão ----------
+  let pdrag = null;
+  document.addEventListener('dragstart', (e) => {
+    const el = e.target.closest?.('[data-drag-patient]'); if (!el) return;
+    pdrag = { id: el.dataset.dragPatient, name: el.dataset.label, prof: el.dataset.prof };
+    e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', `paciente:${pdrag.id}`);
+  });
+  document.addEventListener('dragend', () => { if (!pdrag) return; pdrag = null; document.querySelectorAll('.dg-ghost').forEach((x) => { x.hidden = true; }); });
+  document.addEventListener('dragover', (e) => {
+    if (!pdrag) return; const g = e.target.closest('.dgrid[data-slot-day]'); if (!g) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+    const m = gridMin(g, e.clientY); ghost(g, m, `${hm(m)} · ${pdrag.name}`); g.querySelector('.dg-ghost').classList.remove('hover');
+  });
+  document.addEventListener('drop', (e) => {
+    if (!pdrag) return; const g = e.target.closest('.dgrid[data-slot-day]'); if (!g) return;
+    e.preventDefault();
+    location.href = `/agenda/nova?paciente=${pdrag.id}&data=${g.dataset.slotDay}&hora=${hm(gridMin(g, e.clientY))}${g.dataset.prof ? `&prof=${g.dataset.prof}` : ''}`;
+  });
+
   function confirmMove(it, date, time) {
     const wa = document.querySelector('[data-agenda]')?.dataset.wa === '1' && it.phone && it.optin === '1';
     const dlg = document.createElement('div'); dlg.className = 'app-modal'; dlg.setAttribute('role', 'dialog'); dlg.setAttribute('aria-modal', 'true');
@@ -1923,3 +1942,42 @@ document.querySelectorAll('[data-mkt-ai]').forEach((box) => {
   scan();
   new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.matches?.('input')) apply(n); scan(n); } }))).observe(document.body, { childList: true, subtree: true });
 })();
+
+// ---------- agenda nova: lista de pacientes, notas, expandir e janela de férias ----------
+(() => {
+  const box = document.querySelector('[data-agx]'); if (!box) return;
+  const list = box.querySelector('[data-pt-list]'); const items = [...box.querySelectorAll('.pt-item')];
+  const search = box.querySelector('[data-pt-search]'); const bday = box.querySelector('[data-pt-bday]'); const sort = box.querySelector('[data-pt-sort]');
+  const none = box.querySelector('.agx-none');
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } return null; };
+  const apply = () => {
+    const t = norm(search?.value.trim()); const onlyB = bday?.getAttribute('aria-pressed') === 'true'; let n = 0;
+    items.forEach((it) => { const ok = (!t || it.dataset.name.includes(t)) && (!onlyB || it.dataset.bday === '1'); it.hidden = !ok; if (ok) n++; });
+    if (none) none.hidden = n > 0 || !items.length;
+  };
+  const order = () => {
+    const by = sort?.value || 'next';
+    [...items].sort((a, b) => (by === 'name' ? a.dataset.name.localeCompare(b.dataset.name) : a.dataset.next.localeCompare(b.dataset.next) || a.dataset.name.localeCompare(b.dataset.name))).forEach((it) => list.insertBefore(it, none || null));
+  };
+  search?.addEventListener('input', apply);
+  bday?.addEventListener('click', () => { bday.setAttribute('aria-pressed', bday.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); bday.classList.toggle('on'); apply(); });
+  if (sort) { sort.value = store('agx-sort') || 'next'; sort.addEventListener('change', () => { store('agx-sort', sort.value); order(); }); order(); }
+  // expandir: esconde a lista de pacientes (lembrado neste navegador)
+  const exp = box.querySelector('[data-agx-expand]') || document.querySelector('[data-agx-expand]');
+  const setWide = (on) => { box.classList.toggle('wide', on); exp?.setAttribute('aria-pressed', on ? 'true' : 'false'); if (exp) exp.textContent = on ? 'Mostrar pacientes' : 'Expandir'; };
+  setWide(store('agx-wide') === '1');
+  exp?.addEventListener('click', () => { const on = !box.classList.contains('wide'); setWide(on); store('agx-wide', on ? '1' : '0'); });
+  // minhas notas: salvam sozinhas
+  const notes = box.querySelector('[data-notes]'); const st = box.querySelector('[data-notes-st]'); let tm = null;
+  notes?.addEventListener('input', () => {
+    clearTimeout(tm); if (st) st.textContent = 'salvando…';
+    tm = setTimeout(async () => {
+      try { const r = await fetch('/agenda/notas', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: notes.value }) }); if (st) st.textContent = r.ok ? 'salvo' : 'não salvou — tente de novo'; } catch { if (st) st.textContent = 'sem conexão'; }
+    }, 700);
+  });
+})();
+document.addEventListener('click', (e) => {
+  const o = e.target.closest('[data-open-dialog]'); if (o) { document.getElementById(o.dataset.openDialog)?.showModal?.(); return; }
+  const c = e.target.closest('[data-close-dialog]'); if (c) c.closest('dialog')?.close();
+});

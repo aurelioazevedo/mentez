@@ -244,7 +244,7 @@ r.post('/avulsa', async (req, res) => {
   }
   await audit(req, 'escala-bloquear-periodo', `user:${prof.id} ${de}..${ate}`);
   res.flash(`${n === 1 ? brDate(de) : `${n} dias (${brDate(de)} a ${brDate(ate)})`} bloqueado(s): ${motivo}.${withSessions ? ` Atenção: ${withSessions} dia(s) têm sessões agendadas.` : ''}`, withSessions ? 'warn' : 'ok')
-    .redirect(back(prof.id, b.mes));
+    .redirect(/^\/agenda(\?|$)/.test(String(b.voltar || '')) ? String(b.voltar) : back(prof.id, b.mes));
 });
 
 r.post('/liberar', async (req, res) => {

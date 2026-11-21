@@ -118,7 +118,7 @@ account.post('/google/sincronizar', async (req, res) => {
   for (const id of ids.slice(0, 60)) await G.syncAppointment(id);
   if (ids.length > 60) G.syncLater(ids.slice(60));
   const err = await one(`SELECT COUNT(*) n FROM appointments WHERE id IN (${ids.length ? ids.map(() => '?').join(',') : 'NULL'}) AND google_error IS NOT NULL`, ids);
-  res.flash(err.n ? `${ids.length - err.n} sessão(ões) sincronizada(s); ${err.n} com erro.` : `${ids.length} sessão(ões) sincronizada(s).`, err.n ? 'warn' : 'ok').redirect('/conta#google');
+  res.flash(err.n ? `${ids.length - err.n} sessão(ões) sincronizada(s); ${err.n} com erro.` : `${ids.length} sessão(ões) sincronizada(s).`, err.n ? 'warn' : 'ok').redirect(/^\/agenda(\?|$)/.test(String(req.body?.voltar || '')) ? String(req.body.voltar) : '/conta#google');
 });
 
 account.post('/google/desconectar', async (req, res) => {
