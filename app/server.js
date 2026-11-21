@@ -55,6 +55,7 @@ import { publicTv, settings as tvSettings, qrRedirect, publicReport } from './ro
 import psyDocRoutes, { publicDoc, publicDocPdf, verifyPage, cloudReturn, settings as psyDocSettings } from './routes/psydocs.js';
 import { settings as icpCloudSettings } from './routes/icpcloud.js';
 import marketingRoutes, { publicOptOut } from './routes/marketing.js';
+import { pub as cardsPublic, admin as cardsAdmin } from './routes/cards.js';
 import { settings as insSettings, patients as insPatients, sheets as insSheets, billing as insBilling } from './routes/insurance.js';
 import * as Reactivation from './lib/reactivation.js';
 import { publicBooking, settings as bookingSettings } from './routes/booking.js';
@@ -135,7 +136,7 @@ app.use(async (req, res, next) => {
 app.use(Brand.middleware); // identidade da clínica (nome, logo, cores) disponível para todas as páginas
 app.get('/_mentez/entrar', (req, res, next) => autoLogin(req, res).catch(next)); // entrada automática logo depois de criar a conta
 app.use(billingGate); // Mentez: teste grátis, mensalidade em dia ou acesso restrito à tela de assinatura
-app.get(/^\/marca\/(logo|logo-escuro|simbolo|simbolo-escuro|favicon)$/, (req, res, next) => { req.params.tipo = req.params[0]; logoRoute(req, res).catch(next); });
+app.get(/^\/marca\/(logo|logo-escuro|simbolo|simbolo-escuro|favicon|foto)$/, (req, res, next) => { req.params.tipo = req.params[0]; logoRoute(req, res).catch(next); });
 // App instalável (PWA) e notificações push
 app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(__dirname, 'public', 'sw.js')));
 app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').send(JSON.stringify(Brand.manifest()))); // nome e ícones da clínica
@@ -149,7 +150,7 @@ app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
 // Proteções das páginas públicas: limite geral por IP, limites mais apertados nos envios que disparam
 // mensagens (código no WhatsApp) e armadilha para robôs nos formulários públicos.
-app.use(['/tc', '/s', '/e', '/l', '/t', '/agendar', '/paciente', '/r', '/d', '/v', '/q', '/p', '/wa', '/sair'], RL.limit({ name: 'publico', windowMs: 60e3, max: 240 }));
+app.use(['/tc', '/s', '/e', '/l', '/t', '/agendar', '/cartao', '/links', '/paciente', '/r', '/d', '/v', '/q', '/p', '/wa', '/sair'], RL.limit({ name: 'publico', windowMs: 60e3, max: 240 }));
 app.post(/^\/tc\/[^/]+\/sinal$/, RL.limit({ name: 'sinal', windowMs: 60e3, max: 900 }));
 app.post('/agendar/dados', RL.limit({ name: 'agendar', windowMs: 10 * 60e3, max: 20 }), RL.botGuard);
 app.post('/paciente/entrar', RL.limit({ name: 'portal-codigo', windowMs: 10 * 60e3, max: 15 }), RL.botGuard);
@@ -182,6 +183,7 @@ app.use('/e', publicScale); // escalas (PHQ-9, GAD-7): link do paciente
 app.use('/s', publicSurvey); // pesquisa de satisfação (link do paciente)
 app.use('/l', notifyLink); // lembrete por e-mail/SMS: confirmar ou remarcar
 app.use('/agendar', publicBooking); // agendamento online pelo paciente
+app.use(cardsPublic); // Marketing: cartão digital (/cartao) e link na bio (/links)
 app.get('/tarefas/lembretes/:token', (req, res, next) => waCron(req, res).catch(next));
 
 app.use(loadUser);
@@ -248,7 +250,7 @@ app.use('/relatorios/satisfacao', requirePerm('financeiro', 'meufin'), surveyFol
 app.use('/relatorios', requirePerm('financeiro', 'meufin'), reportsRoutes);
 app.use('/agenda/lista-espera', requirePerm('agenda'), waitlistRoutes);
 app.use('/agenda', requirePerm('agenda'), agendaRoutes);
-app.use('/marketing', requirePerm('agenda'), marketingRoutes);
+app.use('/marketing', requirePerm('agenda'), cardsAdmin, marketingRoutes);
 app.use('/convenios', requirePerm('cadastro', 'agenda'), insPatients, insSheets);
 app.use('/escala', requirePerm('agenda'), escalaRoutes);
 app.use('/atendimento', requirePerm('agenda'), agentTeam);

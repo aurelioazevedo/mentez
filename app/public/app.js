@@ -1442,7 +1442,7 @@ document.addEventListener('live:updated', initRecordForm);
 // A imagem é aberta e redesenhada aqui no navegador (aceita PNG, JPG, WebP, SVG, GIF, AVIF), com as margens transparentes
 // cortadas e o tamanho reduzido; vai sempre como PNG (ou WebP, se o PNG ficar grande). Assim arquivos grandes, com
 // extensão trocada ou em SVG também funcionam.
-const LOGO_SIZES = { logo: [1200, 400], simbolo: [512, 512], favicon: [512, 512] };
+const LOGO_SIZES = { logo: [1200, 400], simbolo: [512, 512], favicon: [512, 512], retrato: [640, 640] };
 function loadImage(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file); const img = new Image();
@@ -1464,6 +1464,12 @@ async function prepareImage(file, kind) {
   w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
   const c1 = document.createElement('canvas'); c1.width = w; c1.height = h; const x1 = c1.getContext('2d', { willReadFrequently: true });
   x1.drawImage(img, 0, 0, w, h);
+  if (kind === 'retrato') { // foto: recorte quadrado no centro (a parte de cima, onde costuma estar o rosto), em JPEG
+    const side = Math.min(w, h); const sx = (w - side) / 2; const sy = h > w ? Math.min((h - side) / 2, h * 0.08) : 0;
+    const o = document.createElement('canvas'); o.width = 640; o.height = 640; const oc = o.getContext('2d');
+    oc.fillStyle = '#fff'; oc.fillRect(0, 0, 640, 640); oc.imageSmoothingQuality = 'high'; oc.drawImage(c1, sx, sy, side, side, 0, 0, 640, 640);
+    const jb = await new Promise((r) => o.toBlob(r, 'image/jpeg', 0.86)); if (!jb) throw new Error('não foi possível converter a foto.'); return jb;
+  }
   const [bx, by, bw, bh] = trimBox(x1, w, h); // corta as bordas transparentes
   const [mw, mh] = LOGO_SIZES[kind] || LOGO_SIZES.logo;
   const out = document.createElement('canvas'); const ctx = out.getContext('2d');

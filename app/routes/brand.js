@@ -6,11 +6,12 @@ import { router, send } from '../lib/router.js';
 import * as Brand from '../lib/brand.js';
 
 // /marca/logo, /marca/logo-escuro, /marca/simbolo, /marca/simbolo-escuro e /marca/favicon (sem login)
-const ROUTE_KIND = { logo: 'claro', 'logo-escuro': 'escuro', simbolo: 'simbolo', 'simbolo-escuro': 'simbolo-escuro', favicon: 'favicon' };
+const ROUTE_KIND = { logo: 'claro', 'logo-escuro': 'escuro', simbolo: 'simbolo', 'simbolo-escuro': 'simbolo-escuro', favicon: 'favicon', foto: 'foto' };
 const FALLBACK = { logo: 'logo.png', 'logo-escuro': 'logo-dark.png', simbolo: 'simbolo.png', 'simbolo-escuro': 'simbolo.png', favicon: 'favicon.png' };
 export async function logoRoute(req, res) {
   const kind = ROUTE_KIND[req.params.tipo] || 'claro';
   const b = await Brand.load();
+  if (kind === 'foto') { const f = await Brand.logoFile('foto'); return f ? res.set({ 'Content-Type': f.mime, 'Cache-Control': 'public, max-age=604800', 'X-Content-Type-Options': 'nosniff' }).send(f.buf) : res.sendStatus(404); }
   let f = kind === 'claro' || b.custom !== false ? await Brand.logoFile(kind) : null;
   if (!f && b.custom !== false && (kind === 'escuro' || kind === 'simbolo-escuro')) f = await Brand.logoFile(kind === 'escuro' ? 'claro' : 'simbolo'); // sem versão escura: a clara
   if (!f) return res.redirect(b.legacy ? `/static/img/${{ logo: 'logo-terracota.png', 'logo-escuro': 'logo-creme.png', simbolo: 'simbolo-terracota.png', 'simbolo-escuro': 'simbolo-creme.png', favicon: 'favicon.png' }[req.params.tipo]}` : `/static/img/mentez/${FALLBACK[req.params.tipo] || 'logo.png'}`);

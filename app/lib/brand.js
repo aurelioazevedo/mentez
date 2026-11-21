@@ -59,6 +59,7 @@ function finish(b) {
   b.symbolUrl = b.symbol ? `/marca/simbolo?v=${b.symbol}` : (b.legacy ? '/static/img/simbolo-terracota.png' : (b.logo ? '' : `${mz}/simbolo.png`));
   b.symbolDarkUrl = b.symbolDark ? `/marca/simbolo-escuro?v=${b.symbolDark}` : (b.legacy ? '/static/img/simbolo-creme.png' : b.symbolUrl);
   b.faviconUrl = b.favicon ? `/marca/favicon?v=${b.favicon}` : '';
+  b.photoUrl = b.photo ? `/marca/foto?v=${b.photo}` : '';
   return b;
 }
 export async function load(force = false) {
@@ -73,7 +74,7 @@ export async function load(force = false) {
     name: fin.name || pick('name', base.name), city: fin.city || pick('city', base.city), phone: fin.phone || pick('phone', base.phone),
     email: fin.email || pick('email', base.email), address: fin.address || pick('address', base.address),
   };
-  for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'symbol', 'symbolDark', 'favicon', 'appName']) b[k] = pick(k, b[k]);
+  for (const k of ['short', 'proName', 'proFirst', 'proRole', 'crp', 'site', 'instagram', 'uf', 'color', 'whatsapp', 'logo', 'logoDark', 'symbol', 'symbolDark', 'favicon', 'photo', 'appName']) b[k] = pick(k, b[k]);
   b.colors = Array.isArray(saved.colors) ? saved.colors : [];
   b.custom = await canCustomize();
   if (!saved.appName && saved.short) b.appName = legacyBrand() ? `Sistema ${saved.short}` : saved.short;
@@ -111,6 +112,7 @@ export const ASSETS = {
   simbolo: { setting: 'brand_symbol', field: 'symbol', label: 'símbolo' },
   'simbolo-escuro': { setting: 'brand_symbol_dark', field: 'symbolDark', label: 'símbolo para fundo escuro' },
   favicon: { setting: 'brand_favicon', field: 'favicon', label: 'favicon' },
+  foto: { setting: 'brand_photo', field: 'photo', label: 'foto do profissional' }, // cartão digital e link na bio
 };
 const asset = (kind) => ASSETS[kind] || ASSETS.claro;
 export async function saveLogo(kind, buf, mime) {

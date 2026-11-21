@@ -2372,3 +2372,16 @@ label.ask-opt:has(input:focus-visible) { outline: 2px solid var(--terracota); ou
 .mz2-invite{border:1px solid #07C6BC;background:#F0FBFA;margin-bottom:16px}
 a.mz2-me{text-decoration:none;color:inherit}
 @media (max-width:620px){.mz2-actions{white-space:normal}}
+
+/* Marketing: cartão digital e link na bio */
+.mk-share-grid{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.mk-qr{width:140px;height:140px;border-radius:12px;border:1px solid var(--line);background:#fff;padding:6px}
+.mk-share-grid .stack{flex:1;min-width:240px}
+.mk-fs{border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px}
+.mk-fs legend{font-weight:600;padding:0 6px}
+.mk-row{display:grid;grid-template-columns:1fr 1.4fr 1.6fr;gap:8px}.mk-row.two{grid-template-columns:1fr 1.6fr}
+.mk-item{display:grid;grid-template-columns:170px 1fr 1fr;gap:8px;padding:10px;border:1px dashed var(--line);border-radius:12px}
+.mk-item input[name=item_url],.mk-item input[name=item_text]{grid-column:span 1}
+.mk-item .check{align-self:center}
+.bl-retrato .brand-logo-prev img.mk-photo{width:96px;height:96px;max-height:96px;border-radius:50%;object-fit:cover}
+@media (max-width:700px){.mk-row,.mk-row.two,.mk-item{grid-template-columns:1fr}}
