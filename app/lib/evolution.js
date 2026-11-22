@@ -44,7 +44,7 @@ export async function provision(t, { force = false } = {}) {
   if (!enabled()) return { ok: false, reason: 'A Evolution da Mentez não está configurada neste servidor.' };
   const cur = await W.config();
   if (cur?.url && !cur.managed && !force) return { ok: false, reason: 'A clínica usa uma Evolution própria.' };
-  const name = instanceName(t.slug);
+  const name = cur?.managed && cur.instance ? cur.instance : instanceName(t.slug); // a instância continua a mesma se a clínica trocar de endereço
   let token = null;
   const found = (await listAll()).get(name);
   if (found) token = found.token;
@@ -74,4 +74,13 @@ export function provisionLater(t, actor = 'sistema') {
 }
 
 // Ao remover uma clínica de vez (não usado na suspensão: os dados e a conexão ficam)
+// Depois de trocar o endereço da clínica: aponta o aviso de mensagens da Evolution para o endereço novo
+export async function renameClinic(id, newSlug, actor) {
+  const r = await T.renameTenant(id, newSlug, actor);
+  let wa = null; try { wa = await rewire(r.t); } catch (e) { wa = `erro: ${e.message}`; console.error('troca de endereço (WhatsApp):', e.message); }
+  return { ...r, wa };
+}
+export async function rewire(t) {
+  return T.run(t, async () => { const c = await W.config(); if (!c?.managed || !c.webhookSecret) return false; await W.setWebhook(c, webhookUrl(t.slug, c.webhookSecret)); return true; });
+}
 export async function remove(slug) { await call('DELETE', `/instance/delete/${encodeURIComponent(instanceName(slug))}`); }

@@ -61,6 +61,16 @@ domainSettings.get('/', async (req, res) => {
       <p class="muted">Use o endereço da sua clínica para entrar no sistema e nos links enviados aos pacientes, por exemplo <b>app.suaclinica.com.br</b> ou <b>sistema.suaclinica.com.br</b>.</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
 
+    ${req.query.trocado ? html`<div class="flash ok">Pronto! A clínica agora está em <b>https://${mentezUrl}</b>. O endereço antigo leva automaticamente para este.</div>` : ''}
+    <section class="card"><h2>Endereço na Mentez</h2>
+      <p>Hoje: <b>https://${mentezUrl}</b>${primary ? html` <small class="muted">(o domínio próprio ${primary.domain} continua funcionando)</small>` : ''}</p>
+      ${req.user.role === 'admin' ? html`<form method="post" action="/configuracoes/dominio/endereco" class="actions" data-confirm="Trocar o endereço da clínica? O endereço antigo passa a levar para o novo, e todos precisarão entrar de novo.">
+        <span class="mzp-slug"><input name="slug" required maxlength="40" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" placeholder="${t.slug}" autocomplete="off" aria-label="Novo endereço"><small>.${T.baseDomain()}</small></span>
+        <button class="btn">Trocar endereço</button></form>
+        <p class="muted small">Letras minúsculas, números e hífen. Os links antigos (agendamento, portal do paciente, cartão) continuam funcionando e levam ao endereço novo. Depois da troca, cada pessoa da equipe entra de novo uma vez.</p>`
+      : html`<p class="muted small">Só o administrador da clínica pode trocar o endereço.</p>`}
+    </section>
+
     <section class="card">
       <h2>Endereço principal</h2>
       <p><b>${primary ? primary.domain : mentezUrl}</b> ${primary ? html`<span class="badge b-realizada">domínio próprio</span>` : html`<span class="badge">endereço da Mentez</span>`}</p>
@@ -125,6 +135,18 @@ domainSettings.post('/', async (req, res) => {
     res.flash(`Domínio ${d} cadastrado. Agora crie o registro abaixo no DNS do domínio.`);
   } catch (e) { res.flash(e.message, 'err'); }
   back(res);
+});
+domainSettings.post('/endereco', async (req, res) => {
+  const t = T.current();
+  if (!t || req.user.role !== 'admin') return res.flash('Só o administrador da clínica pode trocar o endereço.', 'err').redirect('/configuracoes/dominio');
+  if ((await T.renamesRecent(t.id, 30)) >= 2) return res.flash('O endereço já foi trocado duas vezes nos últimos 30 dias. Para trocar de novo, abra um chamado em Suporte.', 'err').redirect('/configuracoes/dominio');
+  try {
+    const Evolution = await import('../lib/evolution.js'); const { loginToken } = await import('./signup.js');
+    const r = await Evolution.renameClinic(t.id, String(req.body.slug || ''), `clinica:${req.user.email || req.user.id}`);
+    await audit(req, 'clinica-endereco', `${r.from} → ${r.to}`);
+    // entra direto no endereço novo (o login é por endereço)
+    return res.redirect(`https://${r.to}.${T.baseDomain()}/_mentez/entrar?r=endereco&t=${encodeURIComponent(loginToken(r.to, req.user.id))}`);
+  } catch (e) { return res.flash(e.message, 'err').redirect('/configuracoes/dominio'); }
 });
 domainSettings.post('/verificar', async (req, res) => {
   const t = T.current(); if (!t) return back(res);

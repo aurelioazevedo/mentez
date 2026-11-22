@@ -151,6 +151,13 @@ app.use(async (req, res, next) => {
   if (Tenancy.platformHosts().has(host)) return Platform.handle(req, res, next);
   let t = null;
   try { t = req.mzSlug ? await Tenancy.bySlug(req.mzSlug) : await Tenancy.byHost(host); } catch (e) { return next(e); }
+  // endereço antigo de uma clínica que trocou de endereço: leva ao novo (avisos internos da Evolution seguem atendidos)
+  if (!t) {
+    const old = req.mzSlug || Tenancy.slugOfHost(host);
+    const now = old ? await Tenancy.slugAlias(old).catch(() => null) : null;
+    if (now && req.mzSlug) { t = await Tenancy.bySlug(now); }
+    else if (now) return res.redirect(301, `https://${now}.${Tenancy.baseDomain()}${req.originalUrl}`);
+  }
   if (!t) return res.status(404).send(String(bare('Clínica não encontrada', html`<div class="center-card"><h1>Endereço não encontrado</h1><p>Não há nenhuma clínica neste endereço. Confira o link recebido.</p></div>`)));
   if (t.status !== 'ativa') return res.status(403).send(String(bare('Acesso suspenso', html`<div class="center-card"><h1>Acesso temporariamente suspenso</h1><p>O acesso a esta clínica está suspenso. Fale com a administração da clínica.</p></div>`)));
   // domínio próprio só nos planos com personalização; fora deles, volta ao endereço da Mentez

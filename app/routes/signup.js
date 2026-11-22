@@ -22,7 +22,7 @@ const slugify = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').
 // ---------- entrada automática (token assinado com a chave mestra) ----------
 const used = new Map(); // nonce → expira (uso único)
 const mac = (b) => crypto.createHmac('sha256', crypto.createHash('sha256').update(`mentez-entrar|${process.env.MENTEZ_MASTER_KEY || ''}`).digest()).update(b).digest('base64url');
-function loginToken(slug, uid) { const b = Buffer.from(JSON.stringify({ slug, uid, exp: Date.now() + 120e3, n: crypto.randomBytes(9).toString('base64url') })).toString('base64url'); return `${b}.${mac(b)}`; }
+export function loginToken(slug, uid) { const b = Buffer.from(JSON.stringify({ slug, uid, exp: Date.now() + 120e3, n: crypto.randomBytes(9).toString('base64url') })).toString('base64url'); return `${b}.${mac(b)}`; }
 export async function autoLogin(req, res) {
   const t = T.current(); const tok = String(req.query.t || '');
   const [b, m] = tok.split('.');
@@ -37,7 +37,7 @@ export async function autoLogin(req, res) {
   if (!u) return res.redirect('/login');
   startSession(res, u);
   await q('UPDATE users SET last_login_at = NOW() WHERE id = ?', [u.id]);
-  res.redirect('/?bemvindo=1');
+  res.redirect(req.query.r === 'endereco' ? '/configuracoes/dominio?trocado=1' : '/?bemvindo=1');
 }
 
 // ---------- páginas (montadas no Painel/plataforma) ----------
@@ -154,9 +154,8 @@ export function mount(r, layout) {
     const s = str(req.query.s, 40).toLowerCase();
     const sug = slugify(req.query.n);
     if (!s) return res.json({ ok: false, suggestion: sug });
-    if (!T.SLUG_RE.test(s) || T.RESERVED.has(s)) return res.json({ ok: false, reason: 'Use de 3 a 40 letras minúsculas, números ou hífen.' });
-    const taken = await T.pone('SELECT id FROM tenants WHERE slug = ?', [s]);
-    res.json(taken ? { ok: false, reason: 'Este endereço já está em uso.' } : { ok: true });
+    const av = await T.slugAvailable(s);
+    res.json(av.ok ? { ok: true } : { ok: false, reason: av.reason });
   });
 
   r.post('/criar-conta', RL.limit({ name: 'mentez-cadastro', windowMs: 3600e3, max: 5 }), RL.botGuard, async (req, res) => {

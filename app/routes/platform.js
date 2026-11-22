@@ -129,6 +129,7 @@ const RULES = [
   ['*', /^\/assistente(\/|$)/, ['admin']],
   ['*', /^\/comunicacao(\/|$)/, ['admin', 'financeiro']],
   ['*', /^\/indicacoes(\/|$)/, ['admin', 'financeiro']],
+  ['POST', /^\/clinicas\/\d+\/endereco$/, ['admin']],
   ['POST', /^\/clinicas\/\d+\/assinatura$/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas(\/|$)/, ['admin', 'suporte']],
   ['GET', /^\/clinicas\/nova$/, ['admin', 'suporte']],

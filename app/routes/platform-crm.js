@@ -6,6 +6,7 @@ import * as T from '../lib/tenancy.js';
 import * as Brand from '../lib/brand.js';
 import * as PlatComm from '../lib/platcomm.js';
 import * as PlatCRM from '../lib/platcrm.js';
+import * as Evolution from '../lib/evolution.js';
 
 const UF = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ');
 const KIND = { manual: 'Equipe', cobranca: 'Cobrança', chamado: 'Chamado', indicacao: 'Indicação', teste: 'Teste', aviso: 'Aviso', celular: 'Pelo celular', equipe: 'Aviso à equipe' };
@@ -43,10 +44,18 @@ export function mount(handle, { need, layout, log, tenantOf }) {
   // ---------- dados cadastrais ----------
   handle.get('/clinicas/:id/cadastro', need, async (req, res, next) => {
     const t = await tenantOf(req); if (!t) return next();
-    const p = await PlatCRM.profile(t.id);
+    const p = await PlatCRM.profile(t.id); const aliases = await T.aliasesOf(t.id).catch(() => []);
     const v = (k) => p[k] ?? '';
     send(res, layout(req, `${t.name} · Dados cadastrais`, html`<header class="ph"><div><p class="eyebrow">Clínica</p><h1>${t.name}</h1></div><div class="ph-actions"><a class="btn ghost" href="/clinicas">Clínicas</a></div></header>
       ${await clinicTabs(t.id, '/cadastro')}
+      <section class="card"><h2>Endereço na Mentez</h2>
+        <p>Hoje: <a href="https://${t.slug}.${T.baseDomain()}" target="_blank" rel="noopener"><b>https://${t.slug}.${T.baseDomain()}</b></a>${aliases.length ? html` <small class="muted">· endereços antigos que redirecionam: ${aliases.map((a) => a.slug).join(', ')}</small>` : ''}</p>
+        ${req.admin.role === 'admin' ? html`<form method="post" action="/clinicas/${t.id}/endereco" class="actions" data-confirm="Trocar o endereço desta clínica? O endereço antigo passa a levar para o novo, e a equipe da clínica precisará entrar de novo.">
+          <span class="mzp-slug"><input name="slug" required maxlength="40" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" placeholder="${t.slug}" autocomplete="off" aria-label="Novo endereço"><small>.${T.baseDomain()}</small></span>
+          <button class="btn">Trocar endereço</button></form>
+          <p class="muted small">Banco de dados, assinatura, WhatsApp e domínio próprio continuam os mesmos. Links antigos continuam funcionando e levam ao endereço novo.</p>`
+        : html`<p class="muted small">Só administradores da Mentez podem trocar o endereço.</p>`}
+      </section>
       <form method="post" class="card form-grid pc-form">
         <h2 class="span2">Identificação</h2>
         <label class="fld"><span>Nome da clínica (como aparece no sistema)</span><input value="${t.name}" disabled></label>
@@ -93,6 +102,17 @@ export function mount(handle, { need, layout, log, tenantOf }) {
         street: pick(p.street, br.address), city: pick(p.city, br.city), uf: pick(p.uf, br.uf), site: pick(p.site, br.site), instagram: pick(p.instagram, br.instagram) });
       await log(req, 'clinica-cadastro-importar', t.id); res.flash('Campos vazios completados com a identidade da clínica. Confira e ajuste se precisar.');
     } catch (e) { res.flash(`Não foi possível ler a identidade da clínica: ${e.message}`, 'err'); }
+    res.redirect(`/clinicas/${t.id}/cadastro`);
+  });
+
+  handle.post('/clinicas/:id/endereco', need, async (req, res, next) => {
+    const t = await tenantOf(req); if (!t) return next();
+    if (req.admin.role !== 'admin') return res.flash('Só administradores da Mentez podem trocar o endereço.', 'err').redirect(`/clinicas/${t.id}/cadastro`);
+    try {
+      const r = await Evolution.renameClinic(t.id, String(req.body.slug || ''), req.admin.email);
+      await log(req, 'clinica-endereco', t.id, `${r.from} → ${r.to}`);
+      res.flash(`Endereço trocado: https://${r.to}.${T.baseDomain()} (o antigo, ${r.from}, redireciona para o novo).${typeof r.wa === 'string' ? ' Atenção: não foi possível religar o WhatsApp — use “Refazer a instância” em Recursos.' : ''}`, typeof r.wa === 'string' ? 'warn' : 'ok');
+    } catch (e) { res.flash(e.message, 'err'); }
     res.redirect(`/clinicas/${t.id}/cadastro`);
   });
 

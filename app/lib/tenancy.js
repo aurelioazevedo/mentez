@@ -177,10 +177,46 @@ export async function allowCertificate(domain) {
   const d = String(domain || '').toLowerCase();
   if (platformHosts().has(d)) return true;
   const t = await byHost(d).catch(() => null);
+  if (!t && slugOfHost(d) && (await slugAlias(slugOfHost(d)).catch(() => null))) return true; // endereço antigo: certificado para redirecionar
   if (!t || t.status === 'cancelada') return false;
   if (slugOfHost(d)) return true;
   return !!(await pone('SELECT 1 x FROM tenant_domains WHERE domain = ? AND tenant_id = ? AND verified_at IS NOT NULL', [d, t.id]));
 }
+
+// ---------- trocar o endereço da clínica (ex.: aurelio → aurelioazevedo.mentez.com.br) ----------
+// O endereço antigo fica guardado como apelido: quem abrir um link antigo é levado ao novo (mesmo caminho).
+// O banco da clínica, as chaves e as assinaturas não mudam.
+let aliasReady = null;
+const aliasTable = () => (aliasReady ||= pq('CREATE TABLE IF NOT EXISTS tenant_slug_aliases (slug VARCHAR(40) PRIMARY KEY, tenant_id INT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX (tenant_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4').catch((e) => { aliasReady = null; throw e; }));
+export async function slugAlias(slug) {
+  await aliasTable();
+  const r = await pone('SELECT t.slug FROM tenant_slug_aliases a JOIN tenants t ON t.id = a.tenant_id WHERE a.slug = ?', [String(slug || '').toLowerCase()]);
+  return r?.slug || null;
+}
+export async function slugAvailable(slug, tenantId = null) {
+  slug = String(slug || '').toLowerCase().trim();
+  if (!SLUG_RE.test(slug) || RESERVED.has(slug)) return { ok: false, reason: 'Use de 3 a 40 letras minúsculas, números ou hífen (e não um nome reservado).' };
+  await aliasTable();
+  if (await pone('SELECT id FROM tenants WHERE slug = ?', [slug])) return { ok: false, reason: 'Este endereço já está em uso.' };
+  const a = await pone('SELECT tenant_id FROM tenant_slug_aliases WHERE slug = ?', [slug]);
+  if (a && a.tenant_id !== tenantId) return { ok: false, reason: 'Este endereço já pertenceu a outra clínica e não pode ser reutilizado.' };
+  return { ok: true };
+}
+export async function renameTenant(id, newSlug, actor = 'cli') {
+  newSlug = String(newSlug || '').toLowerCase().trim();
+  const cur = await pone('SELECT slug FROM tenants WHERE id = ?', [id]);
+  if (!cur) throw new Error('Clínica não encontrada.');
+  if (cur.slug === newSlug) throw new Error('Este já é o endereço atual.');
+  const av = await slugAvailable(newSlug, id); if (!av.ok) throw new Error(av.reason);
+  await pq('DELETE FROM tenant_slug_aliases WHERE slug = ? AND tenant_id = ?', [newSlug, id]); // voltando a um endereço antigo da própria clínica
+  await pq('UPDATE tenants SET slug = ? WHERE id = ?', [newSlug, id]);
+  await pq('INSERT INTO tenant_slug_aliases (slug, tenant_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE tenant_id = VALUES(tenant_id)', [cur.slug, id]);
+  await pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', [actor, 'clinica-endereco', id, `${cur.slug} → ${newSlug}`]);
+  clearCache();
+  return { from: cur.slug, to: newSlug, t: await bySlug(newSlug) };
+}
+export async function renamesRecent(id, days = 30) { await aliasTable(); return Number((await pone('SELECT COUNT(*) n FROM tenant_slug_aliases WHERE tenant_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL ? DAY)', [id, days]))?.n || 0); }
+export async function aliasesOf(id) { await aliasTable(); return pq('SELECT slug, created_at FROM tenant_slug_aliases WHERE tenant_id = ? ORDER BY created_at DESC', [id]); }
 
 // ---------- criar uma clínica ----------
 // secrets: opcional, para trazer uma clínica que já existe (ex.: Dra. Lorrainy) com as chaves que ela já usa.
@@ -188,6 +224,7 @@ export async function createTenant({ slug, name, ownerName = null, ownerEmail = 
   slug = String(slug || '').toLowerCase().trim();
   if (!SLUG_RE.test(slug) || RESERVED.has(slug)) throw new Error('Endereço inválido: use de 3 a 40 letras minúsculas, números ou hífen (e não um nome reservado).');
   if (await pone('SELECT id FROM tenants WHERE slug = ?', [slug])) throw new Error('Já existe uma clínica com este endereço.');
+  if (await slugAlias(slug)) throw new Error('Este endereço já pertenceu a outra clínica. Escolha outro.');
   const db = dbName || `mz_${slug.replace(/-/g, '_')}`;
   if (!/^[a-z0-9_]{3,64}$/.test(db)) throw new Error('Nome de banco inválido.');
   const c = await mysql.createConnection(connConfig(undefined));
