@@ -109,6 +109,7 @@ function head(title, theme = '', o = {}) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="${(Styles.STYLES[Brand.get().style] || Styles.STYLES[Brand.get().legacy ? 'classico' : 'mentez']).fonts}" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css?v=${VERSION}">
+${o.css ? raw(o.css.map((h) => `<link rel="stylesheet" href="${h}">`).join('')) : ''}${o.desc ? raw(`<meta name="description" content="${String(o.desc).replace(/"/g, '&quot;')}">`) : ''}
 ${Brand.themeCss() ? raw(`<style>${Brand.themeCss()}</style>`) : ''}
 </head>`;
 }
