@@ -46,10 +46,15 @@
 :root[data-theme="dark"] .theme-ico-sun { display: block; }
 :root[data-theme="dark"] .theme-ico-moon { display: none; }
 * { box-sizing: border-box; }
-html { scrollbar-color: var(--terracota) var(--bg2); background: var(--bg); }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: var(--bg2); }
-::-webkit-scrollbar-thumb { background: var(--terracota); border-radius: 10px; border: 2px solid var(--bg2); }
+/* barra de rolagem fina: nas clínicas, a cor de destaque do estilo; no Painel da Mentez, turquesa → violeta */
+html { --sb-track: var(--bg2); --sb-thumb: var(--terracota); --sb-grad: var(--terracota); scrollbar-width: thin; scrollbar-color: var(--sb-thumb) var(--sb-track); background: var(--bg); }
+html:has(.mz2) { --sb-track: #E8EDF5; --sb-thumb: #07C6BC; --sb-grad: linear-gradient(180deg, #07C6BC, #8065E8); }
+:root[data-theme="dark"]:has(.mz2) { --sb-track: #071936; }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"]:has(.mz2) { --sb-track: #071936; } }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--sb-track); }
+::-webkit-scrollbar-thumb { background: var(--sb-grad); border-radius: 8px; border: 2px solid var(--sb-track); }
+::-webkit-scrollbar-thumb:hover { filter: brightness(1.12); }
 body { margin: 0; font: 15px/1.5 var(--sans); color: var(--ink); background: var(--bg); -webkit-text-size-adjust: 100%; }
 a { color: var(--terracota); }
 h1, h2, h3 { font-family: var(--serif); font-weight: 500; color: var(--marrom-deep); margin: 0; line-height: 1.15; }
