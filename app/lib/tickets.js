@@ -150,7 +150,7 @@ export async function markReadTeam(id) { await T.pq('UPDATE tickets SET unread_t
 async function system(id, text) { await T.pq('INSERT INTO ticket_messages (ticket_id, author_type, author_name, body_enc) VALUES (?,?,?,?)', [id, 'sistema', 'Mentez', seal(text)]); }
 
 // Equipe: resposta (visível para a clínica) ou nota interna (só a equipe vê)
-export async function teamReply(tk, admin, { body, files, internal, status, whatsapp }) {
+export async function teamReply(tk, admin, { body, files, internal, status, whatsapp, phone }) {
   const text = String(body || '').trim().slice(0, 8000);
   if (text.length < 2) throw new Error('Escreva a mensagem.');
   const m = await T.pq('INSERT INTO ticket_messages (ticket_id, author_type, author_name, body_enc, internal) VALUES (?,?,?,?,?)', [tk.id, 'equipe', admin.name || 'Equipe Mentez', seal(text), internal ? 1 : 0]);
@@ -159,7 +159,10 @@ export async function teamReply(tk, admin, { body, files, internal, status, what
   const next = STATUS[status] ? status : 'aguardando';
   await T.pq(`UPDATE tickets SET status = ?, unread_client = 1, unread_team = 0, last_from = 'equipe', updated_at = NOW(), first_response_at = COALESCE(first_response_at, NOW()),
     resolved_at = ${next === 'resolvido' ? 'NOW()' : 'NULL'}, closed_at = ${next === 'fechado' ? 'NOW()' : 'NULL'}, assignee = COALESCE(assignee, ?) WHERE id = ?`, [next, admin.email || null, tk.id]);
-  return { notified: await notifyClient(tk.id, text, { whatsapp }) };
+  // número escolhido na resposta: fica guardado no chamado para as próximas
+  const ph = String(phone || '').replace(/\D/g, '');
+  if (whatsapp && ph.length >= 10 && ph !== String(tk.user_phone || '').replace(/\D/g, '')) await T.pq('UPDATE tickets SET user_phone = ? WHERE id = ?', [ph, tk.id]);
+  return { notified: await notifyClient(tk.id, text, { whatsapp, phone: ph.length >= 10 ? ph : null }) };
 }
 export async function teamUpdate(tk, admin, { status, priority, category, assignee, assigneeName }) {
   const sets = []; const vals = []; const log = [];
@@ -201,7 +204,7 @@ async function notifyTeam(id, kind) {
   if (c.notifyEmail) await PlatComm.mailSend(c.notifyEmail, `[Chamado ${code(id)}] ${tk.subject} — ${tk.tenant_name || ''}`, text, { label: 'Abrir no painel', url: `${PANEL()}/chamados/${id}` }).catch((e) => console.error('chamados (e-mail):', e.message));
   if (c.notifyPhone && (kind === 'novo' || tk.priority !== 'normal')) await PlatComm.waSend(c.notifyPhone, `${text}\n\n${PANEL()}/chamados/${id}`, { kind: 'equipe' }).catch((e) => console.error('chamados (WhatsApp):', e.message));
 }
-async function notifyClient(id, text, { whatsapp } = {}) {
+async function notifyClient(id, text, { whatsapp, phone } = {}) {
   const tk = await get(id); if (!tk) return [];
   const t = await T.bySlug(tk.tenant_slug); const url = `${t?.env?.PUBLIC_URL || ''}/suporte/${id}`;
   const first = String(tk.user_name || '').split(' ')[0] || 'tudo bem';
@@ -209,7 +212,8 @@ async function notifyClient(id, text, { whatsapp } = {}) {
   const msg = `Olá, ${first}! A equipe Mentez respondeu o seu chamado ${code(id)} — “${tk.subject}”:\n\n${short}`;
   const out = [];
   if (tk.user_email) { try { await PlatComm.mailSend(tk.user_email, `Mentez — resposta ao chamado ${code(id)}: ${tk.subject}`, `${msg}\n\nPara responder, abra o chamado no sistema.`, { label: 'Ver e responder', url }); out.push('e-mail'); } catch (e) { console.error('chamados (e-mail cliente):', e.message); } }
-  if (whatsapp && tk.user_phone) { try { await PlatComm.waSend(tk.user_phone, `${msg}\n\nPara responder: ${url}`, { kind: 'chamado', tenantId: tk.tenant_id }); out.push('WhatsApp'); } catch (e) { console.error('chamados (WhatsApp cliente):', e.message); } }
+  const to = phone || tk.user_phone;
+  if (whatsapp && to) { try { await PlatComm.waSend(to, `${msg}\n\nPara responder: ${url}`, { kind: 'chamado', tenantId: tk.tenant_id }); out.push('WhatsApp'); } catch (e) { console.error('chamados (WhatsApp cliente):', e.message); } }
   return out;
 }
 

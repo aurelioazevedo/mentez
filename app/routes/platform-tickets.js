@@ -4,6 +4,8 @@ import { html, raw, brDateTime } from '../lib/html.js';
 import { send, str, int } from '../lib/router.js';
 import * as T from '../lib/tenancy.js';
 import * as Tickets from '../lib/tickets.js';
+import * as PlatCRM from '../lib/platcrm.js';
+import * as Brand from '../lib/brand.js';
 import { thread, filesField, ticketBadge } from './support.js';
 
 const ago = (h) => (h < 1 ? 'agora há pouco' : h < 24 ? `há ${h} h` : `há ${Math.floor(h / 24)} dia(s)`);
@@ -52,6 +54,10 @@ export function mount(handle, { need, layout, log }) {
   handle.get('/chamados/:id', need, async (req, res, next) => {
     const tk = await load(req, res, next); if (!tk) return;
     if (tk.unread_team) await Tickets.markReadTeam(tk.id);
+    // WhatsApp para avisar a clínica: o de quem abriu, os da clínica (Dados cadastrais) e o da identidade da clínica
+    const t = tk.tenant_slug ? await T.bySlug(tk.tenant_slug) : null;
+    const brandPhone = t ? await T.run(t, () => Brand.load()).then((b) => b.whatsapp || b.phone).catch(() => '') : '';
+    const phones = [...new Set([tk.user_phone, ...(await PlatCRM.phonesOf(tk.tenant_id).catch(() => [])), brandPhone].map((x) => PlatCRM.digits(x)).filter((x) => x.length >= 10))];
     const [msgs, team, others] = await Promise.all([Tickets.messages(tk.id, { internal: true }), T.pq('SELECT name, email FROM platform_users WHERE active = 1 ORDER BY name'), T.pq("SELECT id, subject, status FROM tickets WHERE tenant_id = ? AND id <> ? ORDER BY id DESC LIMIT 6", [tk.tenant_id, tk.id])]);
     const sel = (a, b) => (String(a || '') === String(b || '') ? raw('selected') : '');
     send(res, layout(req, `Chamado ${Tickets.code(tk.id)}`, html`<header class="ph"><div><p class="eyebrow">Chamados · ${Tickets.code(tk.id)}</p><h1>${tk.subject}</h1>
@@ -63,7 +69,10 @@ export function mount(handle, { need, layout, log }) {
           <label class="fld span2"><span>Responder para a clínica</span><textarea name="body" rows="5" maxlength="8000" required placeholder="A resposta vai para a clínica no sistema e por e-mail."></textarea></label>
           ${filesField()}
           <label class="fld"><span>Depois de enviar, a situação fica</span><select name="status"><option value="aguardando">Aguardando a clínica</option><option value="andamento">Em andamento</option><option value="resolvido">Resolvido</option></select></label>
-          <label class="check"><input type="checkbox" name="whatsapp" value="1" ${tk.user_phone ? '' : raw('disabled')}> Avisar também pelo WhatsApp${tk.user_phone ? '' : ' (sem celular cadastrado)'}</label>
+          <div class="fld tk-wa"><label class="check"><input type="checkbox" name="whatsapp" value="1"> Avisar também pelo WhatsApp</label>
+            <input name="whatsapp_phone" value="${phones[0] ? PlatCRM.fmtPhone(phones[0]) : ''}" list="tk-phones" inputmode="tel" maxlength="40" placeholder="(62) 99999-9999" aria-label="WhatsApp para o aviso">
+            <datalist id="tk-phones">${phones.map((x) => html`<option value="${PlatCRM.fmtPhone(x)}">`)}</datalist>
+            <small class="muted">${phones.length ? 'Número do chamado ou da clínica (Dados cadastrais). Pode trocar.' : 'Nenhum celular cadastrado: digite o número.'}</small></div>
           <div class="span2 actions"><button class="btn">Enviar resposta</button><button class="btn ghost" name="internal" value="1">Salvar como nota interna</button></div>
           <p class="span2 muted small">Nota interna: só a equipe Mentez vê; a clínica não é avisada.</p>
         </form></div>
@@ -84,8 +93,9 @@ export function mount(handle, { need, layout, log }) {
   });
   handle.post('/chamados/:id/responder', need, async (req, res, next) => {
     const tk = await load(req, res, next); if (!tk) return;
+    if (req.body.whatsapp && !req.body.internal && PlatCRM.digits(req.body.whatsapp_phone).length < 10) return res.flash('Informe o WhatsApp (com DDD) para o aviso, ou desmarque a opção.', 'err').redirect(`/chamados/${tk.id}`);
     try {
-      const out = await Tickets.teamReply(tk, req.admin, { body: req.body.body, files: Tickets.parseFiles(req.body.files), internal: !!req.body.internal, status: req.body.status, whatsapp: !!req.body.whatsapp });
+      const out = await Tickets.teamReply(tk, req.admin, { body: req.body.body, files: Tickets.parseFiles(req.body.files), internal: !!req.body.internal, status: req.body.status, whatsapp: !!req.body.whatsapp, phone: req.body.whatsapp_phone });
       await log(req, req.body.internal ? 'chamado-nota' : 'chamado-responder', tk.tenant_id, Tickets.code(tk.id));
       res.flash(req.body.internal ? 'Nota interna salva.' : `Resposta enviada.${out.notified.length ? ` Clínica avisada por ${out.notified.join(' e ')}.` : ' (Aviso por e-mail não enviado: confira o e-mail da Mentez em WhatsApp e e-mail.)'}`, req.body.internal || out.notified.length ? 'ok' : 'warn');
     } catch (e) { res.flash(e.message, 'err'); }
