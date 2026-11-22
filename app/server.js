@@ -111,6 +111,12 @@ app.use('/static', express.static(path.join(__dirname, 'public'), { maxAge: '7d'
 // O Caddy (rede interna do Docker) pergunta se pode emitir o certificado HTTPS de um endereço.
 app.get('/_mentez/tls', (req, res, next) => {
   if (!Tenancy.multi() || req.get('x-forwarded-for')) return next(); // só chamadas internas, sem passar pelo proxy
+  // Ambiente de testes (dev.mentez.com.br e *.dev.mentez.com.br): quem decide é o app de testes, na rede interna
+  const dom = String(req.query.domain || '').toLowerCase(); const devBase = `dev.${Tenancy.baseDomain()}`;
+  if (process.env.MENTEZ_ENV !== 'dev' && (dom === devBase || dom.endsWith(`.${devBase}`))) {
+    return fetch(`${process.env.MENTEZ_DEV_INTERNAL || 'http://app-dev:3000'}/_mentez/tls?domain=${encodeURIComponent(dom)}`, { signal: AbortSignal.timeout(5000) })
+      .then((r) => res.sendStatus(r.ok ? 200 : 404), () => res.sendStatus(404));
+  }
   Tenancy.allowCertificate(req.query.domain).then((ok) => res.sendStatus(ok ? 200 : 404), () => res.sendStatus(404));
 });
 app.get('/_mentez/saude', (_req, res) => res.json({ ok: true })); // verificação do contêiner

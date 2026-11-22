@@ -91,7 +91,7 @@ function head(title, theme = '', o = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">${process.env.MENTEZ_ENV === 'dev' ? raw('<style>body::after{content:"AMBIENTE DE TESTES · dados fictícios";position:fixed;left:50%;bottom:8px;transform:translateX(-50%);z-index:99999;background:#B4553C;color:#fff;font:700 12px/1 system-ui,sans-serif;letter-spacing:.06em;padding:7px 12px;border-radius:999px;pointer-events:none;opacity:.92}</style>') : ''}
 <meta name="googlebot" content="noindex, nofollow">
 <meta name="referrer" content="same-origin">
 <meta name="theme-color" content="${Brand.get().colors?.[1] || Styles.swatch(Brand.get().style).dark || (Brand.get().legacy ? '#47291c' : '#071936')}">

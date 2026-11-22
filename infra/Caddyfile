@@ -32,11 +32,19 @@ bemestarmental.com.br {
 	root * /srv/bem
 	file_server
 }
-# Painel da Mentez e todas as clínicas (slug.mentez.com.br e domínios próprios)
+# Painel da Mentez e todas as clínicas (slug.mentez.com.br e domínios próprios).
+# Ambiente de testes (dev.mentez.com.br e *.dev.mentez.com.br): outro app, com banco próprio e dados fictícios.
 https:// {
 	tls {
 		on_demand
 	}
 	import seg
-	reverse_proxy app:3000
+	@dev host dev.mentez.com.br *.dev.mentez.com.br
+	handle @dev {
+		header X-Robots-Tag "noindex, nofollow"
+		reverse_proxy app-dev:3000
+	}
+	handle {
+		reverse_proxy app:3000
+	}
 }

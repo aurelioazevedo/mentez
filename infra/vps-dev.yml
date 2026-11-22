@@ -1,0 +1,45 @@
+# Mentez — AMBIENTE DE TESTES na VPS (projeto "mentez-dev"), separado da produção:
+# código do ramo "dev" em /opt/mentez-dev/src, banco próprio (db-dev), segredos próprios em /opt/mentez-dev/.env,
+# sem WhatsApp (Evolution) e só com dados fictícios. Endereços: dev.mentez.com.br e <clínica>.dev.mentez.com.br.
+# Os nomes dos serviços (app-dev, db-dev) são diferentes dos da produção (app, db) de propósito: o app de testes entra
+# na rede da produção só para o Caddy alcançá-lo, e assim nunca há risco de ele achar o banco da produção pelo nome.
+# Publicado por infra/vps-dev-update.yml (nunca pelo Docker Manager da Hostinger).
+services:
+  app-dev:
+    image: mentez-app-dev:latest
+    pull_policy: never
+    restart: unless-stopped
+    env_file: /opt/mentez-dev/.env
+    environment:
+      MENTEZ_ENV: dev
+      MENTEZ_DB_HOST: db-dev
+      MENTEZ_DB_PORT: "3306"
+      PORT: "3000"
+      MENTEZ_INTERNAL_URL: http://app-dev:3000
+      MENTEZ_FILES_DIR: /data/files
+    volumes:
+      - /opt/mentez-dev/files:/data/files:ro
+    networks: [default, prod]
+    mem_limit: 768m
+    depends_on:
+      db-dev: { condition: service_healthy }
+  db-dev:
+    image: mysql:8.4
+    restart: unless-stopped
+    env_file: /opt/mentez-dev/.env
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--innodb-buffer-pool-size=256M"]
+    volumes:
+      - db_dev:/var/lib/mysql
+      - /opt/mentez-dev/src/infra/mysql-init:/docker-entrypoint-initdb.d:ro
+    networks: [default]
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 10s
+      retries: 12
+networks:
+  prod:
+    external: true
+    name: mentez_default
+volumes:
+  db_dev:

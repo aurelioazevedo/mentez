@@ -1,0 +1,47 @@
+# Atualização do AMBIENTE DE TESTES (projeto "mentez-dev-sync" no Docker Manager da Hostinger):
+# 1) baixa o ramo "dev" do GitHub para /opt/mentez-dev/src (mesma deploy key só de leitura da produção);
+# 2) na primeira vez, gera os segredos próprios do ambiente de testes em /opt/mentez-dev/.env (nunca passam pelo Git nem pela API);
+# 3) monta a imagem mentez-app-dev:latest e sobe/atualiza o projeto "mentez-dev" (infra/vps-dev.yml).
+# Não toca em nenhum contêiner da produção.
+services:
+  update:
+    image: docker:27-cli
+    restart: "no"
+    volumes:
+      - /opt/mentez-dev:/opt/mentez-dev
+      - /opt/mentez/keys:/opt/mentez/keys:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      GIT_SSH_COMMAND: "ssh -i /opt/mentez/keys/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/opt/mentez-dev/known_hosts"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache git openssh-client openssl >/dev/null
+        docker compose version >/dev/null 2>&1 || apk add --no-cache docker-cli-compose >/dev/null
+        mkdir -p /opt/mentez-dev/files
+        if [ -d /opt/mentez-dev/src/.git ]; then
+          git -C /opt/mentez-dev/src fetch --depth 1 origin dev
+          git -C /opt/mentez-dev/src reset --hard origin/dev
+        else
+          git clone --depth 1 --branch dev git@github.com:aurelioazevedo/mentez.git /opt/mentez-dev/src
+        fi
+        if [ ! -f /opt/mentez-dev/.env ]; then
+          R=$$(openssl rand -hex 24); U=$$(openssl rand -hex 18); M=$$(openssl rand -hex 32)
+          umask 077
+          printf 'NODE_ENV=production\nMENTEZ_PLATFORM_DB=mentez_platform\nMENTEZ_BASE_DOMAIN=dev.mentez.com.br\nMENTEZ_PLATFORM_HOSTS=dev.mentez.com.br,app.dev.mentez.com.br\nMENTEZ_DB_USER=mentez\nMENTEZ_DB_PASSWORD=%s\nMYSQL_ROOT_PASSWORD=%s\nMENTEZ_MASTER_KEY=%s\n' "$$U" "$$R" "$$M" > /opt/mentez-dev/.env
+          echo "ENV: segredos do ambiente de testes criados"
+        fi
+        chown -R 1000:1000 /opt/mentez-dev/files
+        REV=$$(git -C /opt/mentez-dev/src log -1 --format='%h')
+        echo "SYNC-DEV: $$REV $$(git -C /opt/mentez-dev/src log -1 --format='%s')"
+        docker network inspect mentez_default >/dev/null
+        docker build -q -t mentez-app-dev:latest -t mentez-app-dev:$$REV /opt/mentez-dev/src/app
+        echo "BUILD-DEV: ok mentez-app-dev:$$REV"
+        docker compose -p mentez-dev -f /opt/mentez-dev/src/infra/vps-dev.yml up -d
+        for i in $$(seq 1 45); do h=$$(docker inspect -f '{{.State.Health.Status}}' mentez-dev-app-dev-1 2>/dev/null || true); [ "$$h" = healthy ] && break; sleep 2; done
+        echo "APP-DEV: $$(docker inspect -f '{{.Config.Image}} {{.State.Status}} {{.State.Health.Status}}' mentez-dev-app-dev-1)"
+        echo "DB-DEV: $$(docker inspect -f '{{.State.Status}}' mentez-dev-db-dev-1)"
+        # primeiro acesso ao painel de testes: convite de uso único (só enquanto não houver usuário no painel)
+        docker exec mentez-dev-app-dev-1 node scripts/mentez.js painel-convite 2>/dev/null | sed 's/^/CONVITE-DEV: /' || true
+        docker image prune -f >/dev/null || true
