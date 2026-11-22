@@ -369,3 +369,34 @@ section { position: relative; }
 .plans[data-count="4"] { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 1100px) { .plans[data-count="4"] { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .plans[data-count="2"], .plans[data-count="4"] { grid-template-columns: 1fr; } }
+
+/* ---------- barra de rolagem fina, nas cores da Mentez ---------- */
+html { scrollbar-width: thin; scrollbar-color: #07C6BC #071936; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #071936; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #07C6BC, #8065E8); border-radius: 8px; border: 2px solid #071936; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #3BD6CD, #A08CF2); }
+
+/* ---------- hero: vídeo de atendimento ao fundo + elementos animados ---------- */
+.hero-bg { position: absolute; inset: 0 0 auto 0; height: min(100%, 980px); z-index: -2; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%); mask-image: linear-gradient(180deg, #000 55%, transparent 100%); }
+.hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; opacity: 0; transition: opacity 1.2s ease; filter: saturate(.75) contrast(1.05); }
+.hero-video.on, .hero-video[poster]:not([data-off]) { opacity: .75; }
+.hero-veil { position: absolute; inset: 0; background:
+  linear-gradient(90deg, rgba(7, 25, 54, .95) 0%, rgba(7, 25, 54, .78) 42%, rgba(7, 25, 54, .35) 100%),
+  linear-gradient(180deg, rgba(7, 25, 54, .35) 0%, rgba(7, 25, 54, .2) 60%, #071936 100%); }
+.orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .5; mix-blend-mode: screen; will-change: transform; }
+.orb.o1 { width: 420px; height: 420px; background: #07C6BC; top: -120px; right: 6%; animation: drift1 26s ease-in-out infinite alternate; }
+.orb.o2 { width: 360px; height: 360px; background: #8065E8; top: 38%; right: -80px; animation: drift2 32s ease-in-out infinite alternate; }
+.orb.o3 { width: 280px; height: 280px; background: #3BD6CD; bottom: 8%; left: -90px; opacity: .3; animation: drift3 38s ease-in-out infinite alternate; }
+@keyframes drift1 { to { transform: translate(-120px, 90px) scale(1.15); } }
+@keyframes drift2 { to { transform: translate(-160px, -70px) scale(.9); } }
+@keyframes drift3 { to { transform: translate(140px, -60px) scale(1.2); } }
+.waves { position: absolute; left: 0; right: 0; bottom: 18%; width: 100%; height: 260px; opacity: .55; }
+.waves path { fill: none; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.waves .w { animation: flow 22s linear infinite; }
+.waves .w1 path { stroke: #07C6BC; } .waves .w2 path { stroke: #8065E8; stroke-dasharray: 2 7; } .waves .w3 path { stroke: rgba(245, 247, 252, .35); }
+.waves .w2 { animation-duration: 30s; animation-direction: reverse; } .waves .w3 { animation-duration: 40s; }
+@keyframes flow { to { transform: translateX(-1440px); } }
+@media (max-width: 760px) { .orb.o1 { width: 260px; height: 260px; } .orb.o2 { width: 220px; height: 220px; } .waves { bottom: 30%; height: 180px; } }
+@media (prefers-reduced-motion: reduce) { .orb, .waves .w { animation: none; } .hero-video { display: none; } }

@@ -100,3 +100,15 @@ document.querySelectorAll('[data-year]').forEach((el) => { el.textContent = new 
   if (!document.querySelector('[data-plans],[data-cmp],[data-pay-methods],[data-contact]')) return;
   fetch(API, { mode: 'cors', credentials: 'omit' }).then((r) => (r.ok ? r.json() : null)).then((d) => d && render(d)).catch(() => { /* fica a versão do HTML */ });
 })();
+
+// ---------- hero: vídeo de fundo (só em telas largas, com movimento permitido e sem economia de dados) ----------
+(() => {
+  const v = document.querySelector('.hero-video'); if (!v) return;
+  const saveData = navigator.connection && (navigator.connection.saveData || /2g/.test(navigator.connection.effectiveType || ''));
+  if (saveData || matchMedia('(prefers-reduced-motion: reduce)').matches || !matchMedia('(min-width: 760px)').matches) return;
+  [['webm', 'video/webm'], ['mp4', 'video/mp4']].forEach(([k, t]) => { const s = document.createElement('source'); s.src = v.dataset[k]; s.type = t; v.appendChild(s); });
+  v.load();
+  v.addEventListener('canplay', () => { v.play().then(() => v.classList.add('on')).catch(() => {}); }, { once: true });
+  // pausa quando o hero sai da tela (economiza bateria)
+  if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { if (e.isIntersecting) v.play().catch(() => {}); else v.pause(); }).observe(v);
+})();
