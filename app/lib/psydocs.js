@@ -9,6 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { q, one, getSetting, setSetting } from './db.js';
 import * as Agent from './agent.js';
 import * as AP from './aiproviders.js';
+import * as Slot from './aislot.js';
 import { encrypt, decrypt } from './crypto.js';
 import { todayLocal, longDate } from './time.js';
 import { proName } from './perm.js';
@@ -230,48 +231,55 @@ export async function aiConfig() {
   if (!PROVIDERS[out.provider]) out.provider = 'anthropic';
   if (out.provider === 'anthropic' && !Agent.MODELS[out.model]) out.model = AI_DEFAULTS.model;
   try { out.clinicKey = c.clinic_key_enc ? decrypt(c.clinic_key_enc) : ''; } catch { out.clinicKey = ''; }
+  out.first = { provider: out.provider, model: out.model, baseUrl: out.baseUrl, key: out.clinicKey, on: true };
+  out.second = Slot.read(c.p2); // provedor secundário da clínica (reserva)
   return out;
 }
+// Formulário: vagas p1 (principal) e p2 (secundário). Devolve { error } ou grava.
 export async function saveAiConfig(b) {
   const cur = await aiConfig();
-  const provider = PROVIDERS[b.provider] ? b.provider : 'anthropic';
-  const model = provider === 'anthropic' ? (Agent.MODELS[b.model] ? b.model : AI_DEFAULTS.model) : String(b.model_alt || b.model || '').trim().slice(0, 120);
-  const key = String(b.clinic_key || '').trim();
-  let clinic = cur.clinicKey && provider === cur.provider ? cur.clinicKey : '';
-  if (b.clinic_key_remove) clinic = '';
-  if (key) clinic = key;
+  const r1 = Slot.fromBody(b, 'p1', cur.first, [cur.second]);
+  const r2 = Slot.fromBody(b, 'p2', cur.second, [cur.first]);
+  for (const [r, nm] of [[r1, 'Principal'], [r2, 'Secundário']]) {
+    if (r.error) return { error: `${nm}: ${r.error}` };
+    if (r.slot.on && r.slot.provider !== 'anthropic' && !r.slot.model) return { error: `${nm}: informe o modelo de ${Slot.labelOf(r.slot.provider)}.` };
+  }
+  const p1 = r1.slot;
   await setSetting('psydoc_ai', JSON.stringify({
-    enabled: !!b.enabled, users: [].concat(b.users || []).map(Number).filter((n) => n > 0), provider, model, baseUrl: String(b.baseUrl || '').trim().slice(0, 300),
-    keyMode: KEY_MODES[b.keyMode] ? b.keyMode : AI_DEFAULTS.keyMode, allowRecords: !!b.allowRecords, clinic_key_enc: clinic ? encrypt(clinic) : null,
+    enabled: !!b.enabled, users: [].concat(b.users || []).map(Number).filter((n) => n > 0), provider: p1.provider, model: p1.model, baseUrl: p1.baseUrl,
+    keyMode: KEY_MODES[b.keyMode] ? b.keyMode : AI_DEFAULTS.keyMode, allowRecords: !!b.allowRecords, clinic_key_enc: p1.key ? encrypt(p1.key) : null,
+    p2: r2.slot.provider ? Slot.store(r2.slot) : null,
   }));
-}
-export function checkAiInput(b) {
-  const provider = PROVIDERS[b.provider] ? b.provider : 'anthropic';
-  if (provider !== 'anthropic' && !String(b.model_alt || '').trim()) return 'Informe o modelo do provedor (ex.: o nome que aparece no painel dele).';
-  if (provider === 'custom' && AP.checkUrl(b.baseUrl)) return AP.checkUrl(b.baseUrl);
-  const k = String(b.clinic_key || '').trim();
-  if (k) { if (provider === 'anthropic' ? !/^sk-ant-[\w-]{20,}$/.test(k) : AP.checkKey(provider, k)) return provider === 'anthropic' ? 'A chave da Anthropic começa com sk-ant-.' : AP.checkKey(provider, k); }
-  return null;
+  return { ok: true };
 }
 export const aiAllowed = (c, user) => !!c.enabled && ['admin', 'psicologo'].includes(user.role) && (!c.users.length || c.users.includes(user.id));
 // Chave própria do profissional (provedor, modelo e chave escolhidos por ele)
 export async function userAi(userId) {
-  const u = await one('SELECT ai_key_enc, ai_provider, ai_model, ai_base_url FROM users WHERE id = ?', [userId]);
+  const u = await one('SELECT ai_key_enc, ai_provider, ai_model, ai_base_url, ai2_json FROM users WHERE id = ?', [userId]);
   let key = ''; try { key = u?.ai_key_enc ? decrypt(u.ai_key_enc) : ''; } catch { /* inválida */ }
-  return { key, provider: PROVIDERS[u?.ai_provider] ? u.ai_provider : 'anthropic', model: u?.ai_model || '', baseUrl: u?.ai_base_url || '' };
+  let second = null; try { second = u?.ai2_json ? Slot.read(JSON.parse(u.ai2_json)) : null; } catch { second = null; }
+  return { key, provider: PROVIDERS[u?.ai_provider] ? u.ai_provider : 'anthropic', model: u?.ai_model || '', baseUrl: u?.ai_base_url || '', second };
 }
 // Qual chave (e provedor/modelo) paga esta geração
 export async function aiKeyFor(c, userId) {
   const own = await userAi(userId);
   const ownCfg = own.key ? { key: own.key, owner: 'profissional', provider: own.provider, model: own.model || (own.provider === c.provider ? c.model : (own.provider === 'anthropic' ? AI_DEFAULTS.model : '')), baseUrl: own.baseUrl } : null;
   if (ownCfg && !ownCfg.model) ownCfg.error = 'Informe o modelo da sua chave em Conta → Escrita com IA.';
-  let clinicKey = c.clinicKey;
-  if (!clinicKey && c.provider === 'anthropic') clinicKey = (await Agent.config()).apiKey || '';
-  if (!clinicKey && c.provider !== 'anthropic') { const ag = await Agent.config(); if ((ag.altProvider || 'groq') === c.provider && ag.groqKey) clinicKey = ag.groqKey; }
-  const clinicCfg = clinicKey ? { key: clinicKey, owner: 'clinica', provider: c.provider, model: c.model, baseUrl: c.baseUrl } : null;
-  if (c.keyMode === 'profissional') return ownCfg || { error: 'Cadastre a sua chave de IA em Conta → Escrita com IA.' };
-  if (c.keyMode === 'clinica') return clinicCfg || { error: `A chave da clínica para ${PROVIDERS[c.provider]} não está configurada (Configurações → Documentos psicológicos).` };
-  return ownCfg || clinicCfg || { error: 'Nenhuma chave de IA configurada: cadastre a sua em Conta → Escrita com IA.' };
+  // sem chave própria da escrita com IA, a clínica reaproveita a do atendente virtual do mesmo provedor
+  const ag = await Agent.config();
+  const clinicOf = (x) => { if (!x?.provider) return null; const key = x.key || Agent.keyForProvider(ag, x.provider)?.key || ''; return key ? { key, owner: 'clinica', provider: x.provider, model: x.model || (x.provider === 'anthropic' ? AI_DEFAULTS.model : ''), baseUrl: x.baseUrl } : null; };
+  const clinicCfg = clinicOf(c.first);
+  const clinic2 = c.second?.on ? clinicOf(c.second) : null;
+  const s2 = own.second;
+  const own2 = s2?.on && s2.key ? { key: s2.key, owner: 'profissional', provider: s2.provider, model: s2.model || (s2.provider === 'anthropic' ? AI_DEFAULTS.model : ''), baseUrl: s2.baseUrl } : null;
+  // ordem de tentativa: o primeiro que funcionar escreve; os demais são reserva (aiWrite)
+  const chain = (c.keyMode === 'profissional' ? [ownCfg, own2] : c.keyMode === 'clinica' ? [clinicCfg, clinic2] : [ownCfg, own2, clinicCfg, clinic2]).filter((x) => x && x.model);
+  const head = chain.find((x) => !x.error);
+  if (head) return { ...head, fallbacks: chain.filter((x) => x !== head && !x.error) };
+  if (ownCfg?.error) return ownCfg;
+  if (c.keyMode === 'profissional') return { error: 'Cadastre a sua chave de IA em Conta → Escrita com IA.' };
+  if (c.keyMode === 'clinica') return { error: `A chave da clínica para ${PROVIDERS[c.provider]} não está configurada (Configurações → Documentos psicológicos).` };
+  return { error: 'Nenhuma chave de IA configurada: cadastre a sua em Conta → Escrita com IA.' };
 }
 
 // Tira identificação do texto enviado à IA: nome vira {paciente}; CPF e telefones saem.
@@ -333,7 +341,19 @@ ${pseudonymize(notes, patient).slice(0, 8000) || '(sem anotações)'}
   return { ok: true, body: fill(text.replace(/\*\*/g, ''), vars), owner: k.owner, cost, provider: k.provider };
 }
 // Chamada à IA de texto com a chave/provedor escolhidos (Claude ou provedor compatível com OpenAI).
-export async function aiWrite(k, system, user0, { effort = 'medium' } = {}) {
+// Escreve com o provedor da chave escolhida; se falhar (créditos, chave, limite, fora do ar), tenta os de reserva.
+export async function aiWrite(k, system, user0, opts = {}) {
+  let r = await aiWriteOne(k, system, user0, opts);
+  k.used = k;
+  if (r.ok || r.refusal || !k.fallbacks?.length) return r;
+  for (const f of k.fallbacks) {
+    const r2 = await aiWriteOne(f, system, user0, opts);
+    if (r2.ok) { k.used = f; return { ...r2, via: f, note: `${PROVIDERS[k.provider]} não respondeu (${r.error}); o texto foi escrito por ${PROVIDERS[f.provider]}.` }; }
+    r = r2;
+  }
+  return r;
+}
+async function aiWriteOne(k, system, user0, { effort = 'medium' } = {}) {
   const who = k.owner === 'profissional' ? ' (sua chave)' : ' (chave da clínica)';
   if (k.provider === 'anthropic') {
     const model = Agent.MODELS[k.model] ? k.model : AI_DEFAULTS.model;
@@ -365,7 +385,8 @@ export async function aiWrite(k, system, user0, { effort = 'medium' } = {}) {
     return { ok: false, error: `${e.message}${who}.` };
   }
 }
-export async function logUse(userId, k, kind, model, inTok, outTok, cost) {
+export async function logUse(userId, k0, kind, model, inTok, outTok, cost) {
+  const k = k0.used || k0;
   await q('INSERT INTO ai_doc_usage (user_id, key_owner, kind, model, input_tokens, output_tokens, cost_usd) VALUES (?,?,?,?,?,?,?)',
     [userId, k.owner, kind, `${k.provider === 'anthropic' ? '' : `${k.provider}:`}${model}`.slice(0, 60), inTok, outTok, cost]);
 }

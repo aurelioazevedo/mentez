@@ -15,6 +15,7 @@ import { KEY_TYPES, normalizeKey } from '../lib/pix.js';
 import { str } from '../lib/router.js';
 import * as PsyDocs from '../lib/psydocs.js';
 import * as AP from '../lib/aiproviders.js';
+import * as AISlot from '../lib/aislot.js';
 import * as Fiscal from '../lib/fiscal.js';
 import * as Nfse from '../lib/nfse.js';
 import * as ICP from '../lib/icp.js';
@@ -88,13 +89,11 @@ r.get('/', async (req, res) => {
     </section>` : ''}
     ${aiMine ? html`<section class="card" id="ia"><h2>Escrita com IA (documentos)</h2>
       <p class="muted small sub-h">Sua chave de IA: o custo das gerações de documentos fica na sua conta do provedor, separado da clínica. ${aiCfg.keyMode === 'profissional' ? 'Obrigatória para usar a escrita com IA.' : 'Sem ela, o sistema usa a chave da clínica.'} Pode ser da Anthropic (Claude) ou de outra plataforma (OpenAI, Gemini, Groq, DeepSeek, OpenRouter…).</p>
-      <form method="post" action="/conta/ia" class="form-grid">
-        <label class="fld"><span>Provedor</span><select name="ai_provider">${Object.entries(PsyDocs.PROVIDERS).map(([k, l]) => html`<option value="${k}" ${(u.ai_provider || 'anthropic') === k ? raw('selected') : ''}>${l}</option>`)}</select></label>
-        <label class="fld"><span>Modelo <small class="muted">(vazio = o da clínica; ex.: claude-opus-5-5, gpt-4.1-mini)</small></span><input name="ai_model" maxlength="120" value="${u.ai_model || ''}"></label>
-        <label class="fld span2"><span>Chave da API ${u.ai_key_enc ? html`<small class="muted">(cadastrada — preencha só para trocar)</small>` : ''}</span><input name="ai_key" type="password" autocomplete="off" placeholder="sk-ant-… / sk-… / AIza…" maxlength="300"></label>
-        <label class="fld span2"><span>Endereço da API <small class="muted">(só para “Outro”)</small></span><input name="ai_base_url" maxlength="300" value="${u.ai_base_url || ''}" placeholder="https://…/v1"></label>
-        <div class="span2 actions"><button class="btn">Salvar</button>${u.ai_key_enc ? html`<button class="btn ghost danger-text" name="remover" value="1" formnovalidate>Remover chave</button>` : ''}</div>
-      </form>
+      ${await (async () => { const me = await PsyDocs.userAi(u.id); return html`<form method="post" action="/conta/ia" class="stack">
+        ${AISlot.fields('p1', { provider: me.provider, model: me.model, baseUrl: me.baseUrl, key: me.key, on: true }, { title: 'Meu provedor principal', hint: 'Modelo em branco com Claude: usa o modelo da clínica.' })}
+        ${AISlot.fields('p2', me.second, { title: 'Meu provedor secundário (reserva)', hint: 'Entra sozinho quando o principal falhar (créditos, chave recusada, limite ou fora do ar).', toggle: true })}
+        <div class="actions"><button class="btn">Salvar</button></div>
+      </form>`; })()}
       <p class="muted small">Neste mês: ${aiMine.n} geração(ões) · custo estimado US$ ${Number(aiMine.cost).toFixed(2)}${(u.ai_provider || 'anthropic') !== 'anthropic' ? ' (outros provedores: confira o custo no painel deles)' : ''}.</p>
     </section>` : ''}
     ${myFiscal ? html`<section class="card" id="fiscal"><h2>Meus dados fiscais</h2>
@@ -393,18 +392,18 @@ r.post('/assinatura/remover', async (req, res) => {
 
 // Chave própria da API para a escrita de documentos com IA
 r.post('/ia', async (req, res) => {
-  if (req.body.remover) { await q('UPDATE users SET ai_key_enc = NULL WHERE id = ?', [req.user.id]); await audit(req, 'conta-ia-chave-remover'); return res.flash('Chave removida.').redirect('/conta#ia'); }
-  const provider = PsyDocs.PROVIDERS[req.body.ai_provider] ? req.body.ai_provider : 'anthropic';
-  const k = str(req.body.ai_key, 300); const base = str(req.body.ai_base_url, 300); const model = str(req.body.ai_model, 120);
-  const cur = await one('SELECT ai_key_enc, ai_provider FROM users WHERE id = ?', [req.user.id]);
-  if (!k && (!cur.ai_key_enc || (cur.ai_provider || 'anthropic') !== provider)) return res.flash('Informe a chave da API deste provedor.', 'err').redirect('/conta#ia');
-  if (k) {
-    const bad = provider === 'anthropic' ? (/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k) ? null : 'Chave inválida: a da Anthropic começa com sk-ant-.') : AP.checkKey(provider, k);
-    if (bad) return res.flash(bad, 'err').redirect('/conta#ia');
+  const me = await PsyDocs.userAi(req.user.id);
+  const first = { provider: me.provider, model: me.model, baseUrl: me.baseUrl, key: me.key, on: true };
+  const r1 = AISlot.fromBody(req.body, 'p1', first, [me.second]);
+  const r2 = AISlot.fromBody(req.body, 'p2', me.second, [first]);
+  if (!str(req.body.p1_model, 120) && r1.slot.provider === 'anthropic') r1.slot.model = ''; // vazio = o modelo da clínica
+  for (const [r, nm] of [[r1, 'Principal'], [r2, 'Secundário']]) {
+    if (r.error) return res.flash(`${nm}: ${r.error}`, 'err').redirect('/conta#ia');
+    if (r.slot.on && r.slot.key && r.slot.provider !== 'anthropic' && !r.slot.model) return res.flash(`${nm}: informe o modelo do provedor.`, 'err').redirect('/conta#ia');
   }
-  if (provider === 'custom' && AP.checkUrl(base)) return res.flash(AP.checkUrl(base), 'err').redirect('/conta#ia');
-  if (provider !== 'anthropic' && !model) return res.flash('Informe o modelo do provedor (ex.: o nome que aparece no painel dele).', 'err').redirect('/conta#ia');
-  await q(`UPDATE users SET ${k ? 'ai_key_enc = ?, ' : ''}ai_provider = ?, ai_model = ?, ai_base_url = ? WHERE id = ?`, [...(k ? [encrypt(k)] : []), provider, model || null, base || null, req.user.id]);
+  const p1 = r1.slot;
+  await q('UPDATE users SET ai_key_enc = ?, ai_provider = ?, ai_model = ?, ai_base_url = ?, ai2_json = ? WHERE id = ?',
+    [p1.key ? encrypt(p1.key) : null, p1.provider, p1.model || null, p1.baseUrl || null, r2.slot.provider ? JSON.stringify(AISlot.store(r2.slot)) : null, req.user.id]);
   await audit(req, 'conta-ia-chave');
   res.flash('Configuração de IA salva (a chave fica guardada criptografada).').redirect('/conta#ia');
 });

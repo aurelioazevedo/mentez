@@ -2534,3 +2534,9 @@ a.mz2-me{text-decoration:none;color:inherit}
 .bk-few-more { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .bk-few-cfg { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: grid; gap: 8px; }
 .bk-few-cfg .fld:not(.check) { max-width: 220px; }
+
+/* IA: provedor principal e secundário */
+.ai-slot { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 4px; margin: 10px 0; display: grid; gap: 6px; }
+.ai-slot > legend { font-weight: 700; padding: 0 6px; }
+.ai-slot > p { margin: 0; }
+.ai-slot > .fld.check { justify-self: start; display: flex; flex-direction: row; gap: 8px; align-items: center; }

@@ -1357,6 +1357,7 @@ const COLUMNS = [
   ['users', 'ai_provider', 'VARCHAR(20) NULL'],
   ['users', 'ai_model', 'VARCHAR(120) NULL'],
   ['users', 'ai_base_url', 'VARCHAR(300) NULL'],
+  ['users', 'ai2_json', 'TEXT NULL'], // provedor secundário da escrita com IA (chave cifrada dentro)
   ['patients', 'ai_rec_paper_at', 'DATETIME NULL'],
   ['patients', 'ai_rec_revoked_at', 'DATETIME NULL'],
   ['patients', 'portal_last_at', 'DATETIME NULL'],

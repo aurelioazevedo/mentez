@@ -19,6 +19,7 @@ import { proName } from './perm.js';
 import * as Live from './live.js';
 import * as Waitlist from './waitlist.js';
 import * as AP from './aiproviders.js';
+import * as Slot from './aislot.js';
 
 // Modelos do Claude oferecidos na configuração (preço por milhão de tokens, US$).
 // O Haiku é o padrão: ~40× mais barato que o Opus e suficiente para atendimento e agenda.
@@ -44,28 +45,49 @@ export async function config() {
   if (S.cache && S.cache.at > Date.now() - 30e3) return S.cache.v;
   const raw = await getSetting('agent_config');
   let c = { ...DEFAULTS };
-  if (raw) { try { const o = JSON.parse(raw); c = { ...c, ...o, apiKey: o.key_enc ? decrypt(o.key_enc) : '', groqKey: o.groq_key_enc ? decrypt(o.groq_key_enc) : '' }; } catch { /* usa padrão */ } }
+  let o = {};
+  if (raw) { try { o = JSON.parse(raw); c = { ...c, ...o, apiKey: o.key_enc ? decrypt(o.key_enc) : '', groqKey: o.groq_key_enc ? decrypt(o.groq_key_enc) : '' }; } catch { /* usa padrão */ } }
+  // Provedor principal (ai1) e secundário (ai2), cada um com qualquer provedor. Configurações antigas
+  // (Claude + “outro provedor” como reserva ou principal) viram as duas vagas automaticamente.
+  let ai1 = Slot.read(o.ai1); let ai2 = Slot.read(o.ai2);
+  if (!ai1) {
+    const claude = { provider: 'anthropic', model: modelOf(c), baseUrl: '', key: c.apiKey || '', on: true };
+    const alt = { provider: c.altProvider || 'groq', model: c.groqModel || '', baseUrl: c.altBaseUrl || '', key: c.groqKey || '', on: !!c.groqEnabled };
+    if (c.primary === 'alt' && alt.key) { ai1 = { ...alt, on: true }; ai2 = { ...claude, on: !!claude.key }; } else { ai1 = claude; ai2 = alt; }
+  }
+  c.ai1 = ai1; c.ai2 = ai2;
+  // visões antigas, usadas por outras partes (chave da clínica na escrita com IA, transcrição)
+  const anth = [ai1, ai2].find((x) => x?.provider === 'anthropic' && x.key);
+  const alt = [ai1, ai2].find((x) => x && x.provider !== 'anthropic' && x.key);
+  c.apiKey = anth?.key || ''; if (anth) c.model = anth.model;
+  c.groqKey = alt?.key || ''; c.altProvider = alt?.provider || 'groq'; c.groqModel = alt?.model || ''; c.altBaseUrl = alt?.baseUrl || ''; c.groqEnabled = !!alt?.on;
   S.cache = { at: Date.now(), v: c };
   return c;
 }
 export async function saveConfig(patch) {
   const cur = await config();
   const next = { ...cur, ...patch };
-  if (patch.apiKey) next.key_enc = encrypt(patch.apiKey);
-  if (patch.groqKey) next.groq_key_enc = encrypt(patch.groqKey);
-  delete next.apiKey; delete next.groqKey;
+  next.ai1 = Slot.store(next.ai1); next.ai2 = Slot.store(next.ai2);
+  // as chaves passam a ficar só nas vagas
+  for (const k of ['apiKey', 'groqKey', 'key_enc', 'groq_key_enc', 'groqEnabled', 'groqModel', 'altProvider', 'altBaseUrl', 'primary']) delete next[k];
   await setSetting('agent_config', JSON.stringify(next));
   S.cache = null;
   return config();
 }
-export const claudeReady = (c) => !!(c && c.apiKey && !c.suspended);
-// “Outro provedor” (guardado nos campos groq* por compatibilidade): Groq, OpenAI, Gemini, DeepSeek, OpenRouter, Mistral ou outro
-export const groqReady = (c) => !!(c && c.groqEnabled && c.groqKey && c.groqModel && (c.altProvider !== 'custom' || c.altBaseUrl));
-export const altLabel = (c) => AP.labelOf(c?.altProvider || 'groq');
-// Usa o outro provedor como principal (sem Claude)?
-export const altPrimary = (c) => c?.primary === 'alt' && groqReady(c);
-// O atendente funciona se o Claude estiver disponível ou se a reserva (Groq) estiver configurada.
-export const ready = (c) => !!(c && c.enabled && (claudeReady(c) || groqReady(c)));
+// Chave da clínica para um provedor (de qualquer uma das vagas)
+export const keyForProvider = (c, provider) => [c?.ai1, c?.ai2].find((x) => x?.provider === provider && x.key) || null;
+// A vaga pode responder agora? (Claude suspenso por créditos/chave fica de fora até reativar)
+export const slotOk = (c, x) => Slot.ready(x) && !(x.provider === 'anthropic' && c?.suspended);
+// Ordem de tentativa: principal e, se ativado, o secundário
+export const order = (c) => [c?.ai1, c?.ai2?.on ? c.ai2 : null].filter((x) => x && slotOk(c, x));
+export const primaryReady = (c) => !!c && slotOk(c, c.ai1);
+export const secondaryReady = (c) => !!(c && c.ai2?.on && slotOk(c, c.ai2));
+// nomes antigos (telas e alertas): “Claude” = principal; “reserva” = secundário
+export const claudeReady = primaryReady;
+export const groqReady = secondaryReady;
+export const altLabel = (c) => Slot.labelOf(c?.ai2?.provider);
+export const altPrimary = () => false;
+export const ready = (c) => !!(c && c.enabled && order(c).length);
 
 // Traduz erros da API da Anthropic. “account” = problema da conta (créditos, chave): suspende o atendente.
 export function classifyError(e) {
@@ -85,8 +107,8 @@ async function suspendClaude(reason) {
   await saveConfig({ suspended: { reason, at: nowLocal() } });
   if (/créditos/.test(reason)) await markExhausted();
   const admins = (await q("SELECT id FROM users WHERE active = 1 AND role = 'admin'")).map((u) => u.id);
-  const groq = groqReady(c);
-  notify(admins, { title: groq ? `🔁 Atendente usando a reserva (${altLabel(c)})` : '⛔ Atendente virtual suspenso', body: `${reason}. ${groq ? `As respostas seguem pela ${altLabel(c)} até você reativar o Claude.` : 'Resolva e clique em “Reativar” em Configurações → Atendente virtual.'}`, url: '/configuracoes/agente', tag: 'agent-suspended' });
+  const other = [c.ai1, c.ai2?.on ? c.ai2 : null].find((x) => x && x.provider !== 'anthropic' && Slot.ready(x));
+  notify(admins, { title: other ? `🔁 Atendente usando ${Slot.labelOf(other.provider)}` : '⛔ Atendente virtual suspenso', body: `${reason}. ${other ? `As respostas seguem por ${Slot.labelOf(other.provider)} até você reativar o Claude.` : 'Resolva e clique em “Reativar” em Configurações → Atendente virtual.'}`, url: '/configuracoes/agente', tag: 'agent-suspended' });
 }
 
 // ---------- custo e saldo da conta da Anthropic ----------
@@ -786,15 +808,15 @@ async function converse(c, conv, history, dryRun) {
 }
 
 // Simulador (tela de configuração): conversa de teste sem enviar WhatsApp e sem alterar a agenda.
-export async function simulate(historyIn, text, asPatientId = null, forceGroq = false) {
+export async function simulate(historyIn, text, asPatientId = null, forceSecondary = false) {
   const c = await config();
-  if (!c.apiKey && !groqReady(c)) throw new Error('Informe a chave da API da Anthropic ou configure outro provedor de IA.');
+  if (!order(c).length && !(forceSecondary && Slot.ready(c.ai2))) throw new Error('Configure o provedor de IA principal (provedor, modelo e chave).');
   const conv = { id: 0, phone: '5500000000000', patient_id: asPatientId, contact_name: null, status: 'ativo' };
   // Trabalha numa cópia: se a chamada falhar, o histórico do simulador não fica com um turno pela metade.
   const history = Array.isArray(historyIn) ? [...historyIn] : [];
   history.push({ role: 'user', content: text });
   history.push({ role: 'system', content: await contextMessage(c, conv, 'Esta é uma conversa de TESTE da equipe (simulação): nada será gravado.') });
-  const r = await smartConverse(c, conv, history, true, forceGroq);
+  const r = await smartConverse(c, conv, history, true, forceSecondary);
   return { reply: r.final || '(sem resposta)', history, handoff: r.handoff, provider: r.provider, usage: { in: r.usageIn, out: r.usageOut } };
 }
 
@@ -857,23 +879,33 @@ async function converseGroq(c, conv, history, dryRun) {
   return { final, usageIn, usageOut, handoff: ctx.handoff || null, provider: 'groq' };
 }
 
-// Escolhe o provedor: Claude primeiro; a Groq assume se o Claude estiver suspenso, sem créditos ou fora do ar.
-async function smartConverse(c, conv, history, dryRun, forceGroq = false) {
+// Escolhe o provedor: o principal primeiro; o secundário assume se o principal falhar
+// (conta sem créditos, chave inválida, limite de uso ou serviço fora do ar).
+const transient = (e) => { const st = e?.status; return !st || [401, 402, 403, 404, 408, 409, 429].includes(st) || st >= 500; };
+async function smartConverse(c, conv, history, dryRun, forceSecondary = false) {
   c = { ...c, waitlistOn: (await Waitlist.config()).enabled };
-  if (altPrimary(c)) forceGroq = true; // outro provedor escolhido como principal
-  if (!forceGroq && claudeReady(c)) {
+  const slots = forceSecondary ? [c.ai2].filter((x) => Slot.ready(x)) : order(c);
+  if (!slots.length) throw new Error(`${c.suspended?.reason ? `${c.suspended.reason} — ` : ''}nenhum provedor de IA disponível: configure o principal ou ative o secundário.`);
+  let lastErr = null;
+  for (let i = 0; i < slots.length; i++) {
+    const x = slots[i];
     try {
-      return { ...(await converse(c, conv, history, dryRun)), provider: 'claude' };
+      const r = x.provider === 'anthropic'
+        ? await converse({ ...c, apiKey: x.key, model: x.model }, conv, history, dryRun)
+        : await converseGroq({ ...c, altProvider: x.provider, groqKey: x.key, altBaseUrl: x.baseUrl, groqModel: x.model }, conv, history, dryRun);
+      return { ...r, provider: Slot.describe(x), slot: x === c.ai1 ? 1 : 2 };
     } catch (e) {
-      const { account, reason } = classifyError(e);
-      if (account && !dryRun) await suspendClaude(reason);
-      const outage = e instanceof Anthropic.APIConnectionError || e instanceof Anthropic.RateLimitError || e?.status >= 500;
-      if (!groqReady(c) || !(account || outage)) throw e;
-      console.error(`agent: Claude indisponível, usando ${altLabel(c)} —`, reason);
+      lastErr = e;
+      if (x.provider === 'anthropic') {
+        const { account, reason } = classifyError(e);
+        if (account && !dryRun) await suspendClaude(reason);
+        const outage = e instanceof Anthropic.APIConnectionError || e instanceof Anthropic.RateLimitError || e?.status >= 500;
+        if (!(account || outage)) throw e;
+      } else if (!transient(e)) throw e;
+      if (i < slots.length - 1) console.error(`agent: ${Slot.describe(x)} indisponível, usando ${Slot.describe(slots[i + 1])} —`, e.message);
     }
   }
-  if (!groqReady(c)) throw new Error(`${c.suspended?.reason || 'Claude indisponível'} — configure outro provedor de IA para continuar respondendo.`);
-  return converseGroq(c, conv, history, dryRun);
+  throw lastErr;
 }
 
 // Alguém respondeu manualmente pelo celular: pausa o atendente virtual neste contato.

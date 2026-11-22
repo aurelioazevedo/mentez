@@ -111,8 +111,8 @@ export async function tick() {
       if (ag.enabled) {
         const bal = await Agent.balance();
         const suspended = !Agent.claudeReady(ag);
-        const low = bal.known && bal.estimated < Number(c.iaMinUsd || 2);
-        if (suspended) await raise('ia', `🤖 O atendente virtual (Claude) está *suspenso*: ${ag.suspended?.reason || 'indisponível'}.${Agent.groqReady(ag) ? ' As respostas seguem pela reserva (Groq).' : ' Os pacientes não estão recebendo resposta automática.'}\nResolva em Configurações → Atendente virtual.`);
+        const low = !!ag.apiKey && bal.known && bal.estimated < Number(c.iaMinUsd || 2);
+        if (suspended) await raise('ia', `🤖 O provedor principal do atendente virtual está *indisponível*: ${ag.suspended?.reason || 'confira a chave e o modelo'}.${Agent.groqReady(ag) ? ` As respostas seguem pelo secundário (${Agent.altLabel(ag)}).` : ' Os pacientes não estão recebendo resposta automática.'}\nResolva em Configurações → Atendente virtual.`);
         else if (low) await raise('ia', `🤖 Saldo da IA *baixo*: cerca de US$ ${bal.estimated.toFixed(2)}. Recarregue os créditos da Anthropic para o atendente virtual não parar.`);
         else await clear('ia', 'O atendente virtual (IA) está funcionando normalmente.');
       }

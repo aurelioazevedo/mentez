@@ -303,7 +303,7 @@ function initPage() {
         const r = await post({ text, groq: !!document.querySelector('[data-sim-groq]')?.checked });
         wait.remove();
         const o = add('out', r.ok ? r.reply : `Erro: ${r.error}`);
-        if (r.ok && r.provider) { const t = document.createElement('small'); t.className = 'sim-prov'; t.textContent = r.provider === 'groq' ? 'via Groq (reserva)' : 'via Claude'; o.appendChild(t); }
+        if (r.ok && r.provider) { const t = document.createElement('small'); t.className = 'sim-prov'; t.textContent = `via ${r.provider}`; o.appendChild(t); }
         if (r.handoff) add('sys', `→ Transferido para humano${r.handoff.urgente ? ' (URGENTE)' : ''}: ${r.handoff.motivo}`);
       } catch (err) { wait.remove(); add('sys', `Erro: ${err.message}`); } finally { btn.disabled = false; inp.focus(); }
     }, true);

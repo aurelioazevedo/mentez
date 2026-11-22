@@ -7,6 +7,7 @@ import { router, send, int, str, dec } from '../lib/router.js';
 import { decrypt } from '../lib/crypto.js';
 import * as Agent from '../lib/agent.js';
 import * as AP from '../lib/aiproviders.js';
+import * as AISlot from '../lib/aislot.js';
 import * as WA from '../lib/whatsapp.js';
 import * as Relay from '../lib/relay.js';
 import * as CRM from '../lib/crm.js';
@@ -44,8 +45,9 @@ admin.get('/', async (req, res) => {
   const chk = (n, v) => (v ? raw(`name="${n}" value="1" checked`) : raw(`name="${n}" value="1"`));
   const sel = (n, opts, v) => html`<select name="${n}">${opts.map(([val, l]) => html`<option value="${val}" ${String(val) === String(v) ? raw('selected') : ''}>${l}</option>`)}</select>`;
   const bal = await Agent.balance();
-  let groqModels = []; let groqError = '';
-  if (c.groqKey) { try { groqModels = await Agent.groqModels(c.groqKey, false, c.altProvider || 'groq', c.altBaseUrl); } catch (e) { groqError = e.message; } }
+  // modelos disponíveis na conta de cada vaga (provedores compatíveis com OpenAI)
+  const modelsOf = async (x) => { if (!x?.key || x.provider === 'anthropic') return { list: [], err: '' }; try { return { list: await Agent.groqModels(x.key, false, x.provider, x.baseUrl), err: '' }; } catch (e) { return { list: [], err: e.message }; } };
+  const [m1, m2] = await Promise.all([modelsOf(c.ai1), modelsOf(c.ai2)]);
   const days = await q("SELECT DATE(created_at) d, SUM(cost_usd) s, COUNT(*) n FROM agent_usage WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(created_at) ORDER BY d");
   const usd = (v) => `US$ ${Number(v || 0).toFixed(2)}`;
   const low = bal.known && bal.estimated <= bal.alertUsd;
@@ -54,10 +56,10 @@ admin.get('/', async (req, res) => {
     title: 'Atendente virtual', active: 'config',
     body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Atendente virtual (IA) no WhatsApp</h1>
       <p class="muted">Atende, tira dúvidas, oferece os e-books e agenda, remarca e cancela sessões pelo WhatsApp do consultório — dentro da escala e das regras definidas aqui.</p></div>
-      <div class="ph-actions">${!c.enabled ? html`<span class="badge b-cancelada">Desligado</span>` : Agent.altPrimary(c) ? html`<span class="badge b-realizada">Ligado · ${Agent.altLabel(c)}</span>` : Agent.claudeReady(c) ? html`<span class="badge b-realizada">Ligado · Claude</span>` : Agent.groqReady(c) ? html`<span class="badge b-agendada">Ligado · reserva ${Agent.altLabel(c)}</span>` : html`<span class="badge b-falta">Suspenso</span>`}<a class="btn ghost" href="/atendimento">Conversas</a><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
-    ${c.suspended ? html`<div class="flash ${Agent.groqReady(c) ? 'warn' : 'err'}"><b>${Agent.groqReady(c) ? 'Claude suspenso' : 'Atendente suspenso'} desde ${brDateTime(c.suspended.at)}:</b> ${c.suspended.reason}.
+      <div class="ph-actions">${!c.enabled ? html`<span class="badge b-cancelada">Desligado</span>` : Agent.primaryReady(c) ? html`<span class="badge b-realizada">Ligado · ${AISlot.labelOf(c.ai1.provider)}</span>` : Agent.secondaryReady(c) ? html`<span class="badge b-agendada">Ligado · secundário ${AISlot.labelOf(c.ai2.provider)}</span>` : html`<span class="badge b-falta">Suspenso</span>`}<a class="btn ghost" href="/atendimento">Conversas</a><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
+    ${c.suspended ? html`<div class="flash ${Agent.order(c).length ? 'warn' : 'err'}"><b>${Agent.order(c).length ? 'Claude suspenso' : 'Atendente suspenso'} desde ${brDateTime(c.suspended.at)}:</b> ${c.suspended.reason}.
       ${/créditos/.test(c.suspended.reason) ? html` Adicione créditos em <b>console.anthropic.com → Settings → Billing</b> (botão “Buy credits”); se quiser, ative a recarga automática.` : /Chave/.test(c.suspended.reason) ? ' Gere uma nova chave em console.anthropic.com → API Keys e salve abaixo.' : ''}
-      ${Agent.groqReady(c) ? html`<b>Enquanto isso, o atendente está respondendo pela reserva (${Agent.altLabel(c)} · ${c.groqModel}).</b>` : 'Enquanto isso, as mensagens chegam normalmente no CRM, mas ninguém responde automaticamente — configure a reserva Groq abaixo para não ficar sem resposta.'}
+      ${Agent.order(c).length ? html`<b>Enquanto isso, o atendente está respondendo por ${AISlot.describe(Agent.order(c)[0])}.</b>` : 'Enquanto isso, as mensagens chegam normalmente no CRM, mas ninguém responde automaticamente — ative um provedor secundário abaixo para não ficar sem resposta.'}
       <form method="post" action="/configuracoes/agente/reativar" style="display:inline"><button class="btn" style="margin-left:8px">Reativar agora</button></form></div>` : ''}
     ${!wa ? html`<div class="flash warn">Configure primeiro o WhatsApp em <a class="link" href="/configuracoes/whatsapp">Configurações → WhatsApp</a>.</div>` : ''}
     <section class="kpis small">
@@ -98,9 +100,8 @@ admin.get('/', async (req, res) => {
       <form method="post" action="/configuracoes/agente" class="card form-grid">
         <h2 class="span2">Funcionamento</h2>
         <label class="fld check span2"><input type="checkbox" ${chk('enabled', c.enabled)}><span><b>Atendente virtual ligado</b></span></label>
-        <label class="fld span2"><span>Chave da API da Anthropic (Claude) <small class="muted">(opcional se usar outro provedor como principal)</small></span><input type="password" name="apiKey" autocomplete="off" placeholder="${c.apiKey ? 'deixe em branco para manter a atual' : 'sk-ant-…'}"></label>
-        <label class="fld span2"><span>Modelo do Claude</span>${sel('model', Object.entries(Agent.MODELS).map(([id, m]) => [id, m.label]), Agent.modelOf(c))}
-          <small class="muted">Custo por conversa típica (≈10 mensagens): Haiku ~US$ 0,01 · Sonnet ~US$ 0,15 · Opus ~US$ 0,30.</small></label>
+        <div class="span2">${AISlot.fields('p1', c.ai1, { title: 'Provedor de IA principal', hint: 'Responde todas as conversas. Escolha qualquer provedor; o modelo precisa aceitar chamada de ferramentas (function calling). Com Claude, o Haiku custa cerca de US$ 0,01 por conversa típica.', models: m1.list, error: m1.err })}</div>
+        <div class="span2">${AISlot.fields('p2', c.ai2, { title: 'Provedor de IA secundário (reserva)', hint: 'Assume sozinho quando o principal falhar: conta sem créditos, chave recusada, limite de uso ou serviço fora do ar. Pode ser outro provedor ou outra conta.', toggle: true, models: m2.list, error: m2.err })}</div>
         <label class="fld span2"><span>Nome do atendente</span><input name="assistantName" maxlength="80" value="${c.assistantName}"></label>
         <label class="fld check span2"><input type="checkbox" ${chk('answerNew', c.answerNew)}><span>Atender também quem ainda não é paciente (novos contatos)</span></label>
         <p class="span2 small">Para os botões de WhatsApp do <b>site</b> levarem ao atendente (ou ao WhatsApp do profissional): <a class="link" href="/configuracoes/whatsapp#site">Configurações → WhatsApp → WhatsApp do site</a>.</p>
@@ -108,15 +109,6 @@ admin.get('/', async (req, res) => {
         <label class="fld check"><input type="checkbox" ${chk('canReschedule', c.canReschedule)}><span>Pode remarcar</span></label>
         <label class="fld check"><input type="checkbox" ${chk('canCancel', c.canCancel)}><span>Pode cancelar</span></label>
         <label class="fld check"><input type="checkbox" ${chk('notifyProWhatsApp', c.notifyProWhatsApp)}><span>Avisar o profissional no WhatsApp</span></label>
-        <h2 class="span2">Outro provedor de IA (OpenAI, Gemini, Groq, DeepSeek…)</h2>
-        <p class="span2 muted small">Use a chave de outra plataforma como <b>principal</b> (no lugar do Claude) ou como <b>reserva</b> automática, quando a Anthropic ficar sem créditos, recusar a chave ou estiver fora do ar. O atendente usa as mesmas ferramentas e regras. O modelo precisa aceitar chamada de ferramentas (function calling).</p>
-        <label class="fld"><span>Provedor</span>${sel('altProvider', Object.entries(AP.PROVIDERS).map(([k, v]) => [k, v.label]), c.altProvider || 'groq')}</label>
-        <label class="fld"><span>Usar como</span>${sel('primary', [['claude', 'Reserva (o Claude é o principal)'], ['alt', 'Principal (no lugar do Claude)']], c.primary || 'claude')}</label>
-        <label class="fld check span2"><input type="checkbox" ${chk('groqEnabled', c.groqEnabled)}><span>Ativar este provedor</span></label>
-        <label class="fld"><span>Chave da API ${html`<small class="muted">(${AP.PROVIDERS[c.altProvider || 'groq']?.site || ''})</small>`}</span><input type="password" name="groqKey" autocomplete="off" placeholder="${c.groqKey ? 'deixe em branco para manter a atual' : AP.PROVIDERS[c.altProvider || 'groq']?.keyHint || ''}"></label>
-        <label class="fld"><span>Modelo</span>${groqModels.length ? sel('groqModel', groqModels.map((m) => [m, m]), c.groqModel) : html`<input name="groqModel" value="${c.groqModel || ''}" placeholder="salve a chave para listar os modelos">`}</label>
-        <label class="fld span2"><span>Endereço da API <small class="muted">(só para “Outro”, ex.: https://meu-provedor.com/v1)</small></span><input name="altBaseUrl" maxlength="300" value="${c.altBaseUrl || ''}" placeholder="https://…/v1"></label>
-        ${groqError ? html`<p class="span2 flash err small">${AP.labelOf(c.altProvider || 'groq')}: ${groqError}</p>` : ''}
         <h2 class="span2">Regras de agenda</h2>
         <label class="fld"><span>Profissional para novos contatos</span>${sel('defaultProfessional', pros.map((p) => [p.id, p.name]), c.defaultProfessional || pros[0]?.id)}</label>
         <label class="fld"><span>Duração da sessão</span>${sel('duration', [[40, '40 min'], [50, '50 min'], [60, '60 min']], c.duration)}</label>
@@ -128,7 +120,7 @@ admin.get('/', async (req, res) => {
         <label class="fld span2"><span>Informações do consultório para o atendente (valores, formas de pagamento, endereço, política de faltas, convênios…)</span>
           <textarea name="clinicInfo" rows="7" maxlength="4000" placeholder="Ex.: Valor da sessão: R$ ___ (Pix ou cartão). Endereço do atendimento presencial: ___. Faltas sem aviso com 24h são cobradas. Não atendemos convênios; emitimos recibo para reembolso.">${c.clinicInfo}</textarea></label>
         <div class="span2 actions"><button class="btn">Salvar</button></div>
-        <p class="span2 muted small">Modelo: ${Agent.MODELS[Agent.modelOf(c)].label.split(' — ')[0]} (Anthropic). As mensagens das conversas são enviadas à Anthropic para gerar as respostas (operadora de dados — informe na política de privacidade). O agente nunca faz orientação clínica, segue a escala e os bloqueios, e transfere para humano em caso de risco (CVV 188 / SAMU 192).</p>
+        <p class="span2 muted small">Principal: ${AISlot.describe(c.ai1)}${c.ai2?.on ? ` · secundário: ${AISlot.describe(c.ai2)}` : ''}. As mensagens das conversas são enviadas ao provedor de IA para gerar as respostas (operador de dados — informe na política de privacidade). O agente nunca faz orientação clínica, segue a escala e os bloqueios, e transfere para humano em caso de risco (CVV 188 / SAMU 192).</p>
       </form>
 
       <form method="post" action="/configuracoes/agente/atendimento-humano" class="card stack" id="atendimento-humano">
@@ -158,7 +150,7 @@ admin.get('/', async (req, res) => {
         <div class="sim-chat" data-sim-chat><p class="muted small">Ex.: “Oi, queria marcar uma consulta” · “Tem algum material sobre ansiedade?”</p></div>
         <form class="sim-form" data-sim-form><input name="text" autocomplete="off" placeholder="Escreva uma mensagem…" required><button class="btn">Enviar</button></form>
         <div class="actions"><button type="button" class="link small btnlink" data-sim-reset>Recomeçar conversa</button>
-          ${Agent.groqReady(c) ? html`<label class="small"><input type="checkbox" data-sim-groq> testar com ${Agent.altLabel(c)}</label>` : ''}</div>
+          ${AISlot.ready(c.ai2) ? html`<label class="small"><input type="checkbox" data-sim-groq> testar com o secundário (${AISlot.labelOf(c.ai2.provider)})</label>` : ''}</div>
       </section>
     </div>`,
   }));
@@ -167,32 +159,25 @@ admin.get('/', async (req, res) => {
 admin.post('/', async (req, res) => {
   const b = req.body;
   const n = (v, allowed, d) => (allowed.includes(int(v)) ? int(v) : d);
-  const apiKey = str(b.apiKey, 300);
-  if (apiKey && !/^sk-ant-[\w-]{20,}$/.test(apiKey)) return res.flash('A chave da Anthropic começa com “sk-ant-”.', 'err').redirect('/configuracoes/agente');
   const cur = await Agent.config();
-  const altProvider = AP.PROVIDERS[b.altProvider] ? b.altProvider : 'groq';
-  const altBaseUrl = str(b.altBaseUrl, 300);
-  if (altProvider === 'custom' && b.groqEnabled && AP.checkUrl(altBaseUrl)) return res.flash(AP.checkUrl(altBaseUrl), 'err').redirect('/configuracoes/agente');
-  const groqKey = str(b.groqKey, 300);
-  const keyErr = groqKey ? AP.checkKey(altProvider, groqKey) : null;
-  if (keyErr) return res.flash(`${AP.labelOf(altProvider)}: ${keyErr}`, 'err').redirect('/configuracoes/agente');
-  const sameProvider = altProvider === (cur.altProvider || 'groq');
-  const gk = groqKey || (sameProvider ? cur.groqKey : '');
-  if (b.enabled && !apiKey && !cur.apiKey && !(b.groqEnabled && gk)) return res.flash('Informe a chave da API (Anthropic ou de outro provedor) para ligar o atendente.', 'err').redirect('/configuracoes/agente');
-  if (b.primary === 'alt' && !(b.groqEnabled && gk)) return res.flash('Para usar outro provedor como principal, ative-o e informe a chave.', 'err').redirect('/configuracoes/agente');
-  // Modelo: o escolhido, ou o recomendado entre os disponíveis na conta.
-  let groqModel = str(b.groqModel, 120) || (sameProvider ? cur.groqModel : '') || '';
+  const r1 = AISlot.fromBody(b, 'p1', cur.ai1, [cur.ai2]);
+  const r2 = AISlot.fromBody(b, 'p2', cur.ai2, [cur.ai1]);
+  for (const [r, nm] of [[r1, 'Principal'], [r2, 'Secundário']]) if (r.error) return res.flash(`${nm}: ${r.error}`, 'err').redirect('/configuracoes/agente');
+  // Modelo dos provedores compatíveis com OpenAI: o escolhido, ou o recomendado entre os disponíveis na conta.
   let groqMsg = '';
-  if (b.groqEnabled && gk) {
+  for (const r of [r1, r2]) {
+    const x = r.slot;
+    if (x.provider === 'anthropic' || !x.key || !x.on) continue;
     try {
-      const list = await Agent.groqModels(gk, true, altProvider, altBaseUrl);
-      if (list.length && !list.includes(groqModel)) groqModel = Agent.preferredGroqModel(list, altProvider);
-    } catch (e) { groqMsg = ` Atenção: não foi possível validar a chave (${e.message}).`; }
+      const list = await Agent.groqModels(x.key, true, x.provider, x.baseUrl);
+      if (list.length && !list.includes(x.model)) x.model = Agent.preferredGroqModel(list, x.provider);
+    } catch (e) { groqMsg += ` Atenção: não foi possível validar a chave de ${AISlot.labelOf(x.provider)} (${e.message}).`; }
   }
+  if (b.enabled && !AISlot.ready(r1.slot) && !(r2.slot.on && AISlot.ready(r2.slot))) return res.flash('Informe provedor, modelo e chave do provedor principal para ligar o atendente.', 'err').redirect('/configuracoes/agente');
+  const newAnthropicKey = [r1, r2].some((r) => r.typed && r.slot.provider === 'anthropic');
   await Agent.saveConfig({
-    model: Agent.MODELS[b.model] ? b.model : Agent.MODEL,
-    ...(apiKey ? { apiKey, suspended: null } : {}), // chave nova da Anthropic reativa o Claude
-    ...(groqKey ? { groqKey } : sameProvider ? {} : { groqKey: '' }), groqEnabled: !!b.groqEnabled, groqModel, altProvider, altBaseUrl, primary: b.primary === 'alt' ? 'alt' : 'claude',
+    ai1: r1.slot, ai2: r2.slot,
+    ...(newAnthropicKey ? { suspended: null } : {}), // chave nova da Anthropic reativa o Claude
     enabled: !!b.enabled, answerNew: !!b.answerNew, canBook: !!b.canBook, canReschedule: !!b.canReschedule, canCancel: !!b.canCancel,
     notifyProWhatsApp: !!b.notifyProWhatsApp, assistantName: str(b.assistantName, 80) || 'Assistente virtual do consultório',
     defaultProfessional: int(b.defaultProfessional), duration: n(b.duration, [40, 50, 60], 40), slotStep: n(b.slotStep, [40, 50, 60], 60),

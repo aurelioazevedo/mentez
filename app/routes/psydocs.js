@@ -9,6 +9,7 @@ import { page, bare, html, raw, brDate, brDateTime, logoTag } from '../lib/html.
 import { router, send, int, str } from '../lib/router.js';
 import { canSeePatient, forbidden, isClinician, proName } from '../lib/perm.js';
 import * as Agent from '../lib/agent.js';
+import * as AISlot from '../lib/aislot.js';
 import * as D from '../lib/psydocs.js';
 import * as WA from '../lib/whatsapp.js';
 import { nowLocal } from '../lib/time.js';
@@ -432,23 +433,18 @@ async function aiSettingsCard() {
     <fieldset class="fld wl-chips"><legend>Para quem <small class="muted">(nenhum marcado = todos os psicólogos)</small></legend>${users.map((u) => html`<label class="wl-chip"><input type="checkbox" name="users" value="${u.id}" ${c.users.includes(u.id) ? raw('checked') : ''}><span>${proName(u)}${u.has_key ? ' · tem chave própria' : ''}</span></label>`)}</fieldset>
     <div class="form-grid">
       <label class="fld"><span>Quem paga o uso</span><select name="keyMode">${Object.entries(D.KEY_MODES).map(([k, l]) => html`<option value="${k}" ${c.keyMode === k ? raw('selected') : ''}>${l}</option>`)}</select></label>
-      <label class="fld"><span>Provedor da clínica</span><select name="provider">${Object.entries(D.PROVIDERS).map(([k, l]) => html`<option value="${k}" ${c.provider === k ? raw('selected') : ''}>${l}</option>`)}</select></label>
-      <label class="fld"><span>Modelo (Claude)</span><select name="model">${Object.entries(Agent.MODELS).map(([k, m]) => html`<option value="${k}" ${c.model === k ? raw('selected') : ''}>${m.label}</option>`)}</select></label>
-      <label class="fld"><span>Modelo (outros provedores) <small class="muted">ex.: gpt-4.1-mini, gemini-2.5-flash</small></span><input name="model_alt" maxlength="120" value="${c.provider !== 'anthropic' ? c.model : ''}"></label>
-      <label class="fld"><span>Endereço da API <small class="muted">(só para “Outro”)</small></span><input name="baseUrl" maxlength="300" value="${c.baseUrl || ''}" placeholder="https://…/v1"></label>
-      <label class="fld span2"><span>Chave da clínica para este provedor ${c.clinicKey ? html`<small class="muted">(cadastrada — preencha só para trocar)</small>` : html`<small class="muted">(vazio: usa a chave do atendente virtual, se for o mesmo provedor)</small>`}</span><input type="password" name="clinic_key" autocomplete="off" maxlength="300"></label>
-      ${c.clinicKey ? html`<label class="fld check span2"><input type="checkbox" name="clinic_key_remove" value="1"><span>Remover a chave da clínica</span></label>` : ''}
     </div>
-    <p class="muted small">${ag.apiKey ? 'A chave da clínica está configurada (Configurações → Atendente virtual).' : 'A clínica ainda não tem chave configurada: use a chave de cada profissional (Conta → Escrita com IA).'} Cada profissional cadastra a própria chave em <b>Conta</b>, e o custo fica separado na conta dele na Anthropic.</p>
+    ${AISlot.fields('p1', c.first, { title: 'Provedor principal da clínica', hint: 'Chave em branco: usa a do atendente virtual, se for do mesmo provedor.' })}
+    ${AISlot.fields('p2', c.second, { title: 'Provedor secundário da clínica (reserva)', hint: 'Entra sozinho quando o principal falhar (créditos, chave recusada, limite ou fora do ar).', toggle: true })}
+    <p class="muted small">Cada profissional pode cadastrar o próprio provedor principal e secundário em <b>Conta → Escrita com IA</b>; o custo fica na conta dele no provedor. Com “chave do profissional; se não tiver, a da clínica”, a ordem é: principal do profissional, secundário do profissional, principal da clínica, secundário da clínica.</p>
     <label class="fld check"><input type="checkbox" name="allowRecords" value="1" ${c.allowRecords ? raw('checked') : ''}><span>Permitir usar as últimas evoluções do prontuário como base (o profissional marca a cada uso; enviadas sem nome nem CPF)</span></label>
     <div class="actions"><button class="btn">Salvar</button></div>
     ${usage.length ? html`<h3>Uso nos últimos 30 dias</h3><table class="tbl"><thead><tr><th>Profissional</th><th>Chave</th><th>Gerações</th><th>Tokens</th><th>Custo estimado</th></tr></thead><tbody>${usage.map((x) => html`<tr><td>${proName(x)}</td><td>${x.key_owner === 'profissional' ? 'própria' : 'da clínica'}</td><td>${x.n}</td><td>${Number(x.tokens || 0).toLocaleString('pt-BR')}</td><td>US$ ${Number(x.cost).toFixed(2)}${Number(x.other) ? '*' : ''}</td></tr>`)}</tbody></table><p class="muted small">* Para provedores que não são a Anthropic, o custo exato aparece no painel do provedor; aqui contam só os tokens.</p>` : ''}
   </form>`;
 }
 settings.post('/ia', async (req, res) => {
-  const bad = D.checkAiInput(req.body);
-  if (bad && req.body.enabled) return res.flash(bad, 'err').redirect('/configuracoes/documentos#ia');
-  await D.saveAiConfig(req.body);
+  const r = await D.saveAiConfig(req.body);
+  if (r.error) return res.flash(r.error, 'err').redirect('/configuracoes/documentos#ia');
   await audit(req, 'documentos-ia-config');
   res.flash('Escrita com IA salva.').redirect('/configuracoes/documentos#ia');
 });

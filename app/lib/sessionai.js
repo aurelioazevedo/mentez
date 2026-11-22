@@ -66,7 +66,8 @@ export async function sttKeyFor(c, userId) {
   if (c.sttKey) return { ...base, key: c.sttKey, owner: 'clinica' };
   if (doc.clinicKey && doc.provider === c.sttProvider) return { ...base, key: doc.clinicKey, owner: 'clinica' };
   const ag = await Agent.config();
-  if (ag.groqKey && (ag.altProvider || 'groq') === c.sttProvider) return { ...base, key: ag.groqKey, owner: 'clinica' };
+  const agk = Agent.keyForProvider(ag, c.sttProvider);
+  if (agk) return { ...base, key: agk.key, owner: 'clinica' };
   if (ownOk) return { ...base, key: own.key, owner: 'profissional' };
   return { error: `Falta a chave de transcrição (${AP.STT[c.sttProvider].label}) em Configurações → IA na sessão.` };
 }
