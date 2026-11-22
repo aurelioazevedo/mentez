@@ -2146,3 +2146,11 @@ document.querySelectorAll('[data-ticket-files]').forEach((inp) => {
   try { if (sessionStorage.getItem('mz-off')) return; sessionStorage.setItem('mz-off', '1'); } catch { return; }
   navigator.serviceWorker.ready.then((r) => r.active && r.active.postMessage('mz-offline-refresh')).catch(() => {});
 })();
+
+// Mostrar/ocultar a senha (telas de entrada)
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-pw-toggle]'); if (!b) return;
+  const i = b.parentElement.querySelector('input'); const show = i.type === 'password';
+  i.type = show ? 'text' : 'password'; b.classList.toggle('on', show);
+  b.setAttribute('aria-label', show ? 'Ocultar a senha' : 'Mostrar a senha'); b.title = b.getAttribute('aria-label'); i.focus();
+});

@@ -11,7 +11,7 @@ import * as Brand from '../lib/brand.js';
 import { statusItems } from './config.js';
 import * as W from '../lib/whatsapp.js';
 import { q, one, migrate } from '../lib/db.js';
-import { bare, html, raw, brDate, brDateTime } from '../lib/html.js';
+import { bare, html, raw, brDate, brDateTime, VERSION } from '../lib/html.js';
 import { router, send, str, int, flash } from '../lib/router.js';
 import { parseCookies, checkOrigin } from '../lib/auth.js';
 import * as RL from '../lib/ratelimit.js';
@@ -210,22 +210,65 @@ const need = (req, res, next) => {
 mountSignup(handle, layout);
 mountTickets(handle, { need, layout, log });
 mountCRM(handle, { need, layout, log, tenantOf: (req) => tenantOf(req) });
-handle.get('/inicio', (req, res) => (req.admin ? res.redirect('/') : send(res, layout(req, 'Mentez', html`<section class="card mzp-auth mzp-choose"><h1>Bem-vindo à Mentez</h1>
-  <form method="get" action="/ir" class="stack"><label class="fld"><span>Entrar na minha clínica</span><span class="mzp-slug"><input name="c" required placeholder="suaclinica" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" autocomplete="off"><small>.${T.baseDomain()}</small></span></label><button class="btn">Ir para a minha clínica</button></form>
-  <p class="mzp-or">ou</p><a class="btn ghost" href="/criar-conta">Criar conta grátis</a>
-  <p class="muted small"><a href="/entrar">Equipe Mentez</a></p></section>`))));
+// ---------- telas de entrada (moldura moderna em duas colunas, no estilo do site) ----------
+const AUTH_FONTS = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@1&display=swap';
+const EYE = raw('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>');
+const pwField = (name, label, ac, min = 0) => html`<label class="au-fld"><span>${label}</span><span class="au-pw"><input type="password" name="${name}" required ${min ? raw(`minlength="${min}"`) : ''} autocomplete="${ac}"><button type="button" class="au-eye" data-pw-toggle aria-label="Mostrar a senha" title="Mostrar a senha">${EYE}</button></span></label>`;
+function authPage(req, title, { kick, headline, lede, points = [], visual = 'mascote', body }) {
+  const flash = req.flash ? html`<div class="au-flash ${req.flash.type || 'ok'}" role="alert">${req.flash.text}</div>` : '';
+  const ck = raw('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>');
+  return bare(title, html`<div class="au">
+    <aside class="au-side">
+      <div class="au-bg" aria-hidden="true"><span class="au-orb o1"></span><span class="au-orb o2"></span><span class="au-grid"></span></div>
+      <a class="au-brand" href="https://mentez.com.br"><img src="/static/img/site/simbolo-claro.png" alt="" width="30" height="30">mentez</a>
+      <div class="au-pitch"><span class="au-kick">${kick}</span><h1>${headline}</h1>${lede ? html`<p>${lede}</p>` : ''}
+        ${points.length ? html`<ul class="au-points">${points.map((x) => html`<li>${ck}<span>${x}</span></li>`)}</ul>` : ''}</div>
+      ${visual === 'agenda' ? html`<div class="au-shot"><div class="au-bar"><i></i><i></i><i></i><span>suaclinica.mentez.com.br</span></div><img src="/static/img/site/agenda.webp" alt="" width="1920" height="1200"></div>`
+        : html`<figure class="au-mascot"><img src="/static/img/mentez/assistente.png" alt="" width="200" height="200"></figure>`}
+      <p class="au-foot">Mentez · Inteligência para cuidar de quem cuida</p>
+    </aside>
+    <main class="au-main"><div class="au-box">${flash}${body}</div>
+      <nav class="au-legal"><a href="/termos-de-uso">Termos de Uso</a><a href="/privacidade">Privacidade</a><a href="https://mentez.com.br">mentez.com.br</a></nav></main>
+  </div>`, 'au-body', req, { suffix: 'Mentez', appTitle: 'Mentez', css: [AUTH_FONTS, `/static/auth.css?v=${VERSION}`] });
+}
+handle.get('/inicio', (req, res) => {
+  if (req.admin) return res.redirect('/');
+  send(res, authPage(req, 'Entrar na minha clínica', { kick: 'Bem-vindo de volta', headline: html`Sua clínica, <em>a um clique.</em>`, lede: 'Agenda, prontuário, financeiro e WhatsApp esperando por você.', visual: 'agenda',
+    points: ['Cada clínica no seu endereço próprio', 'Dados separados e criptografados', 'Funciona no computador e no celular'],
+    body: html`<h2 class="au-title">Entrar na minha clínica</h2><p class="au-sub">Digite o endereço da sua clínica na Mentez.</p>
+      <form method="get" action="/ir" class="au-form"><label class="au-fld"><span>Endereço da clínica</span><span class="au-slug"><input name="c" required placeholder="suaclinica" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" autocomplete="off" autocapitalize="none" spellcheck="false" autofocus><small>.${T.baseDomain()}</small></span></label>
+        <button class="au-btn">Continuar <span aria-hidden="true">→</span></button></form>
+      <details class="au-forgot"><summary>Não lembra o endereço da sua clínica?</summary>
+        <form method="post" action="/inicio/lembrar" class="au-form"><p class="au-sub">Informe o e-mail cadastrado. Se ele estiver em alguma clínica, enviamos o endereço para você.</p>
+          <label class="au-fld"><span>E-mail</span><input type="email" name="email" required maxlength="190" autocomplete="email"></label><button class="au-btn ghost">Enviar o endereço por e-mail</button></form></details>
+      <div class="au-or"><span>ou</span></div>
+      <a class="au-btn ghost" href="/criar-conta">Criar conta grátis · 14 dias</a>
+      <p class="au-team">É da equipe Mentez? <a href="/entrar">Entrar no Painel</a></p>` }));
+});
+handle.post('/inicio/lembrar', RL.limit({ name: 'lembrar-endereco', windowMs: 60 * 60e3, max: 5 }), async (req, res) => {
+  const email = str(req.body.email, 190).toLowerCase();
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    const rows = await T.pq("SELECT slug, name FROM tenants WHERE status = 'ativa' AND (LOWER(owner_email) = ? OR LOWER(billing_email) = ?)", [email, email]).catch(() => []);
+    if (rows.length) {
+      const list = rows.map((r) => `• ${r.name}: https://${r.slug}.${T.baseDomain()}`).join('\n');
+      PlatComm.mailSend(email, 'Mentez — o endereço da sua clínica', `Olá! Você pediu o endereço da sua clínica na Mentez:\n\n${list}\n\nDica: salve o endereço nos favoritos ou instale o aplicativo para entrar com um toque.`, { label: 'Entrar na minha clínica', url: `https://${rows[0].slug}.${T.baseDomain()}/login` }).catch((e) => console.error('lembrar endereço:', e.message));
+    }
+    await log(req, 'lembrar-endereco', null, rows.length ? `${rows.length} clínica(s)` : 'nenhuma');
+  }
+  // mesma resposta sempre (não revela quais e-mails estão cadastrados)
+  res.flash('Se este e-mail estiver cadastrado numa clínica, você vai receber o endereço em instantes. Confira também a caixa de spam.').redirect('/inicio');
+});
 handle.get('/ir', (req, res) => { const c = str(req.query.c, 40).toLowerCase(); return T.SLUG_RE.test(c) ? res.redirect(`https://${c}.${T.baseDomain()}/login`) : res.redirect('/inicio'); });
 
 // ---------- primeiro acesso (convite gerado pela linha de comando) e login ----------
 handle.get('/primeiro-acesso', async (req, res) => {
   if (await T.pone('SELECT id FROM platform_users LIMIT 1')) return res.redirect('/entrar');
-  send(res, layout(req, 'Primeiro acesso', html`<section class="card mzp-auth"><h1>Primeiro acesso ao painel</h1>
-    <form method="post" class="stack">
-      <label class="fld"><span>Código de convite</span><input name="codigo" required value="${str(req.query.codigo, 80)}" autocomplete="off"></label>
-      <label class="fld"><span>Nome</span><input name="name" required maxlength="120" autocomplete="name"></label>
-      <label class="fld"><span>E-mail</span><input type="email" name="email" required maxlength="190" autocomplete="username"></label>
-      <label class="fld"><span>Senha (mínimo 12 caracteres)</span><input type="password" name="password" minlength="12" required autocomplete="new-password"></label>
-      <button class="btn">Criar acesso</button></form></section>`));
+  send(res, authPage(req, 'Primeiro acesso', { kick: 'Primeiro acesso', headline: html`Vamos começar <em>a Mentez.</em>`, lede: 'Crie o primeiro acesso de administrador do Painel.',
+    body: html`<h2 class="au-title">Primeiro acesso ao Painel</h2><form method="post" class="au-form">
+      <label class="au-fld"><span>Código de convite</span><input name="codigo" required value="${str(req.query.codigo, 80)}" autocomplete="off"></label>
+      <label class="au-fld"><span>Nome</span><input name="name" required maxlength="120" autocomplete="name"></label>
+      <label class="au-fld"><span>E-mail</span><input type="email" name="email" required maxlength="190" autocomplete="username"></label>
+      ${pwField('password', 'Senha (mínimo 12 caracteres)', 'new-password', 12)}<button class="au-btn">Criar acesso</button></form>` }));
 });
 handle.post('/primeiro-acesso', RL.limit({ name: 'painel-setup', windowMs: 10 * 60e3, max: 10 }), async (req, res) => {
   if (await T.pone('SELECT id FROM platform_users LIMIT 1')) return res.redirect('/entrar');
@@ -240,9 +283,13 @@ handle.post('/primeiro-acesso', RL.limit({ name: 'painel-setup', windowMs: 10 * 
 });
 handle.get('/entrar', (req, res) => {
   if (req.admin) return res.redirect('/');
-  send(res, layout(req, 'Entrar', html`<section class="card mzp-auth"><h1>Painel da Mentez</h1><p class="muted small">Acesso restrito à equipe da Mentez. As clínicas entram pelo próprio endereço.</p>
-    <form method="post" class="stack"><label class="fld"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>
-      <label class="fld"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label><button class="btn">Entrar</button></form></section>`));
+  send(res, authPage(req, 'Entrar', { kick: 'Painel da equipe', headline: html`Bom te ver <em>de novo.</em>`, lede: 'Clínicas, chamados, conversas e cobrança da Mentez num só lugar.',
+    points: ['Chamados e conversas com as clínicas', 'Assinaturas, planos e indicações', 'Aplicativo com notificações no celular'],
+    body: html`<h2 class="au-title">Entrar no Painel</h2><p class="au-sub">Acesso restrito à equipe da Mentez.</p>
+      <form method="post" class="au-form"><label class="au-fld"><span>E-mail</span><input type="email" name="email" required autocomplete="username" autofocus></label>
+        ${pwField('password', 'Senha', 'current-password')}<button class="au-btn">Entrar <span aria-hidden="true">→</span></button></form>
+      <p class="au-team">Esqueceu a senha? Peça a um administrador da Mentez um novo link de acesso.</p>
+      <div class="au-or"><span>é de uma clínica?</span></div><a class="au-btn ghost" href="/inicio">Entrar na minha clínica</a>` }));
 });
 handle.post('/entrar', RL.limit({ name: 'painel-login', windowMs: 15 * 60e3, max: 10 }), async (req, res) => {
   const u = await T.pone('SELECT * FROM platform_users WHERE email = ?', [str(req.body.email, 190).toLowerCase()]);
@@ -1009,10 +1056,10 @@ handle.post('/equipe/:id/convite', need, async (req, res) => {
 async function byInvite(code) { return T.pone('SELECT * FROM platform_users WHERE invite_hash = ? AND invite_expires > NOW() AND active = 1', [inviteHash(code)]); }
 handle.get('/convite-equipe/:code', async (req, res) => {
   const u = await byInvite(req.params.code);
-  if (!u) return send(res, layout(req, 'Link inválido', html`<section class="card mzp-auth"><h1>Link inválido ou vencido</h1><p>Peça um novo link a um administrador da Mentez.</p></section>`));
-  send(res, layout(req, 'Criar senha', html`<section class="card mzp-auth"><h1>Olá, ${u.name.split(' ')[0]}!</h1><p class="muted small">Crie sua senha para entrar no Painel da Mentez com o e-mail <b>${u.email}</b>.</p>
-    <form method="post" class="stack"><label class="fld"><span>Nova senha (mínimo 12 caracteres)</span><input type="password" name="password" minlength="12" required autocomplete="new-password"></label>
-      <label class="fld"><span>Repita a senha</span><input type="password" name="password2" minlength="12" required autocomplete="new-password"></label><button class="btn">Criar senha e entrar</button></form></section>`));
+  if (!u) return send(res, authPage(req, 'Link inválido', { kick: 'Convite da equipe', headline: html`Este link <em>expirou.</em>`, body: html`<h2 class="au-title">Link inválido ou vencido</h2><p class="au-sub">Peça um novo link a um administrador da Mentez.</p><a class="au-btn ghost" href="/entrar">Ir para o login</a>` }));
+  send(res, authPage(req, 'Criar senha', { kick: 'Convite da equipe', headline: html`Bem-vindo à <em>equipe.</em>`, lede: 'Crie sua senha para começar a usar o Painel da Mentez.',
+    body: html`<h2 class="au-title">Olá, ${u.name.split(' ')[0]}!</h2><p class="au-sub">Você vai entrar com o e-mail <b>${u.email}</b>.</p>
+      <form method="post" class="au-form">${pwField('password', 'Nova senha (mínimo 12 caracteres)', 'new-password', 12)}${pwField('password2', 'Repita a senha', 'new-password', 12)}<button class="au-btn">Criar senha e entrar</button></form>` }));
 });
 handle.post('/convite-equipe/:code', RL.limit({ name: 'painel-convite', windowMs: 10 * 60e3, max: 10 }), async (req, res) => {
   const u = await byInvite(req.params.code); const back = `/convite-equipe/${encodeURIComponent(req.params.code)}`;
