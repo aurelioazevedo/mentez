@@ -2624,7 +2624,8 @@ form[data-ref-wa] .btn svg { vertical-align: -4px; margin-right: 4px; }
 .hb-q { display: none; }
 .hb.mini .hb-fab { width: 34px; height: 34px; border-radius: 50%; background: var(--card); border: 1px solid var(--line); filter: none; box-shadow: 0 4px 12px -6px rgba(7, 25, 54, .35); opacity: .62; transition: opacity 160ms ease, transform 160ms ease-out; }
 .hb.mini .hb-fab img { display: none; }
-.hb.mini .hb-q { display: grid; place-items: center; width: 100%; height: 100%; font: 700 16px/1 var(--sans); color: var(--muted); }
+.hb.mini .hb-q { display: grid; place-items: center; width: 100%; height: 100%; color: var(--muted); }
+.hb.mini .hb-q svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .hb.mini .hb-tip { right: 42px; }
 .hb.mini .hb-fab:hover, .hb.mini .hb-fab:focus-visible { opacity: 1; }
 @media (max-width: 860px) { .hb.mini .hb-fab { width: 32px; height: 32px; } }
