@@ -25,6 +25,8 @@ async function call(method, path, body, key = globalKey()) {
   return data;
 }
 
+// Chamada direta com a chave geral (instância da própria plataforma e QR das clínicas no Painel)
+export const api = (method, path, body) => call(method, path, body);
 // Todas as instâncias (painel da Mentez): nome → { status, number, profileName }
 export async function listAll() {
   const list = await call('GET', '/instance/fetchInstances');

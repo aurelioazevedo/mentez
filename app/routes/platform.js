@@ -17,6 +17,7 @@ import { parseCookies, checkOrigin } from '../lib/auth.js';
 import * as RL from '../lib/ratelimit.js';
 import * as Billing from '../lib/billing.js';
 import * as HelpBot from '../lib/helpbot.js';
+import * as PlatComm from '../lib/platcomm.js';
 import * as AISlot from '../lib/aislot.js';
 import { mount as mountSignup } from './signup.js';
 import { money } from '../lib/html.js';
@@ -103,7 +104,7 @@ const ICON = {
 };
 const MENU = [
   ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec']]],
-  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
+  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
 const ROLES = {
@@ -116,6 +117,7 @@ const RULES = [
   ['*', /^\/equipe(\/|$)/, ['admin']],
   ['*', /^\/(faturas|planos|cobranca)(\/|$|\.)/, ['admin', 'financeiro']],
   ['*', /^\/assistente(\/|$)/, ['admin']],
+  ['*', /^\/comunicacao(\/|$)/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas\/\d+\/assinatura$/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas(\/|$)/, ['admin', 'suporte']],
   ['GET', /^\/clinicas\/nova$/, ['admin', 'suporte']],
@@ -433,6 +435,13 @@ handle.post('/clinicas/:id/whatsapp', need, async (req, res, next) => {
   res.redirect(`/clinicas/${t.id}#recursos`);
 });
 
+// QR code da instância da clínica (Evolution da Mentez), para a equipe da Mentez conectar junto com a clínica
+handle.get('/clinicas/:id/whatsapp/qr', need, async (req, res, next) => {
+  const t = await tenantOf(req); if (!t) return next();
+  const wc = await T.run(t, () => W.config()).catch(() => null);
+  if (!wc?.managed) return res.flash('A clínica não usa a Evolution da Mentez.', 'err').redirect(`/clinicas/${t.id}#recursos`);
+  send(res, layout(req, `WhatsApp · ${t.name}`, await qrPage({ title: `WhatsApp de ${t.name}`, instance: wc.instance, back: `/clinicas/${t.id}#recursos`, hint: 'No celular da clínica: WhatsApp → Aparelhos conectados → Conectar um aparelho, e aponte para o QR code.' })));
+});
 handle.get('/testes', need, async (req, res) => {
   const all = await T.all();
   const rows = await T.pq("SELECT id, owner_crp, owner_phone, owner_email, owner_name, trial_ends_at, created_at FROM tenants WHERE billing_status = 'teste' OR (trial_ends_at IS NOT NULL AND trial_ends_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) ORDER BY trial_ends_at");
@@ -497,6 +506,7 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
         <button class="btn ghost btn-sm" name="acao" value="cortesia" data-confirm="Marcar como cortesia? A clínica deixa de ser cobrada pela Mentez.">Cortesia</button>
         <button class="btn ghost btn-sm" name="acao" value="teste7">Teste + 7 dias</button>
       </form>
+      ${await billingBlock(t, row)}
       <form method="post" action="/clinicas/${t.id}/convenio" class="actions" id="convenio">
         <label class="fld inline"><span>Módulo de convênio</span><select name="ins_mode">${Object.entries(Billing.INS_MODES).map(([k, l]) => html`<option value="${k}" ${(t.insMode || '') === k ? raw('selected') : ''}>${l}</option>`)}</select></label>
         <button class="btn ghost btn-sm">Salvar</button>
@@ -507,7 +517,8 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
       ${r?._err ? html`<p class="flash err">Não foi possível ler: ${r._err}</p>` : html`<ul class="mz2-res-list">${RES_COLS.map(([k, label]) => html`<li><span class="mz2-dot ${r?.[k]?.tone || 'off'}"></span><b>${label}</b><span class="muted small">${r?.[k]?.label || '—'}</span></li>`)}</ul>`}
       <p class="actions"><a class="btn ghost btn-sm" href="/clinicas/${t.id}?atualizar=1#recursos">Atualizar</a>
         ${Evolution.enabled() ? (wc?.url && !wc.managed ? html`<form method="post" action="/clinicas/${t.id}/whatsapp"><input type="hidden" name="forcar" value="1"><button class="btn ghost btn-sm" data-confirm="A clínica usa uma Evolution própria. Trocar pela Evolution da Mentez? Ela terá de ler um novo QR code.">Usar a Evolution da Mentez</button></form>`
-          : html`<form method="post" action="/clinicas/${t.id}/whatsapp"><button class="btn ghost btn-sm">${wc?.managed ? 'Refazer a instância do WhatsApp' : 'Criar instância do WhatsApp'}</button></form>`) : ''}</p>
+          : html`<form method="post" action="/clinicas/${t.id}/whatsapp"><button class="btn ghost btn-sm">${wc?.managed ? 'Refazer a instância do WhatsApp' : 'Criar instância do WhatsApp'}</button></form>`) : ''}
+        ${Evolution.enabled() && wc?.managed ? html`<a class="btn ghost btn-sm" href="/clinicas/${t.id}/whatsapp/qr">Conectar o WhatsApp (QR code)</a>` : ''}</p>
     </section>`; })()}
     <section class="card"><h2>Domínios próprios</h2>
       <p class="muted small">O endereço <b>${t.slug}.${T.baseDomain()}</b> sempre funciona. A própria clínica cadastra o domínio em Configurações → Domínio próprio e cria no DNS um registro <b>A</b> (ou <b>CNAME</b> para ${t.slug}.${T.baseDomain()}) apontando para <b>${(await Domains.serverIps().catch(() => ({ v4: [] }))).v4[0] || 'o IP do servidor'}</b>. O domínio só abre a clínica depois que o DNS aponta para cá; o HTTPS é emitido sozinho.</p>
@@ -571,6 +582,144 @@ handle.post('/clinicas/:id/assinatura', need, async (req, res, next) => {
   else if (a === 'teste7') await T.pq("UPDATE tenants SET billing_status = 'teste', trial_ends_at = DATE_ADD(GREATEST(COALESCE(trial_ends_at, NOW()), NOW()), INTERVAL 7 DAY) WHERE id = ?", [t.id]);
   T.clearCache(); await log(req, `assinatura-${a}`, t.id, req.body.plan || null);
   res.flash('Assinatura atualizada.').redirect(`/clinicas/${t.id}`);
+});
+// ---------- cobrança de uma clínica: ativar (cortesia → cobrança) e enviar o link por WhatsApp/e-mail ----------
+async function billingBlock(t, row) {
+  const a = Billing.accessOf(t); const c = await Billing.config(); const plans = (await Billing.plans()).filter((p) => p.public);
+  const subscribed = !!(row.asaas_subscription || row.mp_preapproval);
+  const sendForm = (link) => html`<form method="post" action="/clinicas/${t.id}/enviar-cobranca" class="form-grid" style="margin-top:12px">
+      <h3 class="span2" style="margin:0">Enviar cobrança</h3>
+      ${link?.auto ? html`<p class="span2 muted small">Assinatura autorizada no Mercado Pago: a mensalidade é cobrada no cartão automaticamente.</p>` : link?.url ? html`<p class="span2 small">Link: <a href="${link.url}" target="_blank" rel="noopener">${link.kind === 'autorizar' ? 'autorizar a assinatura no Mercado Pago' : 'fatura em aberto (Asaas)'}</a></p>` : html`<p class="span2 muted small">Nenhuma fatura em aberto agora.</p>`}
+      <label class="fld"><span>WhatsApp</span><input name="phone" value="${row.owner_phone || ''}" maxlength="40" inputmode="tel"></label>
+      <label class="fld"><span>E-mail</span><input type="email" name="email" value="${row.owner_email || ''}" maxlength="190"></label>
+      <div class="span2 actions"><button class="btn btn-sm" name="via" value="whatsapp" ${link?.url ? '' : raw('disabled')}>Enviar pelo WhatsApp</button><button class="btn ghost btn-sm" name="via" value="email" ${link?.url ? '' : raw('disabled')}>Enviar por e-mail</button><button class="btn ghost btn-sm" name="via" value="ambos" ${link?.url ? '' : raw('disabled')}>Os dois</button></div></form>`;
+  if (a.state === 'cortesia' && !subscribed) {
+    return html`<details class="card-sub" style="margin:14px 0 18px"><summary class="btn ghost btn-sm">Ativar cobrança desta clínica</summary>
+      <form method="post" action="/clinicas/${t.id}/ativar-cobranca" class="form-grid" style="margin-top:12px">
+        <p class="span2 muted small">A clínica sai da cortesia e passa a ser cobrada pelo ${Billing.PROVIDERS[c.provider].label} (${Billing.PROVIDERS[c.provider].methods.join(', ')}). ${Billing.ready(c) ? '' : html`<b>Configure a cobrança em <a href="/cobranca">Cobrança</a> antes.</b>`}</p>
+        <label class="fld"><span>Plano</span><select name="plan" required>${plans.map((p) => html`<option value="${p.key}" ${p.key === t.plan ? raw('selected') : ''}>${p.name} — R$ ${String(p.price).replace('.', ',')}/mês</option>`)}</select></label>
+        <label class="fld"><span>Primeira cobrança</span><select name="dias"><option value="0">Agora</option><option value="7">Daqui a 7 dias</option><option value="15">Daqui a 15 dias</option><option value="30">Daqui a 30 dias</option></select></label>
+        <label class="fld"><span>Nome ou razão social de quem paga</span><input name="payer_name" value="${row.owner_name || t.name}" maxlength="120" required></label>
+        <label class="fld"><span>CPF ou CNPJ ${c.provider === 'asaas' ? '' : html`<small class="muted">(opcional no Mercado Pago)</small>`}</span><input name="payer_doc" maxlength="18" inputmode="numeric" ${c.provider === 'asaas' ? raw('required') : ''}></label>
+        <label class="fld"><span>E-mail ${c.provider === 'mercadopago' ? html`<small class="muted">(da conta do Mercado Pago)</small>` : ''}</span><input type="email" name="email" value="${row.owner_email || ''}" maxlength="190" required></label>
+        <label class="fld"><span>WhatsApp</span><input name="phone" value="${row.owner_phone || ''}" maxlength="40" inputmode="tel"></label>
+        <fieldset class="fld span2"><legend>Avisar a clínica agora</legend><label class="check"><input type="checkbox" name="send_wa" value="1" checked> pelo WhatsApp da Mentez</label> <label class="check"><input type="checkbox" name="send_mail" value="1" checked> por e-mail</label></fieldset>
+        <div class="span2 actions"><button class="btn" ${Billing.ready(c) ? '' : raw('disabled')} data-confirm="Ativar a cobrança de ${t.name}? A clínica deixa de ser cortesia.">Ativar cobrança</button></div>
+      </form></details>`;
+  }
+  if (!subscribed) return '';
+  const link = await Billing.paymentLink(t).catch(() => null);
+  return sendForm(link);
+}
+async function sendBilling(t, link, { phone, email, via }) {
+  const row = await T.pone('SELECT owner_name, plan, extra_pros FROM tenants WHERE id = ?', [t.id]);
+  const plan = (await Billing.plans()).find((p) => p.key === row.plan);
+  const first = String(row.owner_name || '').split(' ')[0] || 'tudo bem';
+  const value = plan ? `R$ ${Billing.monthly(plan, row.extra_pros).toFixed(2).replace('.', ',')}/mês` : '';
+  const contact = await Billing.siteContact();
+  const action = link.kind === 'autorizar' ? 'Para ativar, autorize o pagamento mensal no Mercado Pago (cartão de crédito):' : 'Para pagar (Pix, boleto ou cartão):';
+  const body = `Olá, ${first}! Aqui é da Mentez.\n\nA assinatura da clínica ${t.name}${plan ? ` — plano ${plan.name}, ${value}` : ''} — está disponível.`;
+  const out = [];
+  if (via === 'whatsapp' || via === 'ambos') {
+    try { await PlatComm.waSend(phone, `${body}\n\n${action}\n${link.url}\n\nQualquer dúvida, é só responder aqui ou escrever para ${contact}.`); out.push('WhatsApp enviado'); } catch (e) { out.push(`WhatsApp não enviado: ${e.message}`); }
+  }
+  if (via === 'email' || via === 'ambos') {
+    try { await PlatComm.mailSend(email, `Mentez — assinatura da clínica ${t.name}`, `${body}\n\n${action}\n\nQualquer dúvida, responda este e-mail ou escreva para ${contact}.`, { label: link.kind === 'autorizar' ? 'Autorizar no Mercado Pago' : 'Pagar a mensalidade', url: link.url }); out.push('e-mail enviado'); } catch (e) { out.push(`e-mail não enviado: ${e.message}`); }
+  }
+  return out;
+}
+handle.post('/clinicas/:id/ativar-cobranca', need, async (req, res, next) => {
+  const t = await tenantOf(req); if (!t) return next();
+  const b = req.body; const dias = [0, 7, 15, 30].includes(int(b.dias)) ? int(b.dias) : 0;
+  const plan = (await Billing.plans()).find((p) => p.key === b.plan && p.public);
+  if (!plan) return res.flash('Escolha um plano.', 'err').redirect(`/clinicas/${t.id}`);
+  const prev = await T.pone('SELECT billing_status, trial_ends_at, plan FROM tenants WHERE id = ?', [t.id]);
+  // a assinatura calcula a situação: com prazo, fica em “teste” até a 1ª cobrança; sem prazo, a 1ª cobrança vence hoje
+  await T.pq(`UPDATE tenants SET trial_ends_at = ${dias ? 'DATE_ADD(CURDATE(), INTERVAL ? DAY)' : 'NULL'}, owner_phone = COALESCE(NULLIF(?, ''), owner_phone), owner_email = COALESCE(NULLIF(?, ''), owner_email) WHERE id = ?`,
+    [...(dias ? [dias] : []), str(b.phone, 40) || '', str(b.email, 190) || '', t.id]);
+  T.clearCache();
+  const fresh = await T.bySlug(t.slug);
+  try {
+    const out = await Billing.subscribe(fresh, { planKey: plan.key, payerName: str(b.payer_name, 120), payerDoc: b.payer_doc, email: str(b.email, 190), phone: str(b.phone, 40) });
+    await log(req, 'cobranca-ativar', t.id, `${plan.key} · ${out.provider || 'asaas'} · ${dias ? `${dias} dias` : 'agora'}`);
+    let msg = `Cobrança ativada: plano ${plan.name}, ${dias ? `primeira cobrança em ${dias} dias` : 'primeira cobrança hoje'}.`;
+    const via = b.send_wa && b.send_mail ? 'ambos' : b.send_wa ? 'whatsapp' : b.send_mail ? 'email' : null;
+    if (via) {
+      const link = await Billing.paymentLink(fresh).catch(() => null);
+      if (link?.url) msg += ` ${(await sendBilling(fresh, link, { phone: b.phone, email: b.email, via })).join(' · ')}.`;
+      else msg += ' O link de pagamento ainda não está disponível; use “Enviar cobrança” em instantes.';
+    }
+    res.flash(msg);
+  } catch (e) {
+    await T.pq('UPDATE tenants SET billing_status = ?, trial_ends_at = ?, plan = ? WHERE id = ?', [prev.billing_status, prev.trial_ends_at, prev.plan, t.id]); T.clearCache(); // volta para a situação anterior (cortesia)
+    res.flash(`Não foi possível ativar a cobrança: ${e.message}`, 'err');
+  }
+  res.redirect(`/clinicas/${t.id}`);
+});
+handle.post('/clinicas/:id/enviar-cobranca', need, async (req, res, next) => {
+  const t = await tenantOf(req); if (!t) return next();
+  const link = await Billing.paymentLink(t).catch((e) => ({ error: e.message }));
+  if (!link?.url) return res.flash(link?.error ? `Cobrança: ${link.error}` : 'Não há link de pagamento em aberto para enviar.', 'err').redirect(`/clinicas/${t.id}`);
+  const via = ['whatsapp', 'email', 'ambos'].includes(req.body.via) ? req.body.via : 'whatsapp';
+  const out = await sendBilling(t, link, { phone: req.body.phone, email: req.body.email, via });
+  await log(req, 'cobranca-enviar', t.id, out.join(' · '));
+  res.flash(out.join(' · '), out.some((x) => /não/.test(x)) ? 'warn' : 'ok').redirect(`/clinicas/${t.id}`);
+});
+// ---------- WhatsApp e e-mail da Mentez ----------
+async function qrPage({ title, instance, back, hint }) {
+  let st = await PlatComm.stateOf(instance); let qr = null; let err = '';
+  if (st !== 'open') { try { const r = await PlatComm.qrOf(instance); qr = r.qr; st = r.state || st; } catch (e) { err = e.message; } }
+  return html`${st !== 'open' ? html`<meta http-equiv="refresh" content="20">` : ''}<header class="ph"><div><p class="eyebrow">WhatsApp</p><h1>${title}</h1></div><div class="ph-actions"><a class="btn ghost" href="${back}">Voltar</a></div></header>
+    <section class="card mz-qr">${st === 'open' ? html`<p><span class="badge b-realizada">Conectado</span> Tudo certo: o WhatsApp está conectado.</p>`
+      : html`<p class="muted">${hint} O QR code se renova sozinho a cada 20 segundos.</p>${qr ? html`<img src="${qr}" alt="QR code para conectar o WhatsApp" width="280" height="280" style="image-rendering:pixelated;background:#fff;padding:10px;border-radius:12px">` : html`<p class="flash warn">${err || 'O QR code ainda não está pronto. Aguarde alguns segundos.'}</p>`}<p class="small muted">Situação: ${st}</p>`}</section>`;
+}
+handle.get('/comunicacao', need, async (req, res) => {
+  const wa = await PlatComm.waStatus().catch((e) => ({ state: `erro: ${e.message}` }));
+  const m = await PlatComm.mailConfig();
+  const sel = (a2, b2) => (a2 === b2 ? raw('selected') : '');
+  send(res, layout(req, 'WhatsApp e e-mail', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>WhatsApp e e-mail da Mentez</h1><p class="muted">Canais da própria Mentez para falar com as clínicas: cobrança, avisos e relacionamento. Independentes do WhatsApp de cada clínica.</p></div></header>
+    <section class="card"><h2>WhatsApp da Mentez</h2>
+      ${wa.state === 'indisponivel' ? html`<p class="flash warn">A Evolution da Mentez não está configurada neste servidor.</p>`
+        : wa.state === 'sem-instancia' ? html`<p class="muted">Ainda não existe a instância da plataforma na Evolution.</p><form method="post" action="/comunicacao/whatsapp/criar"><button class="btn">Criar a instância da Mentez</button></form>`
+        : html`<p>${wa.state === 'open' ? html`<span class="badge b-realizada">Conectado</span> ${wa.profileName || ''} ${wa.number ? `· +${wa.number}` : ''}` : html`<span class="badge b-falta">Desconectado</span>`} <small class="muted">instância ${PlatComm.INSTANCE}</small></p>
+          <div class="actions">${wa.state !== 'open' ? html`<a class="btn" href="/comunicacao/whatsapp/qr">Conectar (QR code)</a>` : html`<form method="post" action="/comunicacao/whatsapp/sair" data-confirm="Desconectar o WhatsApp da Mentez?"><button class="btn ghost danger-text">Desconectar</button></form>`}</div>
+          ${wa.state === 'open' ? html`<form method="post" action="/comunicacao/whatsapp/teste" class="actions"><input name="phone" placeholder="Celular com DDD" maxlength="40" inputmode="tel" required><button class="btn ghost">Enviar mensagem de teste</button></form>` : ''}`}
+    </section>
+    <form method="post" action="/comunicacao/email" class="card form-grid"><h2 class="span2">E-mail da Mentez (SMTP)</h2>
+      <label class="fld"><span>Servidor SMTP</span><input name="host" value="${m.host}" maxlength="190" placeholder="smtp.hostinger.com"></label>
+      <label class="fld"><span>Porta</span><input type="number" name="port" value="${m.port}" min="1" max="65535"></label>
+      <label class="fld"><span>Segurança</span><select name="secure">${Object.entries(PlatComm.SECURE).map(([k, l]) => html`<option value="${k}" ${sel(m.secure, k)}>${l}</option>`)}</select></label>
+      <label class="fld"><span>Usuário</span><input name="user" value="${m.user}" maxlength="190" autocomplete="off" placeholder="contato@mentez.com.br"></label>
+      <label class="fld"><span>Senha ${m.pass ? html`<small class="muted">(cadastrada — preencha só para trocar)</small>` : ''}</span><input type="password" name="pass" autocomplete="new-password" maxlength="200"></label>
+      <label class="fld"><span>Nome do remetente</span><input name="fromName" value="${m.fromName}" maxlength="80"></label>
+      <label class="fld"><span>E-mail do remetente</span><input type="email" name="fromEmail" value="${m.fromEmail}" maxlength="190" placeholder="contato@mentez.com.br"></label>
+      ${m.pass ? html`<label class="check span2"><input type="checkbox" name="pass_clear" value="1"> Apagar a senha</label>` : ''}
+      <p class="span2 muted small">Na Hostinger: E-mails → contato@mentez.com.br → Configurações de conexão (SMTP smtp.hostinger.com, porta 465, SSL).</p>
+      <div class="span2 actions"><button class="btn">Salvar</button></div></form>
+    ${PlatComm.mailReady(m) ? html`<form method="post" action="/comunicacao/email/teste" class="card actions"><input type="email" name="to" placeholder="E-mail para o teste" required maxlength="190"><button class="btn ghost">Enviar e-mail de teste</button></form>` : ''}`));
+});
+handle.post('/comunicacao/whatsapp/criar', need, async (req, res) => {
+  try { await PlatComm.waCreate(); await log(req, 'plataforma-whatsapp-criar'); res.redirect('/comunicacao/whatsapp/qr'); } catch (e) { res.flash(`WhatsApp: ${e.message}`, 'err').redirect('/comunicacao'); }
+});
+handle.get('/comunicacao/whatsapp/qr', need, async (req, res) => {
+  send(res, layout(req, 'WhatsApp da Mentez', await qrPage({ title: 'WhatsApp da Mentez', instance: PlatComm.INSTANCE, back: '/comunicacao', hint: 'No celular da Mentez: WhatsApp → Aparelhos conectados → Conectar um aparelho, e aponte para o QR code.' })));
+});
+handle.post('/comunicacao/whatsapp/sair', need, async (req, res) => {
+  try { await PlatComm.waLogout(); await log(req, 'plataforma-whatsapp-sair'); res.flash('WhatsApp da Mentez desconectado.'); } catch (e) { res.flash(e.message, 'err'); }
+  res.redirect('/comunicacao');
+});
+handle.post('/comunicacao/whatsapp/teste', need, async (req, res) => {
+  try { await PlatComm.waSend(req.body.phone, 'Teste do WhatsApp da Mentez ✅'); res.flash('Mensagem de teste enviada.'); } catch (e) { res.flash(e.message, 'err'); }
+  res.redirect('/comunicacao');
+});
+handle.post('/comunicacao/email', need, async (req, res) => {
+  const r = await PlatComm.saveMail(req.body, await PlatComm.mailConfig());
+  if (r.error) return res.flash(r.error, 'err').redirect('/comunicacao');
+  await log(req, 'plataforma-email-config'); res.flash('E-mail da Mentez salvo.').redirect('/comunicacao');
+});
+handle.post('/comunicacao/email/teste', need, async (req, res) => {
+  try { await PlatComm.mailSend(str(req.body.to, 190), 'Teste do e-mail da Mentez', 'Se você recebeu esta mensagem, o envio de e-mails da Mentez está funcionando.'); res.flash('E-mail de teste enviado.'); } catch (e) { res.flash(`E-mail: ${e.message}`, 'err'); }
+  res.redirect('/comunicacao');
 });
 // ---------- planos ----------
 handle.get('/planos', need, async (req, res) => {

@@ -390,3 +390,16 @@ export async function publicInfo() {
   return { plans: list, labels: { ...SITE_LABELS }, payment: { provider: c.provider, label: PROVIDERS[c.provider].label, methods: PROVIDERS[c.provider].methods },
     contact: await siteContact(), trialDays: TRIAL_DAYS() };
 }
+
+// Link para a clínica pagar (Asaas: próxima fatura em aberto) ou autorizar a assinatura (Mercado Pago: checkout pendente).
+// Mercado Pago já autorizado: cobrado no cartão automaticamente, sem link.
+export async function paymentLink(t) {
+  const c = await config(); const row = await T.pone('SELECT asaas_subscription, mp_preapproval FROM tenants WHERE id = ?', [t.id]);
+  if (row?.mp_preapproval && ready(c, 'mercadopago')) {
+    const pa = await mp(c, 'GET', `/preapproval/${row.mp_preapproval}`);
+    if (pa.status === 'authorized') return { provider: 'mercadopago', url: null, auto: true };
+    return { provider: 'mercadopago', url: pa.init_point || pa.sandbox_init_point || null, kind: 'autorizar' };
+  }
+  if (row?.asaas_subscription && ready(c, 'asaas')) return { provider: 'asaas', url: await nextInvoiceUrl(c, row.asaas_subscription), kind: 'pagar' };
+  return null;
+}
