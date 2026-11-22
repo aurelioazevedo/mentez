@@ -12,7 +12,7 @@
 <link rel="icon" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/site.css?v=1">
+<link rel="stylesheet" href="/assets/site.css?v=2">
 </head>
 <body>
 <a class="sr" href="#conteudo">Pular para o conteúdo</a>
@@ -34,7 +34,7 @@
   <div class="wrap">
     <span class="kick">Preços</span>
     <h1 class="h-l" style="margin-top:22px;max-width:15ch">Um plano para cada <span class="s">fase da sua prática.</span></h1>
-    <p class="lede">Comece com 14 dias grátis e todos os recursos do Profissional. Sem cartão, sem fidelidade, sem taxa de implantação.</p>
+    <p class="lede">Comece com <span data-trial>14</span> dias grátis e todos os recursos do Profissional. Sem cartão, sem fidelidade, sem taxa de implantação.</p>
   </div>
 </section>
 <section class="pad paper2" style="padding-top:64px">
@@ -45,7 +45,7 @@
         <button role="tab" id="pt2" aria-controls="pp2" aria-selected="false" tabindex="-1">Tenho uma clínica</button>
       </div>
       <div class="panes" style="width:100%">
-        <div class="pane on" id="pp1" role="tabpanel" aria-labelledby="pt1" style="display:block"><div class="plans" style="grid-template-columns:repeat(2,1fr);max-width:900px;margin:0 auto">
+        <div class="pane on" id="pp1" role="tabpanel" aria-labelledby="pt1" style="display:block"><div class="plans" data-plans="individual" data-count="2" style="grid-template-columns:repeat(2,1fr);max-width:900px;margin:0 auto">
   <article class="plan"><h3>Essencial</h3><p class="for">Para tirar o consultório do papel.</p><div class="price"><small>R$</small><b>79</b><small>/mês</small></div>
     <ul><li>1 profissional</li><li>Agenda, escala e lista de espera</li><li>Prontuário e documentos do CFP</li><li>Financeiro, Pix e recibos</li><li>Lembretes automáticos</li><li>App do paciente</li></ul>
     <a class="btn line" href="https://app.mentez.com.br/criar-conta">Testar grátis</a></article>
@@ -53,7 +53,7 @@
     <ul><li>Tudo do Essencial</li><li>Atendente de IA no WhatsApp</li><li>IA na sessão e escrita de documentos</li><li>Teleconsulta própria</li><li>NFS-e e convênios</li><li>Sua marca e domínio próprio</li></ul>
     <a class="btn" href="https://app.mentez.com.br/criar-conta">Testar grátis</a></article>
 </div></div>
-        <div class="pane" id="pp2" role="tabpanel" aria-labelledby="pt2" style="display:block"><div class="plans" style="grid-template-columns:repeat(2,1fr);max-width:900px;margin:0 auto">
+        <div class="pane" id="pp2" role="tabpanel" aria-labelledby="pt2" style="display:block"><div class="plans" data-plans="clinica" data-count="2" style="grid-template-columns:repeat(2,1fr);max-width:900px;margin:0 auto">
   <article class="plan hot"><span class="tag">Para equipes</span><h3>Clínica</h3><p class="for">Profissionais, salas e recepção.</p><div class="price"><small>R$</small><b>249</b><small>/mês</small></div>
     <ul><li>Até 5 profissionais</li><li>Tudo do Profissional</li><li>Perfis de acesso por função</li><li>Locação de salas e repasses</li><li>Painel de chamada na TV</li><li>Profissional extra: R$ 39/mês</li></ul>
     <a class="btn" href="https://app.mentez.com.br/criar-conta">Testar grátis</a></article>
@@ -69,7 +69,7 @@
 <section class="pad">
   <div class="wrap">
     <div class="sec-head"><span class="kick">Comparação</span><h2 class="h-m">Plano a plano, <span class="s">sem surpresa.</span></h2></div>
-    <div class="cmp-wrap"><table class="cmp"><thead><tr><th scope="col">Recurso</th><th scope="col">Essencial<br><small style="font-weight:500;opacity:.75">R$ 79</small></th><th scope="col">Profissional<br><small style="font-weight:500;opacity:.75">R$ 129</small></th><th scope="col">Clínica<br><small style="font-weight:500;opacity:.75">R$ 249</small></th></tr></thead><tbody><tr class="grp"><th colspan="4" scope="rowgroup">Base</th></tr><tr><th scope="row">Profissionais</th><td>1</td><td>1</td><td>até 5 (+R$ 39 cada)</td></tr><tr><th scope="row">Pacientes e sessões</th><td>ilimitados</td><td>ilimitados</td><td>ilimitados</td></tr><tr><th scope="row">Agenda, escala e lista de espera</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Prontuário, escalas e humor</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Documentos do CFP<small>com assinatura digital</small></th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">App do paciente</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Lembretes automáticos<small>WhatsApp e e-mail</small></th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Exercícios</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Financeiro</th></tr><tr><th scope="row">Cobrança por Pix, boleto e cartão</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Recibos (Receita Saúde)</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">NFS-e</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Repasses e conciliação</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Inteligência artificial</th></tr><tr><th scope="row">Atendente de IA no WhatsApp<small>provedor principal e reserva</small></th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">IA na sessão e escrita de documentos</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Atendimento</th></tr><tr><th scope="row">Teleconsulta própria</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Convênios<small>simples ou integrado (TISS)</small></th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Painel de chamada na TV</th><td class="n">—</td><td class="n">—</td><td class="y">●</td></tr><tr><th scope="row">Locação de salas</th><td class="n">—</td><td class="n">—</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Marca</th></tr><tr><th scope="row">Logo, cores e estilo do consultório</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Domínio próprio</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Cartão digital e link na bio</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr></tbody></table></div>
+    <div class="cmp-wrap"><table class="cmp"><thead><tr><th scope="col">Recurso</th><th scope="col">Essencial<br><small style="font-weight:500;opacity:.75">R$ 79</small></th><th scope="col">Profissional<br><small style="font-weight:500;opacity:.75">R$ 129</small></th><th scope="col">Clínica<br><small style="font-weight:500;opacity:.75">R$ 249</small></th></tr></thead><tbody data-cmp><tr class="grp"><th colspan="4" scope="rowgroup">Base</th></tr><tr><th scope="row">Profissionais</th><td>1</td><td>1</td><td>até 5 (+R$ 39 cada)</td></tr><tr><th scope="row">Pacientes e sessões</th><td>ilimitados</td><td>ilimitados</td><td>ilimitados</td></tr><tr><th scope="row">Agenda, escala e lista de espera</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Prontuário, escalas e humor</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Documentos do CFP<small>com assinatura digital</small></th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">App do paciente</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Lembretes automáticos<small>WhatsApp e e-mail</small></th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Exercícios</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Financeiro</th></tr><tr><th scope="row">Cobrança por Pix, boleto e cartão</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Recibos (Receita Saúde)</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">NFS-e</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Repasses e conciliação</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Inteligência artificial</th></tr><tr><th scope="row">Atendente de IA no WhatsApp<small>provedor principal e reserva</small></th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">IA na sessão e escrita de documentos</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Atendimento</th></tr><tr><th scope="row">Teleconsulta própria</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Convênios<small>carteirinhas, autorizações e a receber</small></th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Painel de chamada na TV</th><td class="n">—</td><td class="n">—</td><td class="y">●</td></tr><tr><th scope="row">Locação de salas</th><td class="n">—</td><td class="n">—</td><td class="y">●</td></tr><tr class="grp"><th colspan="4" scope="rowgroup">Marca</th></tr><tr><th scope="row">Logo, cores e estilo do consultório</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Domínio próprio</th><td class="n">—</td><td class="y">●</td><td class="y">●</td></tr><tr><th scope="row">Cartão digital e link na bio</th><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr></tbody></table></div>
   </div>
 </section>
 <section class="pad paper2">
@@ -77,7 +77,7 @@
     <div style="display:grid;gap:22px;align-content:start"><span class="kick">Cobrança</span><h2 class="h-m">Dúvidas sobre <span class="s">pagamento.</span></h2></div>
     <div>
       <details><summary>Preciso informar cartão para testar?</summary><p>Não. O teste de 14 dias é liberado só com o cadastro. Ao final, você escolhe o plano e a forma de pagamento.</p></details>
-      <details><summary>Como pago a assinatura?</summary><p>Por Pix, boleto ou cartão de crédito, todo mês. A cobrança é feita pela Asaas, instituição de pagamento autorizada pelo Banco Central.</p></details>
+      <details><summary>Como pago a assinatura?</summary><p>Por <span data-pay-methods>Pix, boleto e cartão de crédito</span>, todo mês. A cobrança é feita pelo <span data-pay-provider>Asaas</span>.</p></details>
       <details><summary>Posso trocar de plano depois?</summary><p>Sim, a qualquer momento. A diferença é ajustada na próxima mensalidade.</p></details>
       <details><summary>O que acontece se eu atrasar?</summary><p>Você continua usando normalmente por alguns dias, com aviso. Depois disso o acesso fica suspenso, mas os dados ficam guardados até a regularização.</p></details>
       <details><summary>A IA está incluída no preço?</summary><p>O atendente e a escrita com IA estão no plano. O uso do provedor de IA (Claude, OpenAI, Gemini…) é pago diretamente a ele, com a chave da clínica ou de cada profissional — em geral, centavos por conversa.</p></details>
@@ -92,6 +92,7 @@
       <p class="lede">14 dias com tudo liberado. Sem cartão, sem instalação, sem compromisso.</p>
       <a class="btn big" href="https://app.mentez.com.br/criar-conta">Criar minha conta grátis <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
     </div>
+    <p class="contact-line">Prefere conversar antes? Escreva para <a data-contact href="mailto:contato@mentez.com.br">contato@mentez.com.br</a></p>
     <div class="rule"></div>
   </div>
 </section>
@@ -101,12 +102,12 @@
     <div class="cols">
       <div><a class="brand" href="/"><img src="/img/simbolo-claro.png" alt="" width="34" height="34">mentez</a><p>Inteligência para cuidar de quem cuida. Sistema de gestão para psicólogos e clínicas de psicologia.</p></div>
       <div><h4>Produto</h4><ul><li><a href="/recursos/">Recursos</a></li><li><a href="/precos/">Preços</a></li><li><a href="/seguranca/">Segurança</a></li><li><a href="/clinicas/">Para clínicas</a></li></ul></div>
-      <div><h4>Conta</h4><ul><li><a href="https://app.mentez.com.br/criar-conta">Criar conta</a></li><li><a href="https://app.mentez.com.br/inicio">Entrar</a></li></ul></div>
+      <div><h4>Conta</h4><ul><li><a href="https://app.mentez.com.br/criar-conta">Criar conta</a></li><li><a href="https://app.mentez.com.br/inicio">Entrar</a></li><li><a data-contact href="mailto:contato@mentez.com.br">contato@mentez.com.br</a></li></ul></div>
       <div><h4>Legal</h4><ul><li><a href="https://app.mentez.com.br/termos-de-uso">Termos de uso</a></li><li><a href="https://app.mentez.com.br/privacidade">Privacidade</a></li></ul></div>
     </div>
-    <div class="legal"><span>© <span data-year>2026</span> Mentez. Feito no Brasil.</span><span>Em crise? CVV 188 · SAMU 192</span></div>
+    <div class="legal"><span>© <span data-year>2026</span> Mentez. Feito no Brasil. Fotos: Pexels.</span><span>Em crise? CVV 188 · SAMU 192</span></div>
   </div>
 </footer>
-<script src="/assets/site.js?v=1" defer></script>
+<script src="/assets/site.js?v=2" defer></script>
 </body>
 </html>

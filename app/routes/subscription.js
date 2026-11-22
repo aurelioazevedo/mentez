@@ -50,13 +50,17 @@ settings.get('/', async (req, res) => {
   const row = await T.pone('SELECT * FROM tenants WHERE id = ?', [t.id]);
   const inv = await Billing.invoices(t).catch(() => []);
   const cfg = await Billing.config();
+  // provedor desta clínica: o da assinatura existente ou o escolhido pela Mentez para novas assinaturas
+  const prov = row.asaas_subscription ? 'asaas' : row.mp_preapproval ? 'mercadopago' : cfg.provider;
+  const subscribed = !!(row.asaas_subscription || row.mp_preapproval);
   const pros = Number((await one("SELECT COUNT(*) n FROM users WHERE active = 1 AND role IN ('admin','psicologo') AND attends = 1")).n);
   const open = inv.find((i) => ['PENDING', 'OVERDUE'].includes(i.status));
   const stLabel = { cortesia: 'Cortesia (sem cobrança)', teste: `Teste grátis · ${a.daysLeft ?? 0} dia(s) restantes`, ativa: 'Assinatura em dia', atrasada: 'Mensalidade em aberto', bloqueada: 'Acesso suspenso' }[a.state];
   send(res, page(req, { title: 'Plano e assinatura', active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Configurações · Mentez</p><h1>Plano e assinatura</h1>
       <p class="muted">${stLabel} · plano atual: <b>${cur?.name || '—'}</b>${row.paid_until ? ` · pago até ${brDate(row.paid_until)}` : ''}</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
-    ${open ? html`<div class="flash ${open.status === 'OVERDUE' ? 'warn' : 'info'}">Mensalidade de ${money(open.value)} com vencimento em ${brDate(open.due)}. <a class="btn btn-sm" href="${open.url}" target="_blank" rel="noopener">Pagar agora (Pix, boleto ou cartão)</a></div>` : ''}
+    ${open ? html`<div class="flash ${open.status === 'OVERDUE' ? 'warn' : 'info'}">Mensalidade de ${money(open.value)} com vencimento em ${brDate(open.due)}. ${open.url ? html`<a class="btn btn-sm" href="${open.url}" target="_blank" rel="noopener">Pagar agora (Pix, boleto ou cartão)</a>` : prov === 'mercadopago' ? ' A cobrança é feita automaticamente no cartão cadastrado no Mercado Pago.' : ''}</div>` : ''}
+    ${req.query.mp ? html`<div class="flash ok">Pronto! Assim que o Mercado Pago confirmar a autorização, a assinatura aparece aqui.</div>` : ''}
     ${a.state === 'cortesia' ? html`<section class="card"><p>Esta clínica está no plano de cortesia da Mentez, sem cobrança.</p></section>` : html`
     <form method="post" class="stack">
       <section class="plans">${plans.map((p) => html`<label class="plan ${p.key === cur?.key ? 'on' : ''}"><input type="radio" name="plan" value="${p.key}" ${p.key === (cur?.public ? cur.key : 'profissional') ? raw('checked') : ''}>
@@ -66,17 +70,17 @@ settings.get('/', async (req, res) => {
       <section class="card form-grid">
         <h2 class="span2">Dados para a cobrança</h2>
         <label class="fld"><span>Nome ou razão social</span><input name="payer_name" required maxlength="120" value="${row.owner_name || t.name}"></label>
-        <label class="fld"><span>CPF ou CNPJ</span><input name="payer_doc" required maxlength="18" inputmode="numeric" data-mask="doc" placeholder="000.000.000-00"></label>
-        <label class="fld"><span>E-mail para as faturas</span><input type="email" name="email" required maxlength="190" value="${row.owner_email || ''}"></label>
+        <label class="fld"><span>CPF ou CNPJ</span><input name="payer_doc" ${prov === 'asaas' ? raw('required') : ''} maxlength="18" inputmode="numeric" data-mask="doc" placeholder="000.000.000-00"></label>
+        <label class="fld"><span>${prov === 'mercadopago' ? 'E-mail da conta do Mercado Pago' : 'E-mail para as faturas'}</span><input type="email" name="email" required maxlength="190" value="${row.owner_email || ''}"></label>
         <label class="fld"><span>Celular</span><input name="phone" maxlength="40" value="${row.owner_phone || ''}" inputmode="tel"></label>
-        <p class="span2 muted small">Profissionais que atendem hoje: ${pros}. A cobrança é mensal, pelo Asaas: você paga por Pix, boleto ou cartão. ${a.state === 'teste' ? `A primeira mensalidade vence quando o teste acabar (${brDate(a.ends)}).` : ''}</p>
-        ${Billing.ready(cfg) ? '' : html`<p class="span2 flash warn">A cobrança da Mentez está sendo configurada. Tente de novo mais tarde ou fale com a Mentez.</p>`}
-        <div class="span2 actions"><button class="btn" ${Billing.ready(cfg) ? '' : raw('disabled')}>${row.asaas_subscription ? 'Mudar de plano' : 'Assinar'}</button></div>
+        <p class="span2 muted small">Profissionais que atendem hoje: ${pros}. ${prov === 'mercadopago' ? `A cobrança é mensal e automática pelo Mercado Pago, no cartão de crédito (ou saldo do Mercado Pago). Ao assinar, você vai para o Mercado Pago para autorizar.` : 'A cobrança é mensal, pelo Asaas: você paga por Pix, boleto ou cartão.'} ${a.state === 'teste' ? `A primeira mensalidade ${prov === 'mercadopago' ? 'é cobrada' : 'vence'} quando o teste acabar (${brDate(a.ends)}).` : ''}</p>
+        ${Billing.ready(cfg, prov) ? '' : html`<p class="span2 flash warn">A cobrança da Mentez está sendo configurada. Tente de novo mais tarde ou fale com a Mentez.</p>`}
+        <div class="span2 actions"><button class="btn" ${Billing.ready(cfg, prov) ? '' : raw('disabled')}>${subscribed ? 'Mudar de plano' : prov === 'mercadopago' ? 'Assinar pelo Mercado Pago' : 'Assinar'}</button></div>
       </section>
     </form>
     ${inv.length ? html`<section class="card flush"><h2 class="pad">Faturas</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Vencimento</th><th>Valor</th><th>Situação</th><th></th></tr></thead><tbody>
       ${inv.map((i) => html`<tr><td>${brDate(i.due)}</td><td>${money(i.value)}</td><td><span class="badge b-${(PAY[i.status] || ['agendada'])[0]}">${(PAY[i.status] || [0, i.status])[1]}</span></td><td>${i.url ? html`<a class="link small" href="${i.url}" target="_blank" rel="noopener">${['PENDING', 'OVERDUE'].includes(i.status) ? 'pagar' : 'ver'}</a>` : ''}</td></tr>`)}</tbody></table></div></section>` : ''}
-    ${row.asaas_subscription ? html`<form method="post" action="/configuracoes/assinatura/cancelar" class="card"><p class="muted small">Cancelar interrompe as próximas cobranças. Os dados ficam guardados e você pode voltar quando quiser; para levar os dados, use a exportação antes.</p><button class="btn ghost danger-text" data-confirm="Cancelar a assinatura da Mentez? O acesso fica suspenso depois do período pago.">Cancelar assinatura</button></form>` : ''}`}` }));
+    ${subscribed ? html`<form method="post" action="/configuracoes/assinatura/cancelar" class="card"><p class="muted small">Cancelar interrompe as próximas cobranças. Os dados ficam guardados e você pode voltar quando quiser; para levar os dados, use a exportação antes.</p><button class="btn ghost danger-text" data-confirm="Cancelar a assinatura da Mentez? O acesso fica suspenso depois do período pago.">Cancelar assinatura</button></form>` : ''}`}` }));
 });
 settings.post('/', async (req, res) => {
   const t = T.current(); if (!t || !can(req.user, 'usuarios')) return res.redirect('/configuracoes');
@@ -88,7 +92,16 @@ settings.post('/', async (req, res) => {
   try {
     const out = await Billing.subscribe(t, { planKey: req.body.plan, payerName: str(req.body.payer_name, 120), payerDoc: req.body.payer_doc, email: str(req.body.email, 190), phone: str(req.body.phone, 40) });
     await audit(req, 'assinatura', `${req.body.plan} ${money(out.value)}`);
-    if (out.invoiceUrl && Billing.accessOf(T.current()).state !== 'teste') return res.redirect(out.invoiceUrl);
+    // A política de segurança do sistema não deixa um formulário redirecionar para outro site:
+    // mostra uma página com o botão (e o encaminhamento automático) para o checkout do provedor.
+    const go = out.checkoutUrl || (out.invoiceUrl && Billing.accessOf(T.current()).state !== 'teste' ? out.invoiceUrl : null);
+    if (go && /^https?:\/\//.test(go)) {
+      const name = out.provider === 'mercadopago' ? 'Mercado Pago' : 'Asaas';
+      return send(res, page(req, { title: `Continuar no ${name}`, active: 'config', body: html`<meta http-equiv="refresh" content="2;url=${go}">
+        <section class="card center-card"><h1>Quase lá</h1><p>${out.provider === 'mercadopago' ? 'Autorize a assinatura no Mercado Pago com o cartão que vai pagar as mensalidades.' : 'Pague a primeira mensalidade no Asaas (Pix, boleto ou cartão).'} Vamos abrir a página em instantes.</p>
+        <p class="actions"><a class="btn" href="${go}">Continuar no ${name}</a><a class="btn ghost" href="/configuracoes/assinatura">Voltar</a></p></section>` }));
+    }
+    if (out.provider === 'mercadopago') return res.flash(`Plano atualizado: ${money(out.value)}/mês, cobrado automaticamente pelo Mercado Pago.`).redirect('/configuracoes/assinatura');
     res.flash(`Assinatura registrada: ${money(out.value)}/mês, primeira cobrança em ${brDate(out.nextDue)}. A fatura também chega por e-mail.`).redirect('/configuracoes/assinatura');
   } catch (e) { res.flash(e.message, 'err').redirect('/configuracoes/assinatura'); }
 });

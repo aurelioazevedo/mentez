@@ -26,6 +26,22 @@ handle.post('/webhooks/asaas', express.json({ limit: '200kb' }), async (req, res
   try { await Billing.handleEvent(req.body || {}); } catch (e) { console.error('webhook Mentez:', e.message); return res.sendStatus(500); }
   res.json({ ok: true });
 });
+// Avisos do Mercado Pago sobre as assinaturas (URL com o token da plataforma; assinatura secreta, se cadastrada)
+handle.post('/webhooks/mercadopago', express.json({ limit: '200kb' }), async (req, res) => {
+  if (!(await Billing.webhookAuth(String(req.query.t || '')))) return res.sendStatus(401);
+  const type = String(req.body?.type || req.query.type || ''); const id = String(req.body?.data?.id || req.query['data.id'] || '');
+  const c = await Billing.config();
+  if (!Billing.mpSignatureOk(c, { signature: req.get('x-signature'), requestId: req.get('x-request-id'), dataId: id })) return res.sendStatus(401);
+  try { await Billing.handleMercadoPago(type, id); } catch (e) { console.error('webhook Mentez (Mercado Pago):', e.message); return res.sendStatus(500); }
+  res.json({ ok: true });
+});
+// Site mentez.com.br: planos, forma de pagamento e contato vindos do painel (lidos pelo navegador de quem visita o site)
+const SITE_ORIGINS = ['https://mentez.com.br', 'https://www.mentez.com.br'];
+handle.get('/api/site', async (req, res) => {
+  const o = req.get('origin');
+  res.set({ 'Access-Control-Allow-Origin': SITE_ORIGINS.includes(o) ? o : SITE_ORIGINS[0], Vary: 'Origin', 'Cache-Control': 'public, max-age=300' });
+  res.json(await Billing.publicInfo());
+});
 handle.use(express.urlencoded({ extended: false, limit: '50kb' }), checkOrigin, flash);
 handle.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); next(); });
 
@@ -85,7 +101,7 @@ const ICON = {
 };
 const MENU = [
   ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec']]],
-  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança (Asaas)', 'cobranca'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
+  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
 const ROLES = {
@@ -243,7 +259,7 @@ handle.get('/', need, async (req, res) => {
   let activated = 0; let subscribed = 0;
   for (const r of signups) {
     const t = all.find((x) => x.id === r.tenant_id); if (!t) continue;
-    const row = await T.pone('SELECT asaas_subscription FROM tenants WHERE id = ?', [t.id]); if (row?.asaas_subscription) subscribed++;
+    const row = await T.pone('SELECT asaas_subscription, mp_preapproval FROM tenants WHERE id = ?', [t.id]); if (row?.asaas_subscription || row?.mp_preapproval) subscribed++;
     const ok = await T.run(t, async () => Number((await one('SELECT COUNT(*) n FROM patients')).n) > 0 && Number((await one("SELECT COUNT(*) n FROM appointments WHERE status = 'realizada'")).n) > 0).catch(() => false);
     if (ok) activated++;
   }
@@ -323,7 +339,7 @@ handle.get('/clinicas.csv', need, async (req, res) => {
 // ---------- assinaturas e faturas ----------
 handle.get('/faturas', need, async (req, res) => {
   const all = await T.all(); const plans = await Billing.plans();
-  const subs = await T.pq('SELECT id, plan, billing_status, asaas_subscription, paid_until, overdue_since, extra_pros FROM tenants WHERE asaas_subscription IS NOT NULL OR billing_status IN (\'ativa\',\'atrasada\',\'pendente\',\'cancelada\') ORDER BY name');
+  const subs = await T.pq('SELECT id, plan, billing_status, asaas_subscription, paid_until, overdue_since, extra_pros FROM tenants WHERE asaas_subscription IS NOT NULL OR mp_preapproval IS NOT NULL OR billing_status IN (\'ativa\',\'atrasada\',\'pendente\',\'cancelada\') ORDER BY name');
   const ev = await T.pq("SELECT e.*, t.name tname, t.id tid FROM billing_events e LEFT JOIN tenants t ON t.id = e.tenant_id WHERE e.event LIKE 'PAYMENT_%' ORDER BY e.id DESC LIMIT 60");
   const EV = { PAYMENT_RECEIVED: ['ok', 'Paga'], PAYMENT_CONFIRMED: ['ok', 'Paga'], PAYMENT_OVERDUE: ['err', 'Vencida'], PAYMENT_CREATED: ['muted', 'Gerada'], PAYMENT_REFUNDED: ['warn', 'Estornada'], PAYMENT_DELETED: ['muted', 'Removida'] };
   send(res, layout(req, 'Assinaturas e faturas', html`<div class="mz2-hello"><div><h1>Assinaturas e faturas</h1><p>Assinaturas das clínicas e os últimos avisos de pagamento do Asaas.</p></div></div>
@@ -470,7 +486,7 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
       </section>
     </div>
     <section class="card"><h2>Assinatura</h2>
-      ${(() => { const a = Billing.accessOf(t); return html`<p><b>${{ cortesia: 'Cortesia (sem cobrança)', teste: `Teste grátis · ${a.daysLeft} dia(s) restantes (até ${brDate(a.ends)})`, ativa: 'Em dia', atrasada: `Em aberto há ${a.late} dia(s)`, bloqueada: `Acesso suspenso (${a.reason})` }[a.state]}</b> · plano ${t.plan}${row.paid_until ? ` · pago até ${brDate(row.paid_until)}` : ''}${row.asaas_subscription ? ` · assinatura Asaas ${row.asaas_subscription}` : ''}${row.extra_pros ? ` · ${row.extra_pros} profissional(is) extra` : ''}</p>`; })()}
+      ${(() => { const a = Billing.accessOf(t); return html`<p><b>${{ cortesia: 'Cortesia (sem cobrança)', teste: `Teste grátis · ${a.daysLeft} dia(s) restantes (até ${brDate(a.ends)})`, ativa: 'Em dia', atrasada: `Em aberto há ${a.late} dia(s)`, bloqueada: `Acesso suspenso (${a.reason})` }[a.state]}</b> · plano ${t.plan}${row.paid_until ? ` · pago até ${brDate(row.paid_until)}` : ''}${row.asaas_subscription ? ` · assinatura Asaas ${row.asaas_subscription}` : ''}${row.mp_preapproval ? ` · assinatura Mercado Pago ${row.mp_preapproval}` : ''}${row.extra_pros ? ` · ${row.extra_pros} profissional(is) extra` : ''}</p>`; })()}
       ${row.owner_crp ? html`<p class="small muted">Cadastro: ${row.owner_name || ''} · CRP ${row.owner_crp} · ${row.owner_phone || ''} · ${row.owner_email || ''} — confira o CRP no Cadastro Nacional do CFP.</p>` : ''}
       <form method="post" action="/clinicas/${t.id}/assinatura" class="actions">
         <select name="plan" aria-label="Plano">${(await Billing.plans()).map((p) => html`<option value="${p.key}" ${p.key === t.plan ? raw('selected') : ''}>${p.name}</option>`)}</select>
@@ -556,49 +572,75 @@ handle.post('/clinicas/:id/assinatura', need, async (req, res, next) => {
 // ---------- planos ----------
 handle.get('/planos', need, async (req, res) => {
   const list = await Billing.plans(true);
-  send(res, layout(req, 'Planos', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Planos</h1><p class="muted">Preços e limites valem para novas assinaturas e mudanças de plano. Assinaturas existentes mantêm o valor até a clínica mudar de plano.</p></div></header>
+  send(res, layout(req, 'Planos', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Planos</h1><p class="muted">Preços e limites valem para novas assinaturas e mudanças de plano. Assinaturas existentes mantêm o valor até a clínica mudar de plano. O site <a href="https://mentez.com.br/precos/" target="_blank" rel="noopener">mentez.com.br</a> mostra os planos marcados como visíveis, com estes nomes, preços e recursos (atualiza em até 5 minutos).</p></div></header>
+    <form method="post" action="/planos/site" class="card form-grid"><h2 class="span2">Site</h2>
+      <label class="fld"><span>E-mail de contato no site</span><input type="email" name="contact" value="${await Billing.siteContact()}" maxlength="120" required></label>
+      <p class="fld muted small">A forma de pagamento mostrada no site acompanha o provedor escolhido em <a href="/cobranca">Cobrança</a>.</p>
+      <div class="span2 actions"><button class="btn ghost">Salvar</button></div></form>
     ${list.map((p) => html`<form method="post" action="/planos/${p.key}" class="card form-grid">
       <h2 class="span2">${p.name} <small class="muted">${p.key}${p.public ? '' : ' · interno'}</small></h2>
       <label class="fld"><span>Nome</span><input name="name" value="${p.name}" maxlength="60" required></label>
       <label class="fld"><span>Preço mensal (R$)</span><input name="price" value="${String(p.price).replace('.', ',')}" inputmode="decimal" required></label>
       <label class="fld"><span>Profissionais incluídos</span><input type="number" name="max_pros" min="1" max="500" value="${p.maxPros}"></label>
       <label class="fld"><span>Profissional a mais (R$/mês, 0 = não permite)</span><input name="extra" value="${String(p.extraPro).replace('.', ',')}" inputmode="decimal"></label>
+      <label class="fld"><span>Frase no site</span><input name="tagline" value="${p.tagline}" maxlength="160" placeholder="Ex.: Tudo para quem atende sozinho."></label>
+      <label class="fld"><span>Aparece no site para</span><select name="audience"><option value="individual" ${p.audience === 'individual' ? raw('selected') : ''}>Quem atende sozinho</option><option value="clinica" ${p.audience === 'clinica' ? raw('selected') : ''}>Clínicas</option></select></label>
       <fieldset class="fld span2"><legend>Recursos</legend><div class="wl-chips">${Object.entries(Billing.FEATURES).map(([k, l]) => html`<label class="wl-chip"><input type="checkbox" name="f_${k}" value="1" ${p.features.includes(k) ? raw('checked') : ''}><span>${l}</span></label>`)}</div></fieldset>
-      <label class="check"><input type="checkbox" name="public" value="1" ${p.public ? raw('checked') : ''}> Aparece para as clínicas escolherem</label>
+      <label class="check"><input type="checkbox" name="public" value="1" ${p.public ? raw('checked') : ''}> Aparece para as clínicas escolherem e no site</label>
+      <label class="check"><input type="checkbox" name="highlight" value="1" ${p.highlight ? raw('checked') : ''}> Destacar no site como “Mais escolhido”</label>
       <div class="span2 actions"><button class="btn">Salvar ${p.name}</button></div></form>`)}`));
+});
+handle.post('/planos/site', need, async (req, res) => {
+  await Billing.setSiteContact(str(req.body.contact, 120)); await log(req, 'site-contato');
+  res.flash('Contato do site salvo.').redirect('/planos');
 });
 handle.post('/planos/:k', need, async (req, res) => {
   const b = req.body; const num = (v) => Math.max(0, Number(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0);
-  await T.pq('UPDATE plans SET name = ?, price = ?, max_pros = ?, extra_pro_price = ?, features = ?, public = ? WHERE plan_key = ?',
-    [str(b.name, 60), num(b.price), Math.max(1, int(b.max_pros) || 1), num(b.extra), JSON.stringify(Object.keys(Billing.FEATURES).filter((k) => b[`f_${k}`])), b.public ? 1 : 0, req.params.k]);
+  await T.pq('UPDATE plans SET name = ?, price = ?, max_pros = ?, extra_pro_price = ?, features = ?, public = ?, tagline = ?, audience = ?, highlight = ? WHERE plan_key = ?',
+    [str(b.name, 60), num(b.price), Math.max(1, int(b.max_pros) || 1), num(b.extra), JSON.stringify(Object.keys(Billing.FEATURES).filter((k) => b[`f_${k}`])), b.public ? 1 : 0,
+      str(b.tagline, 160) || null, b.audience === 'clinica' ? 'clinica' : 'individual', b.highlight ? 1 : 0, req.params.k]);
   Billing.clearPlans(); await log(req, 'plano-editar', null, req.params.k);
   res.flash('Plano salvo.').redirect('/planos');
 });
 // ---------- cobrança (Asaas da Mentez) ----------
 handle.get('/cobranca', need, async (req, res) => {
   const c = await Billing.config();
-  const url = `https://${req.get('host')}/webhooks/asaas`;
+  const host = `https://${req.get('host')}`;
   const ev = await T.pq('SELECT e.*, t.name tname FROM billing_events e LEFT JOIN tenants t ON t.id = e.tenant_id ORDER BY e.id DESC LIMIT 30');
-  send(res, layout(req, 'Cobrança', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Cobrança das clínicas</h1><p class="muted">Conta Asaas da Mentez, que cobra as mensalidades das clínicas (Pix, boleto ou cartão).</p></div></header>
+  const counts = await T.pq("SELECT SUM(asaas_subscription IS NOT NULL) asaas, SUM(mp_preapproval IS NOT NULL) mp FROM tenants");
+  const sel = (a2, b2) => (a2 === b2 ? raw('selected') : '');
+  send(res, layout(req, 'Cobrança', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Cobrança das clínicas</h1><p class="muted">Quem cobra as mensalidades das clínicas. O provedor escolhido vale para as novas assinaturas e aparece no site; as assinaturas que já existem continuam no provedor em que foram feitas (Asaas: ${counts[0]?.asaas || 0} · Mercado Pago: ${counts[0]?.mp || 0}).</p></div></header>
     <form method="post" class="card form-grid">
-      <label class="fld"><span>Ambiente</span><select name="env"><option value="sandbox" ${c.env === 'sandbox' ? raw('selected') : ''}>Testes (sandbox)</option><option value="producao" ${c.env === 'producao' ? raw('selected') : ''}>Produção</option></select></label>
-      <label class="fld"><span>Chave de API ${c.key ? html`<small class="muted">(cadastrada — preencha só para trocar)</small>` : ''}</span><input type="password" name="key" autocomplete="off" maxlength="300" placeholder="$aact_…"></label>
-      <p class="span2 muted small">No Asaas: Integrações → Chave de API. Para testar sem cobrar ninguém, crie uma conta em sandbox.asaas.com e use a chave de lá com o ambiente “Testes”.</p>
+      <label class="fld span2"><span>Provedor das novas assinaturas</span><select name="provider">${Object.entries(Billing.PROVIDERS).map(([k, p]) => html`<option value="${k}" ${sel(c.provider, k)}>${p.label} — ${p.methods.join(', ')}</option>`)}</select></label>
+      <h2 class="span2">Asaas</h2>
+      <label class="fld"><span>Ambiente</span><select name="env"><option value="sandbox" ${sel(c.env, 'sandbox')}>Testes (sandbox)</option><option value="producao" ${sel(c.env, 'producao')}>Produção</option></select></label>
+      <label class="fld"><span>Chave de API ${c.key ? html`<small class="muted">(cadastrada — preencha só para trocar)</small>` : ''}</span><input type="password" name="key" autocomplete="new-password" maxlength="300" placeholder="$aact_…"></label>
+      <p class="span2 muted small">No Asaas: Integrações → Chave de API. Para testar sem cobrar ninguém, use uma conta em sandbox.asaas.com com o ambiente “Testes”.</p>
+      <h2 class="span2">Mercado Pago</h2>
+      <label class="fld"><span>Access Token ${c.mpToken ? html`<small class="muted">(cadastrado — preencha só para trocar)</small>` : ''}</span><input type="password" name="mp_token" autocomplete="new-password" maxlength="300" placeholder="APP_USR-… (ou TEST-… para testes)"></label>
+      <label class="fld"><span>Assinatura secreta do webhook ${c.mpSecret ? html`<small class="muted">(cadastrada)</small>` : html`<small class="muted">(opcional, recomendado)</small>`}</span><input type="password" name="mp_secret" autocomplete="new-password" maxlength="200"></label>
+      ${c.mpSecret ? html`<label class="check span2"><input type="checkbox" name="mp_secret_clear" value="1"> Apagar a assinatura secreta</label>` : ''}
+      <p class="span2 muted small">No Mercado Pago: Suas integrações → sua aplicação → Credenciais de produção (Access Token). Em <b>Webhooks</b>, cadastre a URL abaixo e marque os eventos <b>Planos e assinaturas</b>; copie a “assinatura secreta” para o campo acima. As assinaturas do Mercado Pago são cobradas no cartão de crédito (ou saldo do Mercado Pago), todo mês, de forma automática.</p>
       <div class="span2 actions"><button class="btn">Salvar</button></div></form>
-    ${c.key ? html`<section class="card"><h2>Conexão e avisos automáticos</h2>
-      <p class="small">Webhook: <code>${url}</code> · ${c.webhookAt ? html`registrado em ${brDateTime(c.webhookAt)}` : html`<b>ainda não registrado</b>`}</p>
-      <div class="actions"><form method="post" action="/cobranca/testar"><button class="btn ghost">Testar conexão</button></form><form method="post" action="/cobranca/webhook"><button class="btn ghost">Registrar o webhook no Asaas</button></form></div></section>` : ''}
-    <section class="card flush"><h2 class="pad">Últimos avisos do Asaas</h2>${ev.length ? html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Quando</th><th>Clínica</th><th>Evento</th><th>Situação</th><th>Valor</th><th>Vencimento</th></tr></thead><tbody>
+    ${c.key || c.mpToken ? html`<section class="card"><h2>Conexão e avisos automáticos</h2>
+      ${c.key ? html`<p class="small"><b>Asaas</b> · webhook <code>${host}/webhooks/asaas</code> · ${c.webhookAt ? html`registrado em ${brDateTime(c.webhookAt)}` : html`<b>ainda não registrado</b>`}</p>` : ''}
+      ${c.mpToken ? html`<p class="small"><b>Mercado Pago</b> · webhook <code>${host}/webhooks/mercadopago?t=${c.token}</code> (cadastre no painel do Mercado Pago)</p>` : ''}
+      <div class="actions">${c.key ? html`<form method="post" action="/cobranca/testar"><input type="hidden" name="p" value="asaas"><button class="btn ghost">Testar Asaas</button></form><form method="post" action="/cobranca/webhook"><button class="btn ghost">Registrar o webhook no Asaas</button></form>` : ''}
+        ${c.mpToken ? html`<form method="post" action="/cobranca/testar"><input type="hidden" name="p" value="mercadopago"><button class="btn ghost">Testar Mercado Pago</button></form>` : ''}</div></section>` : ''}
+    <section class="card flush"><h2 class="pad">Últimos avisos dos provedores</h2>${ev.length ? html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Quando</th><th>Clínica</th><th>Evento</th><th>Situação</th><th>Valor</th><th>Vencimento</th></tr></thead><tbody>
       ${ev.map((e) => html`<tr><td>${brDateTime(e.created_at)}</td><td>${e.tname || '—'}</td><td>${e.event}</td><td>${e.status || ''}</td><td>${e.value ? money(e.value) : ''}</td><td>${e.due_date ? brDate(e.due_date) : ''}</td></tr>`)}</tbody></table></div>` : html`<p class="pad muted">Nenhum aviso ainda.</p>`}</section>`));
 });
 handle.post('/cobranca', need, async (req, res) => {
   const k = String(req.body.key || '').trim();
-  if (k && (k.length < 20 || /\s/.test(k))) return res.flash('Chave de API inválida (no Asaas ela começa com $aact_).', 'err').redirect('/cobranca');
-  await Billing.saveConfig(req.body); await log(req, 'cobranca-config', null, req.body.env);
-  res.flash('Configuração de cobrança salva.').redirect('/cobranca');
+  if (k && (k.length < 20 || /\s/.test(k))) return res.flash('Chave de API do Asaas inválida (ela começa com $aact_).', 'err').redirect('/cobranca');
+  const m = String(req.body.mp_token || '').trim();
+  if (m && !/^(APP_USR|TEST)-[\w-]{20,}$/.test(m)) return res.flash('Access Token do Mercado Pago inválido (começa com APP_USR- ou TEST-).', 'err').redirect('/cobranca');
+  const c = await Billing.saveConfig(req.body); await log(req, 'cobranca-config', null, `${c.provider} · ${req.body.env}`);
+  res.flash(Billing.ready(c) ? `Configuração salva. Novas assinaturas: ${Billing.PROVIDERS[c.provider].label}.` : `Salvo, mas falta a credencial de ${Billing.PROVIDERS[c.provider].label} para as clínicas conseguirem assinar.`, Billing.ready(c) ? 'ok' : 'warn').redirect('/cobranca');
 });
 handle.post('/cobranca/testar', need, async (req, res) => {
-  try { res.flash(`Conexão com o Asaas funcionando: ${await Billing.testConnection(await Billing.config())}.`); } catch (e) { res.flash(e.message, 'err'); }
+  const p = req.body.p === 'mercadopago' ? 'mercadopago' : 'asaas';
+  try { res.flash(`Conexão com o ${Billing.PROVIDERS[p].label} funcionando: ${await Billing.testConnection(await Billing.config(), p)}.`); } catch (e) { res.flash(e.message, 'err'); }
   res.redirect('/cobranca');
 });
 handle.post('/cobranca/webhook', need, async (req, res) => {

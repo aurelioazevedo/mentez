@@ -42,7 +42,7 @@ export const TRIAL_DAYS = () => Number(process.env.MENTEZ_TRIAL_DAYS || 14);
 export const GRACE_DAYS = () => Number(process.env.MENTEZ_GRACE_DAYS || 10);
 
 const COLS = [
-  ['trial_ends_at', 'DATETIME NULL'], ['ins_mode', 'VARCHAR(10) NULL'], ['billing_status', "VARCHAR(20) NOT NULL DEFAULT 'cortesia'"], ['asaas_customer', 'VARCHAR(40) NULL'],
+  ['trial_ends_at', 'DATETIME NULL'], ['ins_mode', 'VARCHAR(10) NULL'], ['billing_provider', 'VARCHAR(12) NULL'], ['mp_preapproval', 'VARCHAR(60) NULL'], ['billing_status', "VARCHAR(20) NOT NULL DEFAULT 'cortesia'"], ['asaas_customer', 'VARCHAR(40) NULL'],
   ['asaas_subscription', 'VARCHAR(40) NULL'], ['paid_until', 'DATE NULL'], ['overdue_since', 'DATE NULL'], ['owner_phone', 'VARCHAR(40) NULL'],
   ['owner_crp', 'VARCHAR(30) NULL'], ['payer_doc_enc', 'TEXT NULL'], ['signup_ip', 'VARCHAR(64) NULL'], ['extra_pros', 'INT NOT NULL DEFAULT 0'],
 ];
@@ -54,6 +54,16 @@ export async function migrate() {
   for (const [k, n, p, m, x, f, pos] of SEED) await T.pq('INSERT IGNORE INTO plans (plan_key, name, price, max_pros, extra_pro_price, features, public, position) VALUES (?,?,?,?,?,?,?,?)', [k, n, p, m, x, JSON.stringify(f), k === 'piloto' ? 0 : 1, pos]);
   for (const [c, def] of COLS) {
     if (!(await T.pone('SELECT 1 x FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', ['tenants', c]))) await T.pq(`ALTER TABLE tenants ADD COLUMN ${c} ${def}`);
+  }
+  // planos: textos e destaque usados no site (mentez.com.br)
+  for (const [c, def] of [['tagline', 'VARCHAR(160) NULL'], ['audience', "VARCHAR(12) NOT NULL DEFAULT 'individual'"], ['highlight', 'TINYINT(1) NOT NULL DEFAULT 0']]) {
+    if (!(await T.pone('SELECT 1 x FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', ['plans', c]))) await T.pq(`ALTER TABLE plans ADD COLUMN ${c} ${def}`);
+  }
+  if (!(await T.pone("SELECT 1 x FROM platform_settings WHERE k = 'site_plans_v1'").catch(() => null))) {
+    const seed = { essencial: ['Para tirar o consultório do papel.', 'individual', 0], profissional: ['Tudo para quem atende sozinho.', 'individual', 1], clinica: ['Profissionais, salas e recepção.', 'clinica', 0] };
+    await T.pq('CREATE TABLE IF NOT EXISTS platform_settings (k VARCHAR(60) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+    for (const [k, [tg, au, hl]] of Object.entries(seed)) await T.pq('UPDATE plans SET tagline = COALESCE(tagline, ?), audience = ?, highlight = ? WHERE plan_key = ?', [tg, au, hl, k]);
+    await T.pq("INSERT INTO platform_settings (k, v) VALUES ('site_plans_v1', '1')");
   }
   await T.pq(`CREATE TABLE IF NOT EXISTS billing_events (
     id BIGINT AUTO_INCREMENT PRIMARY KEY, tenant_id INT NULL, event VARCHAR(60) NOT NULL, payment_id VARCHAR(40) NULL, status VARCHAR(30) NULL,
@@ -76,7 +86,8 @@ let pcache = null;
 export async function plans(force = false) {
   if (!force && pcache && Date.now() - pcache.at < 60e3) return pcache.v;
   const rows = await T.pq('SELECT * FROM plans ORDER BY position, price');
-  const v = rows.map((r) => ({ key: r.plan_key, name: r.name, price: Number(r.price), maxPros: r.max_pros, extraPro: Number(r.extra_pro_price), features: JSON.parse(r.features || '[]'), public: !!r.public }));
+  const v = rows.map((r) => ({ key: r.plan_key, name: r.name, price: Number(r.price), maxPros: r.max_pros, extraPro: Number(r.extra_pro_price), features: JSON.parse(r.features || '[]'), public: !!r.public,
+    tagline: r.tagline || '', audience: r.audience === 'clinica' ? 'clinica' : 'individual', highlight: !!r.highlight, position: r.position }));
   pcache = { at: Date.now(), v }; return v;
 }
 export const clearPlans = () => { pcache = null; };
@@ -132,19 +143,31 @@ export const OPEN_WHEN_BLOCKED = [/^\/configuracoes\/assinatura(\/|$)/, /^\/(log
 // ---------- configuração do Asaas (plataforma) ----------
 async function getS(k) { return (await T.pone('SELECT v FROM platform_settings WHERE k = ?', [k]))?.v || null; }
 async function setS(k, v) { await T.pq('INSERT INTO platform_settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)', [k, v]); }
+// Provedores de cobrança das mensalidades: Asaas (Pix, boleto, cartão) ou Mercado Pago (assinatura no cartão).
+// O escolhido vale para as novas assinaturas; cada clínica continua no provedor em que assinou.
+export const PROVIDERS = {
+  asaas: { label: 'Asaas', methods: ['Pix', 'boleto', 'cartão de crédito'] },
+  mercadopago: { label: 'Mercado Pago', methods: ['cartão de crédito', 'saldo do Mercado Pago'] },
+};
 export async function config() {
   let c = {}; try { c = JSON.parse((await getS('billing_cfg')) || '{}'); } catch { /* padrão */ }
-  let key = ''; try { key = c.key_sealed ? T.unseal(c.key_sealed).key : ''; } catch { key = ''; }
-  return { env: c.env === 'producao' ? 'producao' : 'sandbox', key, token: c.token || '', dueDay: c.dueDay || null, webhookAt: c.webhookAt || null };
+  const open = (v, f) => { try { return v ? T.unseal(v)[f] : ''; } catch { return ''; } };
+  return { provider: PROVIDERS[c.provider] ? c.provider : 'asaas', env: c.env === 'producao' ? 'producao' : 'sandbox', key: open(c.key_sealed, 'key'),
+    mpToken: open(c.mp_sealed, 'token'), mpSecret: open(c.mp_secret_sealed, 'secret'), token: c.token || '', dueDay: c.dueDay || null, webhookAt: c.webhookAt || null };
 }
 export async function saveConfig(b) {
   const cur = await config();
   const key = String(b.key || '').trim() || cur.key;
+  const mpToken = String(b.mp_token || '').trim() || cur.mpToken;
+  const mpSecret = b.mp_secret_clear ? '' : String(b.mp_secret || '').trim() || cur.mpSecret;
   const env = b.env === 'producao' ? 'producao' : 'sandbox';
-  await setS('billing_cfg', JSON.stringify({ env, key_sealed: key ? T.seal({ key }) : null, token: cur.token || crypto.randomBytes(24).toString('base64url'), webhookAt: env === cur.env && key === cur.key ? cur.webhookAt : null }));
+  const provider = PROVIDERS[b.provider] ? b.provider : cur.provider;
+  await setS('billing_cfg', JSON.stringify({ provider, env, key_sealed: key ? T.seal({ key }) : null, mp_sealed: mpToken ? T.seal({ token: mpToken }) : null, mp_secret_sealed: mpSecret ? T.seal({ secret: mpSecret }) : null,
+    token: cur.token || crypto.randomBytes(24).toString('base64url'), webhookAt: env === cur.env && key === cur.key ? cur.webhookAt : null }));
   return config();
 }
-export const ready = (c) => !!c.key;
+// Pronto para cobrar pelo provedor escolhido (ou por um específico)
+export const ready = (c, provider = c.provider) => (provider === 'mercadopago' ? !!c.mpToken : !!c.key);
 const base = (c) => process.env.MENTEZ_ASAAS_URL || (c.env === 'producao' ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3');
 async function api(c, method, path, body) {
   const r = await fetch(`${base(c)}${path}`, { method, signal: AbortSignal.timeout(25000), headers: { access_token: c.key, 'Content-Type': 'application/json', 'User-Agent': 'Mentez/1.0' }, body: body ? JSON.stringify(body) : undefined });
@@ -152,7 +175,20 @@ async function api(c, method, path, body) {
   if (!r.ok) { const e = new Error(`Asaas ${r.status}: ${d?.errors?.[0]?.description || d?.message || 'erro'}`); e.status = r.status; throw e; }
   return d;
 }
-export async function testConnection(c) { const d = await api(c, 'GET', '/myAccount'); return d?.name || d?.email || 'conta Asaas'; }
+export async function testConnection(c, provider = c.provider) {
+  if (provider === 'mercadopago') { const d = await mp(c, 'GET', '/users/me'); return d?.nickname || d?.email || 'conta Mercado Pago'; }
+  const d = await api(c, 'GET', '/myAccount'); return d?.name || d?.email || 'conta Asaas';
+}
+// ---------- Mercado Pago (assinaturas: /preapproval) ----------
+const mpBase = () => process.env.MENTEZ_MP_URL || 'https://api.mercadopago.com';
+async function mp(c, method, path, body) {
+  const r = await fetch(`${mpBase()}${path}`, { method, signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${c.mpToken}`, 'Content-Type': 'application/json', 'User-Agent': 'Mentez/1.0', ...(method === 'POST' ? { 'X-Idempotency-Key': crypto.randomUUID() } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(`Mercado Pago ${r.status}: ${d?.cause?.[0]?.description || d?.message || d?.error || 'erro'}`); e.status = r.status; throw e; }
+  return d;
+}
+// De qual provedor é a assinatura desta clínica (a que já existe manda; senão, o escolhido no painel)
+const providerOf = (row, c) => (row?.asaas_subscription ? 'asaas' : row?.mp_preapproval ? 'mercadopago' : c.provider);
 // Webhook da plataforma (cobranças das clínicas): app.mentez.com.br/webhooks/asaas, autenticado pelo token
 export async function registerWebhook(c, url, email) {
   await api(c, 'POST', '/webhooks', { name: 'Mentez — assinaturas', url, email, enabled: true, interrupted: false, authToken: c.token, sendType: 'SEQUENTIALLY',
@@ -162,9 +198,41 @@ export async function registerWebhook(c, url, email) {
 
 // ---------- assinatura de uma clínica ----------
 const docOk = (d) => /^(\d{11}|\d{14})$/.test(d);
-export async function subscribe(t, { planKey, payerName, payerDoc, email, phone }) {
+export async function subscribe(t, opts) {
   const c = await config();
-  if (!ready(c)) throw new Error('A cobrança da Mentez ainda não está configurada. Fale com a Mentez.');
+  const row = await T.pone('SELECT * FROM tenants WHERE id = ?', [t.id]);
+  return providerOf(row, c) === 'mercadopago' ? subscribeMp(t, opts, c, row) : subscribeAsaas(t, opts, c);
+}
+async function subscribeMp(t, { planKey, payerName, payerDoc, email }, c, row) {
+  if (!ready(c, 'mercadopago')) throw new Error('A cobrança da Mentez ainda não está configurada. Fale com a Mentez.');
+  const plan = (await plans()).find((p) => p.key === planKey && p.public);
+  if (!plan) throw new Error('Escolha um plano.');
+  const doc = String(payerDoc || '').replace(/\D/g, '');
+  if (doc && !docOk(doc)) throw new Error('Confira o CPF ou CNPJ.');
+  const mail = String(email || row.owner_email || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) throw new Error('Informe o e-mail da conta do Mercado Pago que vai pagar.');
+  const value = monthly(plan, row.extra_pros);
+  const trialEnd = String(row.trial_ends_at || '').slice(0, 10);
+  let pre = row.mp_preapproval; let checkout = null;
+  if (pre) {
+    await mp(c, 'PUT', `/preapproval/${pre}`, { reason: `Mentez — plano ${plan.name}`, auto_recurring: { transaction_amount: value, currency_id: 'BRL' } });
+  } else {
+    const d = await mp(c, 'POST', '/preapproval', {
+      reason: `Mentez — plano ${plan.name}`, external_reference: `mentez:${t.slug}`, payer_email: mail, status: 'pending',
+      back_url: `${t.env.PUBLIC_URL}/configuracoes/assinatura?mp=1`,
+      // no teste grátis, a 1ª cobrança só acontece quando o teste acaba
+      auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: value, currency_id: 'BRL', ...(trialEnd && trialEnd > today() ? { start_date: `${trialEnd}T12:00:00.000-03:00` } : {}) },
+    });
+    pre = d.id; checkout = d.init_point || d.sandbox_init_point || null;
+  }
+  const status = row.billing_status === 'ativa' ? 'ativa' : (trialEnd && trialEnd > today() ? 'teste' : 'pendente');
+  await T.pq("UPDATE tenants SET plan = ?, mp_preapproval = ?, billing_provider = 'mercadopago', payer_doc_enc = COALESCE(?, payer_doc_enc), billing_status = ?, overdue_since = IF(? = 'pendente', COALESCE(overdue_since, CURDATE()), overdue_since) WHERE id = ?",
+    [plan.key, pre, doc ? T.seal({ doc }) : null, status, status, t.id]);
+  T.clearCache();
+  return { subscription: pre, value, provider: 'mercadopago', checkoutUrl: checkout };
+}
+async function subscribeAsaas(t, { planKey, payerName, payerDoc, email, phone }, c) {
+  if (!ready(c, 'asaas')) throw new Error('A cobrança da Mentez ainda não está configurada. Fale com a Mentez.');
   const plan = (await plans()).find((p) => p.key === planKey && p.public);
   if (!plan) throw new Error('Escolha um plano.');
   const doc = String(payerDoc || '').replace(/\D/g, '');
@@ -180,14 +248,19 @@ export async function subscribe(t, { planKey, payerName, payerDoc, email, phone 
   if (sub) await api(c, 'POST', `/subscriptions/${sub}`, { value, description: `Mentez — plano ${plan.name}`, updatePendingPayments: true });
   else sub = (await api(c, 'POST', '/subscriptions', { customer, billingType: 'UNDEFINED', value, nextDueDate: nextDue, cycle: 'MONTHLY', description: `Mentez — plano ${plan.name}`, externalReference: `mentez:${t.slug}` })).id;
   const status = row.billing_status === 'ativa' ? 'ativa' : (trialEnd && trialEnd > today() ? 'teste' : 'pendente');
-  await T.pq('UPDATE tenants SET plan = ?, asaas_customer = ?, asaas_subscription = ?, payer_doc_enc = ?, billing_status = ?, overdue_since = IF(? = \'pendente\', COALESCE(overdue_since, CURDATE()), overdue_since) WHERE id = ?',
+  await T.pq('UPDATE tenants SET plan = ?, asaas_customer = ?, asaas_subscription = ?, billing_provider = \'asaas\', payer_doc_enc = ?, billing_status = ?, overdue_since = IF(? = \'pendente\', COALESCE(overdue_since, CURDATE()), overdue_since) WHERE id = ?',
     [plan.key, customer, sub, T.seal({ doc }), status, status, t.id]);
   T.clearCache();
   return { subscription: sub, value, nextDue, invoiceUrl: await nextInvoiceUrl(c, sub) };
 }
 export async function invoices(t) {
-  const c = await config(); const row = await T.pone('SELECT asaas_subscription FROM tenants WHERE id = ?', [t.id]);
-  if (!ready(c) || !row?.asaas_subscription) return [];
+  const c = await config(); const row = await T.pone('SELECT asaas_subscription, mp_preapproval FROM tenants WHERE id = ?', [t.id]);
+  if (row?.mp_preapproval && ready(c, 'mercadopago')) {
+    const d = await mp(c, 'GET', `/authorized_payments/search?preapproval_id=${encodeURIComponent(row.mp_preapproval)}&limit=12`);
+    const ST = { approved: 'RECEIVED', rejected: 'OVERDUE', pending: 'PENDING', in_process: 'PENDING' };
+    return (d.results || []).map((p) => ({ id: p.id, value: p.transaction_amount, due: String(p.debit_date || p.date_created || '').slice(0, 10), status: ST[p.payment?.status] || (p.status === 'scheduled' ? 'PENDING' : String(p.status || '').toUpperCase()), url: null, paidAt: p.payment?.status === 'approved' ? String(p.last_modified || p.debit_date || '').slice(0, 10) : null }));
+  }
+  if (!ready(c, 'asaas') || !row?.asaas_subscription) return [];
   const d = await api(c, 'GET', `/payments?subscription=${row.asaas_subscription}&limit=12`);
   return (d.data || []).map((p) => ({ id: p.id, value: p.value, due: p.dueDate, status: p.status, url: p.invoiceUrl, paidAt: p.paymentDate || p.clientPaymentDate }));
 }
@@ -195,9 +268,10 @@ async function nextInvoiceUrl(c, sub) {
   try { const d = await api(c, 'GET', `/payments?subscription=${sub}&limit=5`); const open = (d.data || []).filter((p) => ['PENDING', 'OVERDUE'].includes(p.status)).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1)); return open[0]?.invoiceUrl || null; } catch { return null; }
 }
 export async function cancel(t) {
-  const c = await config(); const row = await T.pone('SELECT asaas_subscription FROM tenants WHERE id = ?', [t.id]);
-  if (row?.asaas_subscription && ready(c)) await api(c, 'DELETE', `/subscriptions/${row.asaas_subscription}`).catch((e) => { if (e.status !== 404) throw e; });
-  await T.pq("UPDATE tenants SET billing_status = 'cancelada', asaas_subscription = NULL WHERE id = ?", [t.id]); T.clearCache();
+  const c = await config(); const row = await T.pone('SELECT asaas_subscription, mp_preapproval FROM tenants WHERE id = ?', [t.id]);
+  if (row?.asaas_subscription && ready(c, 'asaas')) await api(c, 'DELETE', `/subscriptions/${row.asaas_subscription}`).catch((e) => { if (e.status !== 404) throw e; });
+  if (row?.mp_preapproval && ready(c, 'mercadopago')) await mp(c, 'PUT', `/preapproval/${row.mp_preapproval}`, { status: 'cancelled' }).catch((e) => { if (e.status !== 404) throw e; });
+  await T.pq("UPDATE tenants SET billing_status = 'cancelada', asaas_subscription = NULL, mp_preapproval = NULL WHERE id = ?", [t.id]); T.clearCache();
 }
 
 // Profissional a mais (planos com valor por profissional extra): ajusta o contador e o valor da assinatura
@@ -206,7 +280,8 @@ export async function setExtraPros(t, delta) {
   await T.pq('UPDATE tenants SET extra_pros = GREATEST(0, extra_pros + ?) WHERE id = ?', [delta, t.id]);
   const row = await T.pone('SELECT * FROM tenants WHERE id = ?', [t.id]); T.clearCache();
   const c = await config(); const plan = (await plans()).find((p) => p.key === row.plan);
-  if (row.asaas_subscription && ready(c) && plan) await api(c, 'POST', `/subscriptions/${row.asaas_subscription}`, { value: monthly(plan, row.extra_pros), updatePendingPayments: true });
+  if (row.asaas_subscription && ready(c, 'asaas') && plan) await api(c, 'POST', `/subscriptions/${row.asaas_subscription}`, { value: monthly(plan, row.extra_pros), updatePendingPayments: true });
+  if (row.mp_preapproval && ready(c, 'mercadopago') && plan) await mp(c, 'PUT', `/preapproval/${row.mp_preapproval}`, { auto_recurring: { transaction_amount: monthly(plan, row.extra_pros), currency_id: 'BRL' } });
 }
 
 // ---------- avisos do Asaas (webhook) ----------
@@ -231,11 +306,63 @@ export async function handleEvent(ev) {
   T.clearCache();
   return { ok: true, tenant: t.slug };
 }
+// ---------- avisos do Mercado Pago (webhook) ----------
+// O aviso traz só o tipo e o número; os dados vêm de uma consulta ao Mercado Pago.
+export function mpSignatureOk(c, { signature, requestId, dataId }) {
+  if (!c.mpSecret) return true;
+  const parts = Object.fromEntries(String(signature || '').split(',').map((kv) => kv.trim().split('=')));
+  if (!parts.ts || !parts.v1) return false;
+  const h = crypto.createHmac('sha256', c.mpSecret).update(`id:${String(dataId || '').toLowerCase()};request-id:${requestId || ''};ts:${parts.ts};`).digest('hex');
+  return h.length === parts.v1.length && crypto.timingSafeEqual(Buffer.from(h), Buffer.from(parts.v1));
+}
+async function tenantOfPre(pre, extRef) {
+  let t = pre ? await T.pone('SELECT id, slug, billing_status FROM tenants WHERE mp_preapproval = ?', [pre]) : null;
+  const slug = /^mentez:([a-z0-9-]+)$/.exec(String(extRef || ''))?.[1];
+  if (!t && slug) t = await T.pone('SELECT id, slug, billing_status FROM tenants WHERE slug = ?', [slug]);
+  return t;
+}
+export async function handleMercadoPago(type, id) {
+  const c = await config();
+  if (!ready(c, 'mercadopago') || !/^[\w-]{3,60}$/.test(String(id || ''))) return { ignored: true };
+  const log = async (t, event, status, value, due) => {
+    const hash = crypto.createHash('sha256').update(JSON.stringify(['mp', event, id, status])).digest('hex');
+    try { await T.pq('INSERT INTO billing_events (tenant_id, event, payment_id, status, value, due_date, raw_hash) VALUES (?,?,?,?,?,?,?)', [t?.id || null, event, String(id).slice(0, 40), status || null, value || null, due || null, hash]); return true; }
+    catch (e) { if (/Duplicate/.test(e.message)) return false; throw e; }
+  };
+  if (type === 'subscription_authorized_payment') {
+    const ap = await mp(c, 'GET', `/authorized_payments/${id}`);
+    const pre = ap.preapproval_id; const st = ap.payment?.status || ap.status;
+    const t = await tenantOfPre(pre, ap.external_reference);
+    const due = String(ap.debit_date || ap.date_created || today()).slice(0, 10);
+    if (!(await log(t, 'MP_AUTHORIZED_PAYMENT', st, ap.transaction_amount, due)) || !t) return { ignored: !t };
+    if (st === 'approved') await T.pq("UPDATE tenants SET billing_status = 'ativa', overdue_since = NULL, paid_until = GREATEST(COALESCE(paid_until, '1970-01-01'), ?) WHERE id = ?", [addMonth(due), t.id]);
+    else if (st === 'rejected') await T.pq("UPDATE tenants SET billing_status = IF(billing_status = 'cortesia', billing_status, 'atrasada'), overdue_since = COALESCE(overdue_since, ?) WHERE id = ?", [due, t.id]);
+  } else if (type === 'subscription_preapproval') {
+    const pa = await mp(c, 'GET', `/preapproval/${id}`);
+    const t = await tenantOfPre(pa.id, pa.external_reference);
+    if (!(await log(t, 'MP_PREAPPROVAL', pa.status, pa.auto_recurring?.transaction_amount, null)) || !t) return { ignored: !t };
+    if (pa.status === 'authorized') await T.pq("UPDATE tenants SET mp_preapproval = ?, billing_provider = 'mercadopago' WHERE id = ?", [pa.id, t.id]);
+    else if (pa.status === 'cancelled') await T.pq("UPDATE tenants SET billing_status = IF(billing_status = 'cortesia', billing_status, 'cancelada'), mp_preapproval = NULL WHERE id = ?", [t.id]);
+    else if (pa.status === 'paused') await T.pq("UPDATE tenants SET billing_status = IF(billing_status IN ('cortesia','teste'), billing_status, 'atrasada'), overdue_since = COALESCE(overdue_since, CURDATE()) WHERE id = ?", [t.id]);
+  } else return { ignored: true };
+  T.clearCache();
+  return { ok: true };
+}
 export async function webhookAuth(token) { const c = await config(); return !!c.token && typeof token === 'string' && token.length === c.token.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(c.token)); }
 
 // ---------- conferência periódica (caso algum aviso do Asaas se perca) ----------
 export async function tick() {
-  const c = await config(); if (!ready(c)) return;
+  const c = await config();
+  // Mercado Pago: confere as cobranças recentes das assinaturas (caso algum aviso tenha se perdido)
+  if (ready(c, 'mercadopago')) {
+    for (const r of await T.pq("SELECT id, mp_preapproval FROM tenants WHERE mp_preapproval IS NOT NULL AND billing_status IN ('pendente','atrasada','ativa','teste')")) {
+      try {
+        const d = await mp(c, 'GET', `/authorized_payments/search?preapproval_id=${encodeURIComponent(r.mp_preapproval)}&limit=3`);
+        for (const p of d.results || []) if (['approved', 'rejected'].includes(p.payment?.status)) await handleMercadoPago('subscription_authorized_payment', String(p.id));
+      } catch (e) { console.error('cobrança Mentez (Mercado Pago):', e.message); }
+    }
+  }
+  if (!ready(c, 'asaas')) return;
   const rows = await T.pq("SELECT id, asaas_subscription FROM tenants WHERE asaas_subscription IS NOT NULL AND billing_status IN ('pendente','atrasada','ativa','teste')");
   for (const r of rows) {
     try {
@@ -246,4 +373,20 @@ export async function tick() {
       }
     } catch (e) { console.error('cobrança Mentez:', e.message); }
   }
+}
+
+// ---------- informações públicas para o site (mentez.com.br) ----------
+// Nomes dos recursos como aparecem no site (convênio sem destacar o TISS)
+export const SITE_LABELS = {
+  portal: 'App do paciente', teleconsulta: 'Teleconsulta própria', ia_sessao: 'IA na sessão e escrita de documentos', atendente: 'Atendente de IA no WhatsApp',
+  nfse: 'NFS-e', convenios: 'Convênios', convenios_simples: 'Convênios', tv: 'Painel de chamada na TV', locacao: 'Locação de salas', personalizacao: 'Sua marca e domínio próprio',
+};
+export async function siteContact() { return (await getS('site_contact')) || 'contato@mentez.com.br'; }
+export async function setSiteContact(v) { await setS('site_contact', String(v || '').trim().slice(0, 120) || 'contato@mentez.com.br'); }
+export async function publicInfo() {
+  const c = await config();
+  const list = (await plans()).filter((p) => p.public).map((p) => ({ key: p.key, name: p.name, price: p.price, maxPros: p.maxPros, extraPro: p.extraPro, tagline: p.tagline, audience: p.audience, highlight: p.highlight,
+    features: [...new Set(p.features.map((k) => (k === 'convenios_simples' ? 'convenios' : k)))] }));
+  return { plans: list, labels: { ...SITE_LABELS }, payment: { provider: c.provider, label: PROVIDERS[c.provider].label, methods: PROVIDERS[c.provider].methods },
+    contact: await siteContact(), trialDays: TRIAL_DAYS() };
 }
