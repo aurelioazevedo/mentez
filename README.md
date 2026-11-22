@@ -35,3 +35,12 @@ Sem `MENTEZ_PLATFORM_DB`, o app funciona como antes, com uma clínica só (vari�
 2. `infra/vps.yml` (projeto `mentez`): sobe app, MySQL e Caddy com essa imagem.
 
 Os segredos ficam em `/opt/mentez/.env`, gerados na própria VPS. **Guarde uma cópia da `MENTEZ_MASTER_KEY`** em local seguro (gerenciador de senhas): sem ela as chaves das clínicas não abrem.
+
+## Ambientes: testes (dev) e produção
+
+- **Testes** — ramo `dev`, projeto `mentez-dev` na VPS (`infra/vps-dev.yml`), banco próprio (`db-dev`), segredos em `/opt/mentez-dev/.env`,
+  sem WhatsApp e só com dados fictícios. Endereços: `dev.mentez.com.br` (painel) e `<clínica>.dev.mentez.com.br`.
+  Publicar: rodar `infra/vps-dev-update.yml` (projeto `mentez-dev-sync`). Não toca na produção.
+- **Produção** — ramo `main`, projeto `mentez`. Publicar: rodar `infra/vps-update.yml` (projeto `mentez-sync`), que troca **só o app**
+  (banco, WhatsApp e Caddy continuam como estão) e aplica o Caddyfile sem reiniciar. Nunca republicar o projeto `mentez` inteiro pelo Docker Manager.
+- Fluxo: desenvolver no `dev` → publicar em testes → aprovar → levar o mesmo commit para o `main` → publicar em produção.
