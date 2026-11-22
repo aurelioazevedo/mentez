@@ -2014,3 +2014,33 @@ document.addEventListener('input', (e) => { const r = e.target.closest?.('[data-
     [...list.children].forEach((row, i) => row.querySelectorAll('[name^="fields["]').forEach((el) => { el.name = el.name.replace(/^fields\[[^\]]+\]/, `fields[${i}]`); }));
   });
 })();
+
+// ---------- IA: provedor principal/secundário — lista de modelos ao informar a chave ou trocar o provedor ----------
+document.querySelectorAll('[data-ai-slot]').forEach((box) => {
+  const prov = box.querySelector('[data-ai-provider]'); const key = box.querySelector('[data-ai-key]'); const base = box.querySelector('[data-ai-base]');
+  const model = box.querySelector('[data-ai-model]'); const dl = box.querySelector('datalist'); const msg = box.querySelector('[data-ai-models-msg]'); const note = box.querySelector('[data-ai-keynote]');
+  const original = prov.value; let seq = 0;
+  const load = async () => {
+    const my = ++seq; const p = prov.value;
+    msg.textContent = p === 'anthropic' ? '' : '(buscando modelos…)';
+    try {
+      const r = await fetch('/conta/ia/modelos', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: p, key: key.value.trim(), base: base ? base.value.trim() : '', scope: box.dataset.aiScope, slot: box.dataset.aiSlot }) });
+      const d = await r.json().catch(() => ({}));
+      if (my !== seq) return;
+      if (!d.ok) { msg.textContent = `(não foi possível listar: ${d.error || r.status})`; return; }
+      dl.innerHTML = ''; (d.models || []).forEach((m) => { const o = document.createElement('option'); o.value = m; dl.appendChild(o); });
+      msg.textContent = d.models?.length ? `(${d.models.length} disponíveis — clique no campo para escolher)` : d.note ? `(${d.note})` : '';
+      if (d.models?.length && !d.models.includes(model.value.trim())) model.value = d.preferred || d.models[0];
+    } catch { if (my === seq) msg.textContent = '(sem conexão para listar os modelos)'; }
+  };
+  prov.addEventListener('change', () => {
+    const o = prov.selectedOptions[0];
+    box.dataset.provider = prov.value;
+    key.placeholder = o?.dataset.hint || '';
+    if (note) note.textContent = `(${prov.value === original && note.dataset.saved ? note.dataset.saved : o?.dataset.site || ''})`;
+    model.value = ''; model.placeholder = prov.value === 'anthropic' ? 'claude-haiku-5-5' : 'informe a chave para listar os modelos';
+    dl.innerHTML = ''; load();
+  });
+  key.addEventListener('change', load);
+  base?.addEventListener('change', load);
+});

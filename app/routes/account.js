@@ -16,6 +16,7 @@ import { str } from '../lib/router.js';
 import * as PsyDocs from '../lib/psydocs.js';
 import * as AP from '../lib/aiproviders.js';
 import * as AISlot from '../lib/aislot.js';
+import * as Agent from '../lib/agent.js';
 import * as Fiscal from '../lib/fiscal.js';
 import * as Nfse from '../lib/nfse.js';
 import * as ICP from '../lib/icp.js';
@@ -89,9 +90,9 @@ r.get('/', async (req, res) => {
     </section>` : ''}
     ${aiMine ? html`<section class="card" id="ia"><h2>Escrita com IA (documentos)</h2>
       <p class="muted small sub-h">Sua chave de IA: o custo das gerações de documentos fica na sua conta do provedor, separado da clínica. ${aiCfg.keyMode === 'profissional' ? 'Obrigatória para usar a escrita com IA.' : 'Sem ela, o sistema usa a chave da clínica.'} Pode ser da Anthropic (Claude) ou de outra plataforma (OpenAI, Gemini, Groq, DeepSeek, OpenRouter…).</p>
-      ${await (async () => { const me = await PsyDocs.userAi(u.id); return html`<form method="post" action="/conta/ia" class="stack">
-        ${AISlot.fields('p1', { provider: me.provider, model: me.model, baseUrl: me.baseUrl, key: me.key, on: true }, { title: 'Meu provedor principal', hint: 'Modelo em branco com Claude: usa o modelo da clínica.' })}
-        ${AISlot.fields('p2', me.second, { title: 'Meu provedor secundário (reserva)', hint: 'Entra sozinho quando o principal falhar (créditos, chave recusada, limite ou fora do ar).', toggle: true })}
+      ${await (async () => { const me = await PsyDocs.userAi(u.id); const first = { provider: me.provider, model: me.model, baseUrl: me.baseUrl, key: me.key, on: true }; const [m1, m2] = await Promise.all([AISlot.modelsSafe(first), AISlot.modelsSafe(me.second)]); return html`<form method="post" action="/conta/ia" class="stack">
+        ${AISlot.fields('p1', first, { title: 'Meu provedor principal', hint: 'Modelo em branco com Claude: usa o modelo da clínica.', scope: 'conta', models: m1.list, error: m1.err })}
+        ${AISlot.fields('p2', me.second, { title: 'Meu provedor secundário (reserva)', hint: 'Entra sozinho quando o principal falhar (créditos, chave recusada, limite ou fora do ar).', toggle: true, scope: 'conta', models: m2.list, error: m2.err })}
         <div class="actions"><button class="btn">Salvar</button></div>
       </form>`; })()}
       <p class="muted small">Neste mês: ${aiMine.n} geração(ões) · custo estimado US$ ${Number(aiMine.cost).toFixed(2)}${(u.ai_provider || 'anthropic') !== 'anthropic' ? ' (outros provedores: confira o custo no painel deles)' : ''}.</p>
@@ -390,6 +391,28 @@ r.post('/assinatura/remover', async (req, res) => {
   res.flash('Assinatura removida.').redirect('/conta#assinatura');
 });
 
+// Lista de modelos de um provedor para as telas de IA (atendente, documentos, conta), sem precisar salvar antes.
+// Chave digitada agora ou, em branco, a já guardada daquela vaga (se for do mesmo provedor).
+r.post('/ia/modelos', express.json({ limit: '4kb' }), async (req, res) => {
+  const b = req.body || {};
+  const provider = AISlot.PROVIDERS[b.provider] ? b.provider : null;
+  if (!provider) return res.status(400).json({ ok: false, error: 'Provedor inválido.' });
+  let key = str(b.key, 300); const base = provider === 'custom' ? str(b.base, 300) : '';
+  if (!key) {
+    const slot = b.slot === 'p2' ? 1 : 0;
+    let saved = [];
+    if (b.scope === 'conta') { const me = await PsyDocs.userAi(req.user.id); saved = [{ provider: me.provider, key: me.key }, me.second]; }
+    else if (b.scope === 'docs' && can(req.user, 'usuarios')) { const c = await PsyDocs.aiConfig(); saved = [c.first, c.second]; }
+    else if (b.scope === 'agente' && can(req.user, 'usuarios')) { const c = await Agent.config(); saved = [c.ai1, c.ai2]; }
+    if (saved[slot]?.provider === provider) key = saved[slot].key || '';
+    if (!key && ['docs', 'agente'].includes(b.scope) && can(req.user, 'usuarios')) key = Agent.keyForProvider(await Agent.config(), provider)?.key || '';
+  }
+  if (provider !== 'anthropic' && !key) return res.json({ ok: true, models: [], preferred: '', note: 'Informe a chave para listar os modelos.' });
+  if (provider === 'custom' && AP.checkUrl(base)) return res.json({ ok: true, models: [], preferred: '', note: 'Informe o endereço da API (https://…).' });
+  try { const m = await AISlot.models({ provider, key, baseUrl: base }); res.json({ ok: true, models: m.list, preferred: m.preferred }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 // Chave própria da API para a escrita de documentos com IA
 r.post('/ia', async (req, res) => {
   const me = await PsyDocs.userAi(req.user.id);
@@ -399,6 +422,7 @@ r.post('/ia', async (req, res) => {
   if (!str(req.body.p1_model, 120) && r1.slot.provider === 'anthropic') r1.slot.model = ''; // vazio = o modelo da clínica
   for (const [r, nm] of [[r1, 'Principal'], [r2, 'Secundário']]) {
     if (r.error) return res.flash(`${nm}: ${r.error}`, 'err').redirect('/conta#ia');
+    if (r.slot.on && r.slot.key && r.slot.provider !== 'anthropic') await AISlot.fillModel(r.slot);
     if (r.slot.on && r.slot.key && r.slot.provider !== 'anthropic' && !r.slot.model) return res.flash(`${nm}: informe o modelo do provedor.`, 'err').redirect('/conta#ia');
   }
   const p1 = r1.slot;

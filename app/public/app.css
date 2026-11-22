@@ -2540,3 +2540,4 @@ a.mz2-me{text-decoration:none;color:inherit}
 .ai-slot > legend { font-weight: 700; padding: 0 6px; }
 .ai-slot > p { margin: 0; }
 .ai-slot > .fld.check { justify-self: start; display: flex; flex-direction: row; gap: 8px; align-items: center; }
+.ai-slot:not([data-provider="custom"]) .ai-base { display: none; }

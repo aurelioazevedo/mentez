@@ -231,6 +231,7 @@ export async function aiConfig() {
   if (!PROVIDERS[out.provider]) out.provider = 'anthropic';
   if (out.provider === 'anthropic' && !Agent.MODELS[out.model]) out.model = AI_DEFAULTS.model;
   try { out.clinicKey = c.clinic_key_enc ? decrypt(c.clinic_key_enc) : ''; } catch { out.clinicKey = ''; }
+  if (out.provider !== 'custom') out.baseUrl = ''; // endereço só vale para “Outro”
   out.first = { provider: out.provider, model: out.model, baseUrl: out.baseUrl, key: out.clinicKey, on: true };
   out.second = Slot.read(c.p2); // provedor secundário da clínica (reserva)
   return out;
@@ -242,6 +243,10 @@ export async function saveAiConfig(b) {
   const r2 = Slot.fromBody(b, 'p2', cur.second, [cur.first]);
   for (const [r, nm] of [[r1, 'Principal'], [r2, 'Secundário']]) {
     if (r.error) return { error: `${nm}: ${r.error}` };
+    if (r.slot.on && r.slot.provider !== 'anthropic') {
+      const x = r.slot.key ? r.slot : { ...r.slot, key: Agent.keyForProvider(await Agent.config(), r.slot.provider)?.key || '' };
+      await Slot.fillModel(x); r.slot.model = x.model;
+    }
     if (r.slot.on && r.slot.provider !== 'anthropic' && !r.slot.model) return { error: `${nm}: informe o modelo de ${Slot.labelOf(r.slot.provider)}.` };
   }
   const p1 = r1.slot;
@@ -258,7 +263,8 @@ export async function userAi(userId) {
   const u = await one('SELECT ai_key_enc, ai_provider, ai_model, ai_base_url, ai2_json FROM users WHERE id = ?', [userId]);
   let key = ''; try { key = u?.ai_key_enc ? decrypt(u.ai_key_enc) : ''; } catch { /* inválida */ }
   let second = null; try { second = u?.ai2_json ? Slot.read(JSON.parse(u.ai2_json)) : null; } catch { second = null; }
-  return { key, provider: PROVIDERS[u?.ai_provider] ? u.ai_provider : 'anthropic', model: u?.ai_model || '', baseUrl: u?.ai_base_url || '', second };
+  const provider = PROVIDERS[u?.ai_provider] ? u.ai_provider : 'anthropic';
+  return { key, provider, model: u?.ai_model || '', baseUrl: provider === 'custom' ? u?.ai_base_url || '' : '', second };
 }
 // Qual chave (e provedor/modelo) paga esta geração
 export async function aiKeyFor(c, userId) {

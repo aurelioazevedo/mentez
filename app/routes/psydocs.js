@@ -434,8 +434,9 @@ async function aiSettingsCard() {
     <div class="form-grid">
       <label class="fld"><span>Quem paga o uso</span><select name="keyMode">${Object.entries(D.KEY_MODES).map(([k, l]) => html`<option value="${k}" ${c.keyMode === k ? raw('selected') : ''}>${l}</option>`)}</select></label>
     </div>
-    ${AISlot.fields('p1', c.first, { title: 'Provedor principal da clínica', hint: 'Chave em branco: usa a do atendente virtual, se for do mesmo provedor.' })}
-    ${AISlot.fields('p2', c.second, { title: 'Provedor secundário da clínica (reserva)', hint: 'Entra sozinho quando o principal falhar (créditos, chave recusada, limite ou fora do ar).', toggle: true })}
+    ${await (async () => { const k1 = c.first.key ? c.first : { ...c.first, key: Agent.keyForProvider(ag, c.first.provider)?.key || '' }; const [m1, m2] = await Promise.all([AISlot.modelsSafe(k1), AISlot.modelsSafe(c.second)]); return html`
+    ${AISlot.fields('p1', c.first, { title: 'Provedor principal da clínica', hint: 'Chave em branco: usa a do atendente virtual, se for do mesmo provedor.', scope: 'docs', models: m1.list, error: m1.err })}
+    ${AISlot.fields('p2', c.second, { title: 'Provedor secundário da clínica (reserva)', hint: 'Entra sozinho quando o principal falhar (créditos, chave recusada, limite ou fora do ar).', toggle: true, scope: 'docs', models: m2.list, error: m2.err })}`; })()}
     <p class="muted small">Cada profissional pode cadastrar o próprio provedor principal e secundário em <b>Conta → Escrita com IA</b>; o custo fica na conta dele no provedor. Com “chave do profissional; se não tiver, a da clínica”, a ordem é: principal do profissional, secundário do profissional, principal da clínica, secundário da clínica.</p>
     <label class="fld check"><input type="checkbox" name="allowRecords" value="1" ${c.allowRecords ? raw('checked') : ''}><span>Permitir usar as últimas evoluções do prontuário como base (o profissional marca a cada uso; enviadas sem nome nem CPF)</span></label>
     <div class="actions"><button class="btn">Salvar</button></div>
