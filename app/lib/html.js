@@ -211,7 +211,7 @@ ${u && Tenancy.multi() && HELPBOT.on ? html`<div class="hb${/(?:^|;\s*)hb_seen=1
       <div class="hb-sugs" data-hb-sugs>${['Como agendar uma sessão recorrente?', 'Como conectar o WhatsApp?', 'Como enviar um exercício?', 'Como emitir um recibo?', 'Como ligar o app do paciente?'].map((q) => html`<button type="button" data-hb-q>${q}</button>`)}</div>
     </div>
     <form class="hb-form" data-hb-form><textarea name="q" rows="1" maxlength="1500" placeholder="Escreva sua dúvida…" aria-label="Sua dúvida" required></textarea><button class="hb-send" aria-label="Enviar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></form>
-    <p class="hb-note">Respostas geradas por IA. Não escreva dados de pacientes.</p>
+    <p class="hb-note">Respostas geradas por IA. Não escreva dados de pacientes. Precisa da equipe? <a href="/suporte/novo">Abrir chamado</a></p>
   </section>
 </div>` : ''}
 <script src="/static/app.js?v=${VERSION}"></script>

@@ -146,7 +146,7 @@ export function accessOf(t) {
   return { state: 'cortesia' };
 }
 // Rotas que continuam abertas com o acesso bloqueado (para conseguir assinar e pagar)
-export const OPEN_WHEN_BLOCKED = [/^\/configuracoes\/assinatura(\/|$)/, /^\/(login|logout|setup|conta)(\/|$)/, /^\/(static|marca|manifest\.webmanifest|sw\.js|favicon\.ico|robots\.txt|privacidade|termos|live)(\/|$)/, /^\/_mentez\//];
+export const OPEN_WHEN_BLOCKED = [/^\/configuracoes\/assinatura(\/|$)/, /^\/suporte(\/|$)/, /^\/(login|logout|setup|conta)(\/|$)/, /^\/(static|marca|manifest\.webmanifest|sw\.js|favicon\.ico|robots\.txt|privacidade|termos|live)(\/|$)/, /^\/_mentez\//];
 
 // ---------- configuração do Asaas (plataforma) ----------
 async function getS(k) { return (await T.pone('SELECT v FROM platform_settings WHERE k = ?', [k]))?.v || null; }

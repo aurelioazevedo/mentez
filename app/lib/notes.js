@@ -7,6 +7,7 @@ import { todayLocal } from './time.js';
 import { brDate, money } from './html.js';
 import * as WA from './whatsapp.js';
 import * as Agent from './agent.js';
+import * as Tickets from './tickets.js';
 
 const cache = new Tenancy.TMap(); // por usuário, 20 s (separado por clínica)
 
@@ -88,6 +89,11 @@ export async function forUser(user, fresh = false) {
         const b = await Agent.balance();
         if (b.known && b.estimated <= b.alertUsd) items.push({ tone: 'warn', href: '/configuracoes/agente#saldo', text: '🤖 Saldo da IA acabando', sub: `≈ US$ ${b.estimated.toFixed(2)}` });
       }
+    }
+    // Suporte Mentez: resposta nova da equipe num chamado
+    if (Tenancy.multi() && Tenancy.current()) {
+      const tks = await Tickets.unreadForClinic(Tenancy.current().id, user, can(user, 'usuarios')).catch(() => []);
+      for (const k of tks) items.unshift({ tone: 'info', href: `/suporte/${k.id}`, text: `💬 A Mentez respondeu o chamado ${Tickets.code(k.id)}`, sub: k.subject });
     }
   } catch (e) { console.error('notas', e.message); }
   const v = { count: items.length + extra, items };

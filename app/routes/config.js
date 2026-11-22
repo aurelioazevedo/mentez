@@ -79,6 +79,10 @@ export async function statusItems({ master = false } = {}) {
       desc: 'Plano da Mentez, faturas e forma de pagamento (Pix, boleto ou cartão).',
       status: (() => { const a = Billing.accessOf(Tenancy.current()); return a.state === 'ativa' || a.state === 'cortesia' ? ['realizada', a.state === 'ativa' ? 'Em dia' : 'Cortesia'] : a.state === 'teste' ? ['confirmada', `Teste · ${a.daysLeft} dia(s)`] : ['falta', a.state === 'atrasada' ? 'Em aberto' : 'Suspenso']; })(),
     }, {
+      key: 'suporte', href: '/suporte', title: 'Suporte Mentez',
+      desc: 'Abra chamados para a equipe Mentez: dúvidas, problemas no sistema, financeiro, reclamações e sugestões. A resposta chega aqui e por e-mail.',
+      status: await (async () => { const r = await Tenancy.pone("SELECT SUM(status IN ('aberto','andamento','aguardando')) a, SUM(unread_client = 1) n FROM tickets WHERE tenant_id = ?", [Tenancy.current().id]).catch(() => null); return Number(r?.n) ? ['falta', `${r.n} resposta(s) nova(s)`] : Number(r?.a) ? ['confirmada', `${r.a} em aberto`] : ['realizada', 'Sem pendências']; })(),
+    }, {
       key: 'indicacao', href: '/configuracoes/indicacao', title: 'Indique e ganhe',
       desc: 'Indique a Mentez por WhatsApp ou redes sociais: quem chega pelo seu link ganha dias a mais de teste e você ganha desconto progressivo na mensalidade.',
       status: await (async () => { const r = await Tenancy.pone('SELECT ref_discount FROM tenants WHERE id = ?', [Tenancy.current().id]).catch(() => null); return Number(r?.ref_discount) ? ['realizada', `${r.ref_discount}% de desconto`] : ['confirmada', 'Ganhe desconto']; })(),

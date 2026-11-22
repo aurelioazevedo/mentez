@@ -21,6 +21,8 @@ import * as PlatComm from '../lib/platcomm.js';
 import * as Referral from '../lib/referral.js';
 import * as AISlot from '../lib/aislot.js';
 import { mount as mountSignup } from './signup.js';
+import { mount as mountTickets } from './platform-tickets.js';
+import * as Tickets from '../lib/tickets.js';
 import { money } from '../lib/html.js';
 
 export const handle = router();
@@ -46,6 +48,8 @@ handle.get('/api/site', async (req, res) => {
   res.set({ 'Access-Control-Allow-Origin': SITE_ORIGINS.includes(o) ? o : SITE_ORIGINS[0], Vary: 'Origin', 'Cache-Control': 'public, max-age=300' });
   res.json(await Billing.publicInfo());
 });
+// chamados: respostas com anexos aceitam corpo maior (o restante do painel, 50 kB)
+handle.use(/^\/chamados\/\d+\/responder$/, express.urlencoded({ extended: false, limit: '9mb', parameterLimit: 50 }));
 handle.use(express.urlencoded({ extended: false, limit: '50kb' }), checkOrigin, flash);
 handle.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); next(); });
 
@@ -94,6 +98,7 @@ const ICON = {
   planos: SV('<path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/>'),
   cobranca: SV('<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>'),
   presente: SV('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>'),
+  chamados: SV('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12.5h5"/>'),
   historico: SV('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'),
   sair: SV('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3"/>'),
   busca: SV('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
@@ -105,7 +110,7 @@ const ICON = {
   equipe: SV('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3.2 3-5 5.5-5s4.7 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.4.2 4.2 1.9 5 4.8"/>'),
 };
 const MENU = [
-  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec']]],
+  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec'], ['/chamados', 'Chamados', 'chamados', 'chamados']]],
   ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/indicacoes', 'Indicações', 'presente'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
@@ -133,7 +138,8 @@ let counts = { at: 0, v: {} };
 async function menuCounts() {
   if (Date.now() - counts.at < 30e3) return counts.v;
   const all = await T.all();
-  const v = { clinicas: all.length, testes: all.filter((t) => Billing.accessOf(t).state === 'teste').length, alertasRec: [...resCache.values()].filter((e) => Object.values(e.v || {}).some((x) => x?.tone === 'err')).length };
+  const tk = await Tickets.teamCounts().catch(() => ({ novos: 0 }));
+  const v = { chamados: tk.novos, clinicas: all.length, testes: all.filter((t) => Billing.accessOf(t).state === 'teste').length, alertasRec: [...resCache.values()].filter((e) => Object.values(e.v || {}).some((x) => x?.tone === 'err')).length };
   counts = { at: Date.now(), v }; return v;
 }
 function activeOf(path) {
@@ -182,6 +188,7 @@ const need = (req, res, next) => {
   });
 };
 mountSignup(handle, layout);
+mountTickets(handle, { need, layout, log });
 handle.get('/inicio', (req, res) => (req.admin ? res.redirect('/') : send(res, layout(req, 'Mentez', html`<section class="card mzp-auth mzp-choose"><h1>Bem-vindo à Mentez</h1>
   <form method="get" action="/ir" class="stack"><label class="fld"><span>Entrar na minha clínica</span><span class="mzp-slug"><input name="c" required placeholder="suaclinica" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" autocomplete="off"><small>.${T.baseDomain()}</small></span></label><button class="btn">Ir para a minha clínica</button></form>
   <p class="mzp-or">ou</p><a class="btn ghost" href="/criar-conta">Criar conta grátis</a>

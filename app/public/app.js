@@ -2111,3 +2111,30 @@ document.querySelectorAll('[data-ai-slot]').forEach((box) => {
     window.open(`https://wa.me/${d}?text=${encodeURIComponent(txt)}`, '_blank', 'noopener');
   });
 })();
+
+// Chamados (Suporte Mentez e Painel): anexos — imagens reduzidas aqui antes do envio, PDF como está; até 3 arquivos
+document.querySelectorAll('[data-ticket-files]').forEach((inp) => {
+  const box = inp.closest('.tk-attach'); const list = box.querySelector('[data-ticket-picked]'); const out = box.querySelector('[data-ticket-out]');
+  const items = [];
+  const render = () => {
+    list.replaceChildren(...items.map((it, i) => { const li = document.createElement('li'); li.textContent = `${it.name} · ${Math.round(it.size / 1024)} KB `; const x = document.createElement('button'); x.type = 'button'; x.className = 'link'; x.textContent = 'remover'; x.addEventListener('click', () => { items.splice(i, 1); render(); }); li.appendChild(x); return li; }));
+    out.replaceChildren(...items.map((it) => { const h = document.createElement('input'); h.type = 'hidden'; h.name = 'files'; h.value = JSON.stringify({ name: it.name, data: it.data }); return h; }));
+  };
+  const read = (f) => new Promise((ok, bad) => { const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.onerror = bad; rd.readAsDataURL(f); });
+  const shrink = (src) => new Promise((ok, bad) => { const img = new Image(); img.onload = () => {
+    const k = Math.min(1, 1800 / Math.max(img.width, img.height)); const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+    const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(img, 0, 0, cv.width, cv.height);
+    let q = 0.85; let d = cv.toDataURL('image/jpeg', q); while (d.length > 1.6e6 && q > 0.45) { q -= 0.1; d = cv.toDataURL('image/jpeg', q); } ok(d);
+  }; img.onerror = bad; img.src = src; });
+  inp.addEventListener('change', async () => {
+    for (const f of [...inp.files]) {
+      if (items.length >= 3) { alert('No máximo 3 anexos por mensagem.'); break; }
+      try {
+        if (f.type === 'application/pdf') { if (f.size > 2.5 * 1024 * 1024) { alert(`${f.name}: o PDF passa de 2,5 MB.`); continue; } const d = await read(f); items.push({ name: f.name, data: d, size: f.size }); }
+        else if (/^image\//.test(f.type)) { if (f.size > 15 * 1024 * 1024) { alert(`${f.name}: a imagem passa de 15 MB.`); continue; } const d = await shrink(await read(f)); items.push({ name: f.name.replace(/\.\w+$/, '') + '.jpg', data: d, size: Math.round(d.length * 0.75) }); }
+        else alert(`${f.name}: envie imagens (JPG, PNG) ou PDF.`);
+      } catch { alert(`Não foi possível ler ${f.name}.`); }
+    }
+    inp.value = ''; render();
+  });
+});

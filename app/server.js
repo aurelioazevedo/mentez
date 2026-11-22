@@ -12,6 +12,8 @@ import * as Billing from './lib/billing.js';
 import * as HelpBot from './lib/helpbot.js';
 import { ROLES } from './lib/perm.js';
 import { referralSettings } from './routes/referral.js';
+import { support } from './routes/support.js';
+import * as Tickets from './lib/tickets.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
@@ -153,6 +155,7 @@ app.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service
 app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').send(JSON.stringify(Brand.manifest()))); // nome e ícones da clínica
 app.get('/favicon.ico', (_req, res) => res.redirect(302, Brand.icon('favicon.png')));
 
+app.use(/^\/suporte(\/|$)/, express.urlencoded({ extended: true, limit: '9mb', parameterLimit: 200 })); // chamados com anexos
 app.use(express.urlencoded({ extended: true, limit: '400kb', parameterLimit: 3000 }));
 app.use(checkOrigin);
 app.use(flash);
@@ -231,6 +234,7 @@ app.get(/^\/usuarios\/(google|whatsapp|agente|acessos)(\/.*)?$/, (req, res) => r
 app.use('/configuracoes/identidade', requirePerm('usuarios'), brandSettings);
 app.use('/configuracoes/assinatura', subscriptionSettings);
 app.use('/configuracoes/indicacao', referralSettings);
+app.use('/suporte', support);
 app.use('/configuracoes/dominio', requirePerm('usuarios'), domainSettings);
 app.use('/configuracoes/google', requirePerm('usuarios'), googleAdmin);
 app.use('/configuracoes/whatsapp', requirePerm('usuarios'), waAdmin);
@@ -341,6 +345,7 @@ boot()
     every(Number(process.env.ENGAGE_TICK_MS) || 5 * 60e3, () => Engage.tick(), 'aniversário/pesquisa');
     every(Number(process.env.NOTIFY_TICK_MS) || 5 * 60e3, () => Notify.tick(), 'lembretes e-mail/SMS');
     every(Number(process.env.GATEWAY_TICK_MS) || 10 * 60e3, () => Gateway.tick(), 'cobrança online');
+    if (Tenancy.multi()) every(3600e3, () => Tickets.tick(), 'chamados', 120e3);
     if (Tenancy.multi()) setInterval(() => Billing.tick().catch((e) => console.error('cobrança Mentez:', e.message)), Number(process.env.MENTEZ_BILLING_TICK_MS) || 3600e3).unref(); // conferência das mensalidades
   }));
 process.on('unhandledRejection', (e) => { console.error('unhandledRejection', e); Monitor.recordError(e, 'processo'); });
