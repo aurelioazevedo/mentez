@@ -572,33 +572,73 @@ handle.post('/clinicas/:id/assinatura', need, async (req, res, next) => {
 // ---------- planos ----------
 handle.get('/planos', need, async (req, res) => {
   const list = await Billing.plans(true);
+  const uses = Object.fromEntries((await T.pq('SELECT plan, COUNT(*) n FROM tenants GROUP BY plan')).map((r) => [r.plan, Number(r.n)]));
   send(res, layout(req, 'Planos', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Planos</h1><p class="muted">Preços e limites valem para novas assinaturas e mudanças de plano. Assinaturas existentes mantêm o valor até a clínica mudar de plano. O site <a href="https://mentez.com.br/precos/" target="_blank" rel="noopener">mentez.com.br</a> mostra os planos marcados como visíveis, com estes nomes, preços e recursos (atualiza em até 5 minutos).</p></div></header>
     <form method="post" action="/planos/site" class="card form-grid"><h2 class="span2">Site</h2>
       <label class="fld"><span>E-mail de contato no site</span><input type="email" name="contact" value="${await Billing.siteContact()}" maxlength="120" required></label>
       <p class="fld muted small">A forma de pagamento mostrada no site acompanha o provedor escolhido em <a href="/cobranca">Cobrança</a>.</p>
       <div class="span2 actions"><button class="btn ghost">Salvar</button></div></form>
-    ${list.map((p) => html`<form method="post" action="/planos/${p.key}" class="card form-grid">
-      <h2 class="span2">${p.name} <small class="muted">${p.key}${p.public ? '' : ' · interno'}</small></h2>
+    <details class="card" ${req.query.novo ? raw('open') : ''}><summary class="btn">+ Novo plano</summary>
+      <form method="post" action="/planos/novo" class="form-grid" style="margin-top:16px">
+        <label class="fld"><span>Nome</span><input name="name" maxlength="60" required placeholder="Ex.: Clínica Plus"></label>
+        <label class="fld"><span>Código <small class="muted">(letras minúsculas, números e hífen; não muda depois)</small></span><input name="key" maxlength="30" pattern="[a-z0-9][a-z0-9-]{1,29}" placeholder="clinica-plus"></label>
+        <label class="fld"><span>Preço mensal (R$)</span><input name="price" inputmode="decimal" required></label>
+        <label class="fld"><span>Profissionais incluídos</span><input type="number" name="max_pros" min="1" max="500" value="1"></label>
+        <label class="fld"><span>Profissional a mais (R$/mês, 0 = não permite)</span><input name="extra" inputmode="decimal" value="0"></label>
+        <label class="fld"><span>Copiar os recursos de</span><select name="copy"><option value="">Nenhum (escolho depois)</option>${list.map((p) => html`<option value="${p.key}">${p.name}</option>`)}</select></label>
+        <p class="span2 muted small">O plano novo começa <b>interno</b> (fora do site e da tela de assinatura das clínicas). Revise os recursos e marque “Aparece para as clínicas escolherem” quando estiver pronto.</p>
+        <div class="span2 actions"><button class="btn">Criar plano</button></div>
+      </form></details>
+    ${list.map((p) => html`<section class="card" id="plano-${p.key}"><form method="post" action="/planos/${p.key}" class="form-grid">
+      <h2 class="span2">${p.name} <small class="muted">${p.key}${p.public ? '' : ' · interno'} · ${uses[p.key] ? `${uses[p.key]} clínica(s)` : 'nenhuma clínica'}</small></h2>
       <label class="fld"><span>Nome</span><input name="name" value="${p.name}" maxlength="60" required></label>
       <label class="fld"><span>Preço mensal (R$)</span><input name="price" value="${String(p.price).replace('.', ',')}" inputmode="decimal" required></label>
       <label class="fld"><span>Profissionais incluídos</span><input type="number" name="max_pros" min="1" max="500" value="${p.maxPros}"></label>
       <label class="fld"><span>Profissional a mais (R$/mês, 0 = não permite)</span><input name="extra" value="${String(p.extraPro).replace('.', ',')}" inputmode="decimal"></label>
       <label class="fld"><span>Frase no site</span><input name="tagline" value="${p.tagline}" maxlength="160" placeholder="Ex.: Tudo para quem atende sozinho."></label>
+      <label class="fld"><span>Ordem de exibição</span><input type="number" name="position" min="0" max="99" value="${p.position ?? 0}"></label>
       <label class="fld"><span>Aparece no site para</span><select name="audience"><option value="individual" ${p.audience === 'individual' ? raw('selected') : ''}>Quem atende sozinho</option><option value="clinica" ${p.audience === 'clinica' ? raw('selected') : ''}>Clínicas</option></select></label>
       <fieldset class="fld span2"><legend>Recursos</legend><div class="wl-chips">${Object.entries(Billing.FEATURES).map(([k, l]) => html`<label class="wl-chip"><input type="checkbox" name="f_${k}" value="1" ${p.features.includes(k) ? raw('checked') : ''}><span>${l}</span></label>`)}</div></fieldset>
       <label class="check"><input type="checkbox" name="public" value="1" ${p.public ? raw('checked') : ''}> Aparece para as clínicas escolherem e no site</label>
       <label class="check"><input type="checkbox" name="highlight" value="1" ${p.highlight ? raw('checked') : ''}> Destacar no site como “Mais escolhido”</label>
-      <div class="span2 actions"><button class="btn">Salvar ${p.name}</button></div></form>`)}`));
+      <div class="span2 actions"><button class="btn">Salvar ${p.name}</button></div></form>
+      ${uses[p.key] ? html`<p class="muted small">Não dá para excluir: ${uses[p.key]} clínica(s) neste plano. Para tirar do ar, desmarque “Aparece para as clínicas escolherem”.</p>`
+        : html`<form method="post" action="/planos/${p.key}/excluir" data-confirm="Excluir o plano ${p.name}? Esta ação não pode ser desfeita."><button class="btn ghost btn-sm danger-text">Excluir plano</button></form>`}</section>`)}`));
 });
 handle.post('/planos/site', need, async (req, res) => {
   await Billing.setSiteContact(str(req.body.contact, 120)); await log(req, 'site-contato');
   res.flash('Contato do site salvo.').redirect('/planos');
 });
+const numBr = (v) => Math.max(0, Number(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0);
+handle.post('/planos/novo', need, async (req, res) => {
+  const b = req.body;
+  const name = str(b.name, 60);
+  const key = (str(b.key, 30) || name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  if (!name || !/^[a-z0-9][a-z0-9-]{1,29}$/.test(key)) return res.flash('Informe o nome e um código válido.', 'err').redirect('/planos?novo=1');
+  if (await T.pone('SELECT 1 x FROM plans WHERE plan_key = ?', [key])) return res.flash(`Já existe um plano com o código “${key}”.`, 'err').redirect('/planos?novo=1');
+  const src = b.copy ? (await Billing.plans(true)).find((p) => p.key === b.copy) : null;
+  const pos = Number((await T.pone('SELECT COALESCE(MAX(position), 0) m FROM plans WHERE plan_key <> \'piloto\'')).m) + 1;
+  await T.pq('INSERT INTO plans (plan_key, name, price, max_pros, extra_pro_price, features, public, position, tagline, audience, highlight) VALUES (?,?,?,?,?,?,0,?,?,?,0)',
+    [key, name, numBr(b.price), Math.max(1, int(b.max_pros) || 1), numBr(b.extra), JSON.stringify(src?.features || []), pos, src?.tagline || null, src?.audience || 'individual']);
+  Billing.clearPlans(); await log(req, 'plano-criar', null, key);
+  res.flash(`Plano ${name} criado (interno). Revise os recursos e marque “Aparece para as clínicas escolherem” quando estiver pronto.`).redirect(`/planos#plano-${key}`);
+});
+handle.post('/planos/:k/excluir', need, async (req, res) => {
+  const k = str(req.params.k, 30);
+  const p = await T.pone('SELECT plan_key, name, public FROM plans WHERE plan_key = ?', [k]);
+  if (!p) return res.redirect('/planos');
+  const n = Number((await T.pone('SELECT COUNT(*) n FROM tenants WHERE plan = ?', [k])).n);
+  if (n) return res.flash(`Não dá para excluir: ${n} clínica(s) estão no plano ${p.name}.`, 'err').redirect('/planos');
+  if (p.public && Number((await T.pone('SELECT COUNT(*) n FROM plans WHERE public = 1')).n) <= 1) return res.flash('É o único plano visível; crie ou publique outro antes de excluir este.', 'err').redirect('/planos');
+  await T.pq('DELETE FROM plans WHERE plan_key = ?', [k]);
+  Billing.clearPlans(); await log(req, 'plano-excluir', null, k);
+  res.flash(`Plano ${p.name} excluído.`).redirect('/planos');
+});
 handle.post('/planos/:k', need, async (req, res) => {
   const b = req.body; const num = (v) => Math.max(0, Number(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0);
-  await T.pq('UPDATE plans SET name = ?, price = ?, max_pros = ?, extra_pro_price = ?, features = ?, public = ?, tagline = ?, audience = ?, highlight = ? WHERE plan_key = ?',
+  await T.pq('UPDATE plans SET name = ?, price = ?, max_pros = ?, extra_pro_price = ?, features = ?, public = ?, tagline = ?, audience = ?, highlight = ?, position = ? WHERE plan_key = ?',
     [str(b.name, 60), num(b.price), Math.max(1, int(b.max_pros) || 1), num(b.extra), JSON.stringify(Object.keys(Billing.FEATURES).filter((k) => b[`f_${k}`])), b.public ? 1 : 0,
-      str(b.tagline, 160) || null, b.audience === 'clinica' ? 'clinica' : 'individual', b.highlight ? 1 : 0, req.params.k]);
+      str(b.tagline, 160) || null, b.audience === 'clinica' ? 'clinica' : 'individual', b.highlight ? 1 : 0, Math.min(99, Math.max(0, int(b.position) || 0)), req.params.k]);
   Billing.clearPlans(); await log(req, 'plano-editar', null, req.params.k);
   res.flash('Plano salvo.').redirect('/planos');
 });
