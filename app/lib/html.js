@@ -45,6 +45,7 @@ const ICON = {
   escala: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8.5 14.5l7 4M15.5 14.5l-7 4"/>',
   marketing: '<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
   crm: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="7" rx="1.5"/>',
+  ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.6 2.4c-.7.3-1.1.9-1.1 1.6v.4"/><path d="M12 16.8h.01"/>',
   config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   lua: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
   sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -165,6 +166,7 @@ export function page(req, { title, active = '', body, flash = '', live = null })
     <div class="tactions">
       <button type="button" class="tinstall" data-install hidden title="Instalar o sistema como aplicativo neste aparelho">${icon('baixar')}<span class="ti-long">Instalar aplicativo</span><span class="ti-short">Instalar</span></button>
       <button type="button" class="ticon" data-theme-toggle title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro"><span class="theme-ico-moon">${icon('lua')}</span><span class="theme-ico-sun">${icon('sol')}</span></button>
+      ${Tenancy.multi() && HELPBOT.on ? html`<button type="button" class="ticon" data-hb-open title="Ajuda — Assistente Mentez" aria-label="Abrir a ajuda (Assistente Mentez)">${icon('ajuda')}</button>` : ''}
       ${can(u, 'usuarios') ? html`<a class="ticon ${active === 'config' ? 'on' : ''}" href="/configuracoes" title="Configurações" aria-label="Configurações">${icon('config')}</a>` : ''}
       <details class="tnotes">
         <summary class="ticon" title="Notificações" aria-label="Notificações${notes.count ? ` (${notes.count})` : ''}">${icon('sino')}${notes.count ? html`<i class="tbadge">${notes.count > 9 ? '9+' : notes.count}</i>` : ''}</summary>
@@ -201,9 +203,9 @@ ${u ? html`<div class="inst-banner" data-install-banner hidden role="region" ari
   <div class="actions"><button class="btn">Entendi</button></div>
 </form></dialog>` : ''}
 ${u && Tenancy.multi() && HELPBOT.on ? html`<div class="hb" data-helpbot>
-  <button type="button" class="hb-fab" data-hb-open aria-label="Abrir o assistente de ajuda" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.3M12 16.5h.01"/></svg><span>Ajuda</span></button>
+  <button type="button" class="hb-fab" data-hb-open aria-label="Abrir o assistente de ajuda" aria-expanded="false"><img src="/static/img/mentez/assistente.png" alt="" width="64" height="64"><span class="hb-tip">Precisa de ajuda?</span></button>
   <section class="hb-panel" role="dialog" aria-label="Assistente Mentez" hidden>
-    <header><span class="hb-av" aria-hidden="true">M</span><div><b>Assistente Mentez</b><small>Tire dúvidas e aprenda a usar o sistema</small></div><button type="button" class="hb-x" data-hb-close aria-label="Fechar">×</button></header>
+    <header><img class="hb-av" src="/static/img/mentez/assistente-rosto.png" alt="" width="40" height="40"><div><b>Assistente Mentez</b><small>Tire dúvidas e aprenda a usar o sistema</small></div><button type="button" class="hb-x" data-hb-close aria-label="Fechar">×</button></header>
     <div class="hb-log" data-hb-log aria-live="polite">
       <div class="hb-msg bot">Olá, ${(u.name || '').split(' ')[0]}! Sou o assistente da Mentez. Posso explicar qualquer parte do sistema e mostrar o caminho. O que você quer fazer?</div>
       <div class="hb-sugs" data-hb-sugs>${['Como agendar uma sessão recorrente?', 'Como conectar o WhatsApp?', 'Como enviar um exercício?', 'Como emitir um recibo?', 'Como ligar o app do paciente?'].map((q) => html`<button type="button" data-hb-q>${q}</button>`)}</div>

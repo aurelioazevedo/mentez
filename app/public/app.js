@@ -2048,7 +2048,7 @@ document.querySelectorAll('[data-ai-slot]').forEach((box) => {
 // ---------- Assistente de ajuda (chat) ----------
 (() => {
   const box = document.querySelector('[data-helpbot]'); if (!box) return;
-  const fab = box.querySelector('[data-hb-open]'); const panel = box.querySelector('.hb-panel'); const log = box.querySelector('[data-hb-log]');
+  const fab = box.querySelector('.hb-fab'); const panel = box.querySelector('.hb-panel'); const log = box.querySelector('[data-hb-log]');
   const form = box.querySelector('[data-hb-form]'); const ta = form.q; const sugs = box.querySelector('[data-hb-sugs]');
   const KEY = 'mz-hb'; let hist = []; try { hist = JSON.parse(sessionStorage.getItem(KEY) || '[]'); } catch { hist = []; }
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2060,8 +2060,9 @@ document.querySelectorAll('[data-ai-slot]').forEach((box) => {
   const add = (role, text) => { const d = document.createElement('div'); d.className = `hb-msg ${role === 'user' ? 'me' : 'bot'}`; d.innerHTML = role === 'user' ? esc(text) : fmt(text); log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
   hist.forEach((m) => add(m.role, m.content)); if (hist.length && sugs) sugs.hidden = true;
   const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(hist.slice(-20))); } catch { /* sem armazenamento */ } };
-  const open = (on) => { panel.hidden = !on; fab.setAttribute('aria-expanded', on ? 'true' : 'false'); box.classList.toggle('on', on); if (on) { ta.focus(); log.scrollTop = log.scrollHeight; } };
-  fab.addEventListener('click', () => open(panel.hidden));
+  const open = (on) => { panel.hidden = !on; document.querySelectorAll('[data-hb-open]').forEach((b) => b.setAttribute('aria-expanded', on ? 'true' : 'false')); box.classList.toggle('on', on); if (on) { ta.focus(); log.scrollTop = log.scrollHeight; } };
+  // botão flutuante (robô) e o ícone de ajuda na barra de cima abrem o mesmo chat
+  document.querySelectorAll('[data-hb-open]').forEach((b) => b.addEventListener('click', () => open(panel.hidden)));
   box.querySelector('[data-hb-close]').addEventListener('click', () => open(false));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) open(false); });
   let busy = false;
