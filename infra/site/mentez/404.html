@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Página não encontrada · Mentez</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#071936">
+<link rel="icon" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html{scrollbar-width:thin;scrollbar-color:#07C6BC transparent}
+body{margin:0;background:#071936;color:#F5F7FC;font:400 17px/1.6 'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+main{position:relative;isolation:isolate;overflow:hidden;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:90px clamp(16px,4vw,40px) 40px}
+.bg{position:absolute;inset:0;z-index:-1;pointer-events:none}
+.orb{position:absolute;border-radius:50%;filter:blur(60px);opacity:.45;mix-blend-mode:screen}
+.o1{width:440px;height:440px;background:#07C6BC;top:-140px;left:10%;animation:d1 24s ease-in-out infinite alternate}
+.o2{width:420px;height:420px;background:#8065E8;bottom:-160px;right:-60px;animation:d2 30s ease-in-out infinite alternate}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(245,247,252,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(245,247,252,.05) 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(ellipse at 50% 40%,#000 15%,transparent 70%);mask-image:radial-gradient(ellipse at 50% 40%,#000 15%,transparent 70%)}
+@keyframes d1{to{transform:translate(120px,80px) scale(1.15)}}
+@keyframes d2{to{transform:translate(-140px,-60px) scale(.9)}}
+.brand{position:absolute;top:22px;left:clamp(16px,4vw,40px);display:inline-flex;align-items:center;gap:10px;color:#F5F7FC;text-decoration:none;font:800 24px/1 'Plus Jakarta Sans',sans-serif;letter-spacing:-.045em}
+.in{display:grid;grid-template-columns:auto minmax(0,520px);gap:clamp(24px,5vw,64px);align-items:center;max-width:960px}
+figure{position:relative;margin:0}
+figure img{width:clamp(150px,22vw,230px);height:auto;display:block;filter:drop-shadow(0 30px 40px rgba(0,0,0,.45));animation:fl 4.5s ease-in-out infinite}
+@keyframes fl{50%{transform:translateY(-14px) rotate(-2deg)}}
+figcaption{position:absolute;top:-78px;left:28%;width:210px;background:#fff;color:#0D2246;font-size:14px;line-height:1.4;font-weight:600;padding:12px 14px;border-radius:16px 16px 16px 4px;box-shadow:0 18px 40px -18px rgba(0,0,0,.55);animation:pop .6s .4s cubic-bezier(.23,1,.32,1) both}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.9)}}
+.code{margin:0;font:800 clamp(84px,14vw,150px)/.9 'Plus Jakarta Sans',sans-serif;letter-spacing:-.06em;background:linear-gradient(120deg,#07C6BC,#A08CF2);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1{margin:12px 0 10px;font-size:clamp(28px,3.6vw,42px);line-height:1.08;letter-spacing:-.035em;font-weight:800}
+p.t{margin:0;color:#C3CDE0}
+.acts{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:26px}
+.btn{display:inline-flex;align-items:center;padding:14px 22px;border-radius:14px;background:#07C6BC;color:#071936;font-weight:700;text-decoration:none;transition:background .2s,transform .16s}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:transparent;color:#F5F7FC;border:1px solid rgba(245,247,252,.3)}
+.lk{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:22px;font-size:15px}
+.lk a{color:#A9F0EB;text-decoration:none;font-weight:600}
+@media (hover:hover) and (pointer:fine){.btn:hover{background:#3BD6CD}.btn.ghost:hover{background:rgba(245,247,252,.08)}.lk a:hover{text-decoration:underline}}
+@media (max-width:720px){.in{grid-template-columns:1fr;text-align:center;justify-items:center}figure{margin-top:50px}figcaption{left:50%;margin-left:-100px;top:-62px;width:200px;font-size:13px}.acts,.lk{justify-content:center}}
+@media (prefers-reduced-motion:reduce){.orb,figure img{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <div class="bg" aria-hidden="true"><span class="orb o1"></span><span class="orb o2"></span><span class="grid"></span></div>
+  <a class="brand" href="/"><img src="/img/simbolo-claro.png" alt="" width="30" height="30">mentez</a>
+  <section class="in">
+    <figure><img src="/img/assistente.png" alt="Mascote da Mentez" width="230" height="230"><figcaption>Hmm… procurei por toda parte e não achei esta página.</figcaption></figure>
+    <div>
+      <p class="code">404</p>
+      <h1>Essa página tirou uma folga.</h1>
+      <p class="t">O endereço pode ter mudado ou o link está incompleto. Mas não se preocupe: daqui a gente te leva para o lugar certo.</p>
+      <div class="acts"><a class="btn" href="/">Ir para o início</a><a class="btn ghost" href="https://app.mentez.com.br/criar-conta">Testar grátis por 14 dias</a></div>
+      <nav class="lk" aria-label="Páginas do site"><a href="/recursos/">Recursos</a><a href="/clinicas/">Para clínicas</a><a href="/precos/">Preços</a><a href="/seguranca/">Segurança</a><a href="https://app.mentez.com.br/inicio">Entrar na minha clínica</a></nav>
+    </div>
+  </section>
+</main>
+</body>
+</html>

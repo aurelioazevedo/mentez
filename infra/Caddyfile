@@ -26,6 +26,15 @@ mentez.com.br {
 	import seg
 	root * /srv/mentez
 	file_server
+	# endereço que não existe: página 404 da Mentez (com o mascote)
+	handle_errors {
+		@notfound expression {err.status_code} == 404
+		handle @notfound {
+			root * /srv/mentez
+			rewrite * /404.html
+			file_server
+		}
+	}
 }
 bemestarmental.com.br {
 	import seg
