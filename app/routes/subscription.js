@@ -5,6 +5,7 @@ import { audit, one } from '../lib/db.js';
 import { can, isClinician } from '../lib/perm.js';
 import * as T from '../lib/tenancy.js';
 import * as Billing from '../lib/billing.js';
+import * as Referral from '../lib/referral.js';
 
 const PAY = { PENDING: ['agendada', 'Aguardando pagamento'], OVERDUE: ['falta', 'Vencida'], RECEIVED: ['realizada', 'Paga'], CONFIRMED: ['realizada', 'Paga'], RECEIVED_IN_CASH: ['realizada', 'Paga'], REFUNDED: ['cancelada', 'Estornada'] };
 
@@ -60,6 +61,8 @@ settings.get('/', async (req, res) => {
       <p class="muted">${stLabel} · plano atual: <b>${cur?.name || '—'}</b>${row.paid_until ? ` · pago até ${brDate(row.paid_until)}` : ''}</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
     ${open ? html`<div class="flash ${open.status === 'OVERDUE' ? 'warn' : 'info'}">Mensalidade de ${money(open.value)} com vencimento em ${brDate(open.due)}. ${open.url ? html`<a class="btn btn-sm" href="${open.url}" target="_blank" rel="noopener">Pagar agora (Pix, boleto ou cartão)</a>` : prov === 'mercadopago' ? ' A cobrança é feita automaticamente no cartão cadastrado no Mercado Pago.' : ''}</div>` : ''}
+    ${Number(row.ref_discount) && a.state !== 'cortesia' ? html`<div class="flash ok">Desconto por indicação: <b>${row.ref_discount}%</b> na mensalidade${cur ? html` — você paga ${money(Billing.charge(cur, row))} em vez de ${money(Billing.monthly(cur, row.extra_pros))}` : ''}. <a href="/configuracoes/indicacao">Ver indicações</a></div>`
+      : a.state !== 'cortesia' ? html`<p class="muted small"><a class="link" href="/configuracoes/indicacao">Indique a Mentez e ganhe até ${(await Referral.config()).tiers.at(-1)[1]}% de desconto na mensalidade →</a></p>` : ''}
     ${req.query.mp ? html`<div class="flash ok">Pronto! Assim que o Mercado Pago confirmar a autorização, a assinatura aparece aqui.</div>` : ''}
     ${a.state === 'cortesia' ? html`<section class="card"><p>Esta clínica está no plano de cortesia da Mentez, sem cobrança.</p></section>` : html`
     <form method="post" class="stack">

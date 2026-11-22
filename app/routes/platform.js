@@ -18,6 +18,7 @@ import * as RL from '../lib/ratelimit.js';
 import * as Billing from '../lib/billing.js';
 import * as HelpBot from '../lib/helpbot.js';
 import * as PlatComm from '../lib/platcomm.js';
+import * as Referral from '../lib/referral.js';
 import * as AISlot from '../lib/aislot.js';
 import { mount as mountSignup } from './signup.js';
 import { money } from '../lib/html.js';
@@ -92,6 +93,7 @@ const ICON = {
   recursos: SV('<path d="M3 12h4l3-8 4 16 3-8h4"/>'),
   planos: SV('<path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/>'),
   cobranca: SV('<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>'),
+  presente: SV('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>'),
   historico: SV('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'),
   sair: SV('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3"/>'),
   busca: SV('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
@@ -104,7 +106,7 @@ const ICON = {
 };
 const MENU = [
   ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec']]],
-  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
+  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/indicacoes', 'Indicações', 'presente'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
 const ROLES = {
@@ -118,6 +120,7 @@ const RULES = [
   ['*', /^\/(faturas|planos|cobranca)(\/|$|\.)/, ['admin', 'financeiro']],
   ['*', /^\/assistente(\/|$)/, ['admin']],
   ['*', /^\/comunicacao(\/|$)/, ['admin', 'financeiro']],
+  ['*', /^\/indicacoes(\/|$)/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas\/\d+\/assinatura$/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas(\/|$)/, ['admin', 'suporte']],
   ['GET', /^\/clinicas\/nova$/, ['admin', 'suporte']],
@@ -499,6 +502,7 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
     </div>
     <section class="card"><h2>Assinatura</h2>
       ${(() => { const a = Billing.accessOf(t); return html`<p><b>${{ cortesia: 'Cortesia (sem cobrança)', teste: `Teste grátis · ${a.daysLeft} dia(s) restantes (até ${brDate(a.ends)})`, ativa: 'Em dia', atrasada: `Em aberto há ${a.late} dia(s)`, bloqueada: `Acesso suspenso (${a.reason})` }[a.state]}</b> · plano ${t.plan}${row.paid_until ? ` · pago até ${brDate(row.paid_until)}` : ''}${row.asaas_subscription ? ` · assinatura Asaas ${row.asaas_subscription}` : ''}${row.mp_preapproval ? ` · assinatura Mercado Pago ${row.mp_preapproval}` : ''}${row.extra_pros ? ` · ${row.extra_pros} profissional(is) extra` : ''}</p>`; })()}
+      ${await refInfo(row)}
       ${row.owner_crp ? html`<p class="small muted">Cadastro: ${row.owner_name || ''} · CRP ${row.owner_crp} · ${row.owner_phone || ''} · ${row.owner_email || ''} — confira o CRP no Cadastro Nacional do CFP.</p>` : ''}
       <form method="post" action="/clinicas/${t.id}/assinatura" class="actions">
         <select name="plan" aria-label="Plano">${(await Billing.plans()).map((p) => html`<option value="${p.key}" ${p.key === t.plan ? raw('selected') : ''}>${p.name}</option>`)}</select>
@@ -612,10 +616,10 @@ async function billingBlock(t, row) {
   return sendForm(link);
 }
 async function sendBilling(t, link, { phone, email, via }) {
-  const row = await T.pone('SELECT owner_name, plan, extra_pros FROM tenants WHERE id = ?', [t.id]);
+  const row = await T.pone('SELECT owner_name, plan, extra_pros, ref_discount FROM tenants WHERE id = ?', [t.id]);
   const plan = (await Billing.plans()).find((p) => p.key === row.plan);
   const first = String(row.owner_name || '').split(' ')[0] || 'tudo bem';
-  const value = plan ? `R$ ${Billing.monthly(plan, row.extra_pros).toFixed(2).replace('.', ',')}/mês` : '';
+  const value = plan ? `R$ ${Billing.charge(plan, row).toFixed(2).replace('.', ',')}/mês` : '';
   const contact = await Billing.siteContact();
   const action = link.kind === 'autorizar' ? 'Para ativar, autorize o pagamento mensal no Mercado Pago (cartão de crédito):' : 'Para pagar (Pix, boleto ou cartão):';
   const body = `Olá, ${first}! Aqui é da Mentez.\n\nA assinatura da clínica ${t.name}${plan ? ` — plano ${plan.name}, ${value}` : ''} — está disponível.`;
@@ -664,6 +668,45 @@ handle.post('/clinicas/:id/enviar-cobranca', need, async (req, res, next) => {
   const out = await sendBilling(t, link, { phone: req.body.phone, email: req.body.email, via });
   await log(req, 'cobranca-enviar', t.id, out.join(' · '));
   res.flash(out.join(' · '), out.some((x) => /não/.test(x)) ? 'warn' : 'ok').redirect(`/clinicas/${t.id}`);
+});
+// ---------- indicações ----------
+async function refInfo(row) {
+  const by = row.referred_by ? await T.pone('SELECT id, name FROM tenants WHERE id = ?', [row.referred_by]) : null;
+  const n = await T.pone("SELECT COUNT(*) total, SUM(billing_status = 'ativa' AND status = 'ativa') pagando FROM tenants WHERE referred_by = ?", [row.id]);
+  if (!by && !Number(n.total) && !Number(row.ref_discount)) return '';
+  return html`<p class="small">${by ? html`Indicada por <a href="/clinicas/${by.id}">${by.name}</a>. ` : ''}${Number(n.total) ? `Indicou ${n.total} clínica(s), ${Number(n.pagando || 0)} assinante(s). ` : ''}${Number(row.ref_discount) ? html`<b>Desconto por indicação: ${row.ref_discount}%</b>.` : ''} <a href="/indicacoes">Indicações</a></p>`;
+}
+handle.get('/indicacoes', need, async (req, res) => {
+  const c = await Referral.config(true);
+  const rows = await T.pq(`SELECT r.id, r.name, r.ref_discount, COUNT(i.id) total, SUM(i.billing_status = 'ativa' AND i.status = 'ativa') pagando
+    FROM tenants r JOIN tenants i ON i.referred_by = r.id GROUP BY r.id, r.name, r.ref_discount ORDER BY pagando DESC, total DESC LIMIT 100`);
+  const recent = await T.pq('SELECT i.id, i.name, i.billing_status, i.status, i.referred_at, r.id rid, r.name rname FROM tenants i JOIN tenants r ON r.id = i.referred_by ORDER BY i.referred_at DESC LIMIT 50');
+  const tiers = [...c.tiers, ...Array(Math.max(0, 6 - c.tiers.length)).fill(['', ''])].slice(0, 8);
+  const given = (await T.pone('SELECT COALESCE(SUM(ref_discount > 0), 0) n FROM tenants')).n;
+  send(res, layout(req, 'Indicações', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Indicações</h1><p class="muted">Programa “Indique e ganhe”: cada clínica tem um link; quem se cadastra por ele ganha dias a mais de teste, e quem indicou ganha desconto progressivo na mensalidade enquanto as indicadas forem assinantes.</p></div></header>
+    <section class="ref-kpis"><div class="card ref-kpi"><span>Clínicas que indicaram</span><b>${rows.length}</b></div><div class="card ref-kpi"><span>Cadastros por indicação</span><b>${rows.reduce((a, r) => a + Number(r.total), 0)}</b></div><div class="card ref-kpi"><span>Indicadas assinantes</span><b>${rows.reduce((a, r) => a + Number(r.pagando || 0), 0)}</b></div><div class="card ref-kpi"><span>Clínicas com desconto</span><b>${given}</b></div></section>
+    <form method="post" action="/indicacoes" class="card form-grid"><h2 class="span2">Regras</h2>
+      <label class="check span2"><input type="checkbox" name="enabled" value="1" ${c.enabled ? raw('checked') : ''}> Programa de indicação ativo</label>
+      <label class="fld"><span>Dias a mais de teste para quem é indicado</span><input type="number" name="bonusDays" value="${c.bonusDays}" min="0" max="60"></label>
+      <div class="span2"><p class="small muted" style="margin:0 0 6px">Faixas de desconto (assinantes indicadas → desconto na mensalidade, até ${Referral.MAX_PCT}%; a mensalidade nunca fica abaixo de R$ ${Referral.MIN_VALUE},00)</p>
+        <div class="ref-tiers">${tiers.map(([n, p], i) => html`<label class="fld"><span>Faixa ${i + 1}</span><span class="ref-tier"><input type="number" name="n${i}" value="${n}" min="1" max="999" placeholder="nº"> assinante(s) = <input type="number" name="p${i}" value="${p}" min="1" max="${Referral.MAX_PCT}" placeholder="%"> %</span></label>`)}</div></div>
+      <label class="fld span2"><span>Mensagem de indicação (use {link} e {dias})</span><textarea name="message" rows="3" maxlength="600">${c.message}</textarea></label>
+      <p class="span2 muted small">Mudanças nas faixas valem na próxima conferência (a cada hora) ou quando chegar um pagamento; o valor das assinaturas é atualizado sozinho no Asaas e no Mercado Pago.</p>
+      <div class="span2 actions"><button class="btn">Salvar</button><button class="btn ghost" formaction="/indicacoes/recalcular">Recalcular descontos agora</button></div></form>
+    <section class="card flush"><h2 class="pad">Quem mais indica</h2>${rows.length ? html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Clínica</th><th>Cadastros</th><th>Assinantes</th><th>Desconto</th></tr></thead><tbody>
+      ${rows.map((r) => html`<tr><td><a href="/clinicas/${r.id}">${r.name}</a></td><td>${r.total}</td><td>${Number(r.pagando || 0)}</td><td>${Number(r.ref_discount) ? `${r.ref_discount}%` : '—'}</td></tr>`)}</tbody></table></div>` : html`<p class="pad muted">Nenhuma indicação ainda.</p>`}</section>
+    ${recent.length ? html`<section class="card flush"><h2 class="pad">Últimos cadastros por indicação</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Clínica</th><th>Indicada por</th><th>Quando</th><th>Situação</th></tr></thead><tbody>
+      ${recent.map((r) => { const st = r.status !== 'ativa' ? ['cancelada', 'Inativa'] : Referral.REF_STATE[r.billing_status] || ['agendada', r.billing_status]; return html`<tr><td><a href="/clinicas/${r.id}">${r.name}</a></td><td><a href="/clinicas/${r.rid}">${r.rname}</a></td><td>${r.referred_at ? brDateTime(r.referred_at) : '—'}</td><td><span class="badge b-${st[0]}">${st[1]}</span></td></tr>`; })}</tbody></table></div></section>` : ''}`));
+});
+handle.post('/indicacoes', need, async (req, res) => {
+  const r = await Referral.saveConfig(req.body);
+  if (r.error) return res.flash(r.error, 'err').redirect('/indicacoes');
+  await log(req, 'indicacao-regras'); Billing.refreshAllReferrers().catch(() => {});
+  res.flash('Regras de indicação salvas.').redirect('/indicacoes');
+});
+handle.post('/indicacoes/recalcular', need, async (req, res) => {
+  try { await Billing.refreshAllReferrers(); res.flash('Descontos recalculados.'); } catch (e) { res.flash(e.message, 'err'); }
+  res.redirect('/indicacoes');
 });
 // ---------- WhatsApp e e-mail da Mentez ----------
 async function qrPage({ title, instance, back, hint }) {

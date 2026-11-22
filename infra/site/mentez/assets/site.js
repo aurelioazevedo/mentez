@@ -112,3 +112,17 @@ document.querySelectorAll('[data-year]').forEach((el) => { el.textContent = new 
   // pausa quando o hero sai da tela (economiza bateria)
   if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { if (e.isIntersecting) v.play().catch(() => {}); else v.pause(); }).observe(v);
 })();
+
+// Indicação: mentez.com.br/?ref=CODIGO — guarda o código (30 dias) e leva para o cadastro em todos os botões “Criar conta”
+(() => {
+  let ref = '';
+  try {
+    const q = new URLSearchParams(location.search).get('ref');
+    if (q && /^[a-z0-9]{4,16}$/i.test(q)) { ref = q.toLowerCase(); localStorage.setItem('mz_ref', JSON.stringify({ c: ref, t: Date.now() })); }
+    else { const s = JSON.parse(localStorage.getItem('mz_ref') || 'null'); if (s && Date.now() - s.t < 30 * 864e5) ref = s.c; }
+  } catch { /* sem armazenamento: vale só para esta visita */ }
+  if (!ref) return;
+  const add = (a) => { try { const u = new URL(a.href); if (u.pathname === '/criar-conta' && !u.searchParams.has('ref')) { u.searchParams.set('ref', ref); a.href = u.toString(); } } catch { /* link inválido */ } };
+  const run = () => document.querySelectorAll('a[href*="/criar-conta"]').forEach(add);
+  run(); document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[href*="/criar-conta"]'); if (a) add(a); }, true);
+})();

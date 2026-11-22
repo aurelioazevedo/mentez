@@ -9,6 +9,8 @@
 //   bloqueada → teste terminado sem assinatura, ou atraso além da tolerância: só a tela de assinatura (dados guardados)
 import crypto from 'node:crypto';
 import * as T from './tenancy.js';
+import * as Referral from './referral.js';
+import * as PlatComm from './platcomm.js';
 
 export const FEATURES = {
   teleconsulta: 'Teleconsulta própria', ia_sessao: 'IA na sessão (transcrição e rascunho)', atendente: 'Atendente virtual no WhatsApp',
@@ -70,6 +72,7 @@ export async function migrate() {
     value DECIMAL(10,2) NULL, due_date DATE NULL, raw_hash CHAR(64) NULL UNIQUE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX (tenant_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   await T.pq('CREATE TABLE IF NOT EXISTS platform_settings (k VARCHAR(60) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  await Referral.migrate();
   // uma vez: “personalização” entra em todos os planos já cadastrados, menos o Essencial (o mais simples)
   if (!(await T.pone("SELECT 1 x FROM platform_settings WHERE k = 'feat_personalizacao_v1'"))) {
     for (const r of await T.pq('SELECT plan_key, features FROM plans')) {
@@ -114,6 +117,11 @@ export async function insModeOf(t) {
 }
 export async function maxPros(t) { const p = await planOf(t); return (p?.maxPros || 1) + Number(t?.extraPros || 0); }
 export const monthly = (plan, extra = 0) => Number(plan.price) + Number(extra || 0) * Number(plan.extraPro || 0);
+// Valor cobrado: mensalidade do plano menos o desconto de indicação (nunca abaixo do mínimo dos provedores)
+export const charge = (plan, row) => {
+  const v = monthly(plan, row?.extra_pros ?? row?.extraPros); const d = Number(row?.ref_discount || 0);
+  return d > 0 ? Math.max(Math.min(v, Referral.MIN_VALUE), Math.round(v * (100 - d)) / 100) : v;
+};
 
 // ---------- situação de acesso ----------
 const today = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
@@ -211,7 +219,7 @@ async function subscribeMp(t, { planKey, payerName, payerDoc, email }, c, row) {
   if (doc && !docOk(doc)) throw new Error('Confira o CPF ou CNPJ.');
   const mail = String(email || row.owner_email || '').trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) throw new Error('Informe o e-mail da conta do Mercado Pago que vai pagar.');
-  const value = monthly(plan, row.extra_pros);
+  const value = charge(plan, row);
   const trialEnd = String(row.trial_ends_at || '').slice(0, 10);
   let pre = row.mp_preapproval; let checkout = null;
   if (pre) {
@@ -241,7 +249,7 @@ async function subscribeAsaas(t, { planKey, payerName, payerDoc, email, phone },
   let customer = row.asaas_customer;
   const cust = { name: String(payerName || t.name).slice(0, 120), cpfCnpj: doc, email: email || row.owner_email || undefined, mobilePhone: String(phone || row.owner_phone || '').replace(/\D/g, '') || undefined, externalReference: `mentez:${t.slug}`, notificationDisabled: false };
   if (customer) await api(c, 'POST', `/customers/${customer}`, cust); else customer = (await api(c, 'POST', '/customers', cust)).id;
-  const value = monthly(plan, row.extra_pros);
+  const value = charge(plan, row);
   const trialEnd = String(row.trial_ends_at || '').slice(0, 10);
   const nextDue = trialEnd && trialEnd > today() ? trialEnd : today(); // no teste: a 1ª cobrança vence quando o teste acaba
   let sub = row.asaas_subscription;
@@ -280,8 +288,8 @@ export async function setExtraPros(t, delta) {
   await T.pq('UPDATE tenants SET extra_pros = GREATEST(0, extra_pros + ?) WHERE id = ?', [delta, t.id]);
   const row = await T.pone('SELECT * FROM tenants WHERE id = ?', [t.id]); T.clearCache();
   const c = await config(); const plan = (await plans()).find((p) => p.key === row.plan);
-  if (row.asaas_subscription && ready(c, 'asaas') && plan) await api(c, 'POST', `/subscriptions/${row.asaas_subscription}`, { value: monthly(plan, row.extra_pros), updatePendingPayments: true });
-  if (row.mp_preapproval && ready(c, 'mercadopago') && plan) await mp(c, 'PUT', `/preapproval/${row.mp_preapproval}`, { auto_recurring: { transaction_amount: monthly(plan, row.extra_pros), currency_id: 'BRL' } });
+  if (row.asaas_subscription && ready(c, 'asaas') && plan) await api(c, 'POST', `/subscriptions/${row.asaas_subscription}`, { value: charge(plan, row), updatePendingPayments: true });
+  if (row.mp_preapproval && ready(c, 'mercadopago') && plan) await mp(c, 'PUT', `/preapproval/${row.mp_preapproval}`, { auto_recurring: { transaction_amount: charge(plan, row), currency_id: 'BRL' } });
 }
 
 // ---------- avisos do Asaas (webhook) ----------
@@ -304,6 +312,7 @@ export async function handleEvent(ev) {
     await T.pq("UPDATE tenants SET billing_status = IF(billing_status = 'cortesia', billing_status, 'cancelada'), asaas_subscription = NULL WHERE id = ?", [t.id]);
   }
   T.clearCache();
+  await refreshReferrerOf(t.id).catch((e) => console.error('indicação:', e.message));
   return { ok: true, tenant: t.slug };
 }
 // ---------- avisos do Mercado Pago (webhook) ----------
@@ -329,10 +338,12 @@ export async function handleMercadoPago(type, id) {
     try { await T.pq('INSERT INTO billing_events (tenant_id, event, payment_id, status, value, due_date, raw_hash) VALUES (?,?,?,?,?,?,?)', [t?.id || null, event, String(id).slice(0, 40), status || null, value || null, due || null, hash]); return true; }
     catch (e) { if (/Duplicate/.test(e.message)) return false; throw e; }
   };
+  let who = null;
   if (type === 'subscription_authorized_payment') {
     const ap = await mp(c, 'GET', `/authorized_payments/${id}`);
     const pre = ap.preapproval_id; const st = ap.payment?.status || ap.status;
     const t = await tenantOfPre(pre, ap.external_reference);
+    who = t;
     const due = String(ap.debit_date || ap.date_created || today()).slice(0, 10);
     if (!(await log(t, 'MP_AUTHORIZED_PAYMENT', st, ap.transaction_amount, due)) || !t) return { ignored: !t };
     if (st === 'approved') await T.pq("UPDATE tenants SET billing_status = 'ativa', overdue_since = NULL, paid_until = GREATEST(COALESCE(paid_until, '1970-01-01'), ?) WHERE id = ?", [addMonth(due), t.id]);
@@ -340,18 +351,23 @@ export async function handleMercadoPago(type, id) {
   } else if (type === 'subscription_preapproval') {
     const pa = await mp(c, 'GET', `/preapproval/${id}`);
     const t = await tenantOfPre(pa.id, pa.external_reference);
+    who = t;
     if (!(await log(t, 'MP_PREAPPROVAL', pa.status, pa.auto_recurring?.transaction_amount, null)) || !t) return { ignored: !t };
     if (pa.status === 'authorized') await T.pq("UPDATE tenants SET mp_preapproval = ?, billing_provider = 'mercadopago' WHERE id = ?", [pa.id, t.id]);
     else if (pa.status === 'cancelled') await T.pq("UPDATE tenants SET billing_status = IF(billing_status = 'cortesia', billing_status, 'cancelada'), mp_preapproval = NULL WHERE id = ?", [t.id]);
     else if (pa.status === 'paused') await T.pq("UPDATE tenants SET billing_status = IF(billing_status IN ('cortesia','teste'), billing_status, 'atrasada'), overdue_since = COALESCE(overdue_since, CURDATE()) WHERE id = ?", [t.id]);
   } else return { ignored: true };
   T.clearCache();
+  if (who) await refreshReferrerOf(who.id).catch((e) => console.error('indicação:', e.message));
   return { ok: true };
 }
 export async function webhookAuth(token) { const c = await config(); return !!c.token && typeof token === 'string' && token.length === c.token.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(c.token)); }
 
 // ---------- conferência periódica (caso algum aviso do Asaas se perca) ----------
 export async function tick() {
+  try { await checkPayments(); } finally { await refreshAllReferrers().catch((e) => console.error('indicação:', e.message)); }
+}
+async function checkPayments() {
   const c = await config();
   // Mercado Pago: confere as cobranças recentes das assinaturas (caso algum aviso tenha se perdido)
   if (ready(c, 'mercadopago')) {
@@ -373,6 +389,43 @@ export async function tick() {
       }
     } catch (e) { console.error('cobrança Mentez:', e.message); }
   }
+}
+
+// ---------- indicações: desconto progressivo de quem indicou ----------
+// Recalcula o desconto de uma clínica pelas indicadas pagantes e atualiza o valor da assinatura no provedor.
+export async function refreshDiscount(id) {
+  const c = await Referral.config();
+  const row = await T.pone('SELECT * FROM tenants WHERE id = ?', [id]); if (!row) return null;
+  const paying = Referral.counts(await Referral.referredOf(id));
+  const pct = c.enabled ? Referral.pctFor(c, paying) : 0;
+  const prev = Number(row.ref_discount || 0);
+  if (pct === prev) return { pct, changed: false };
+  row.ref_discount = pct;
+  // primeiro o provedor; o desconto só fica gravado se o valor da assinatura foi atualizado (senão, tenta de novo na próxima conferência)
+  const bc = await config(); const plan = (await plans()).find((p) => p.key === row.plan);
+  if (plan && row.asaas_subscription && ready(bc, 'asaas')) await api(bc, 'POST', `/subscriptions/${row.asaas_subscription}`, { value: charge(plan, row), updatePendingPayments: true });
+  if (plan && row.mp_preapproval && ready(bc, 'mercadopago')) await mp(bc, 'PUT', `/preapproval/${row.mp_preapproval}`, { auto_recurring: { transaction_amount: charge(plan, row), currency_id: 'BRL' } });
+  await T.pq('UPDATE tenants SET ref_discount = ? WHERE id = ?', [pct, id]); T.clearCache();
+  await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', ['indicacao', 'indicacao-desconto', id, `${paying} pagante(s) → ${pct}%`]).catch(() => {});
+  // avisa quem indicou quando o desconto sobe (melhor esforço: WhatsApp e e-mail da Mentez)
+  if (pct > prev) notifyDiscount(row, pct, paying, plan).catch(() => {});
+  return { pct, changed: true };
+}
+async function notifyDiscount(row, pct, paying, plan) {
+  const first = String(row.owner_name || '').split(' ')[0] || 'tudo bem';
+  const value = plan ? ` Sua mensalidade passa a ser R$ ${charge(plan, row).toFixed(2).replace('.', ',')}.` : '';
+  const text = `Olá, ${first}! Boa notícia da Mentez: ${paying === 1 ? 'uma clínica que você indicou já é assinante' : `${paying} clínicas que você indicou são assinantes`}. Seu desconto agora é de ${pct}%.${value}\n\nObrigado por indicar a Mentez!`;
+  if (row.owner_phone) await PlatComm.waSend(row.owner_phone, text).catch(() => {});
+  if (row.owner_email) await PlatComm.mailSend(row.owner_email, `Mentez — seu desconto por indicação agora é ${pct}%`, text).catch(() => {});
+}
+async function refreshReferrerOf(id) {
+  const r = await T.pone('SELECT referred_by FROM tenants WHERE id = ?', [id]);
+  if (r?.referred_by) await refreshDiscount(r.referred_by);
+}
+export async function refreshAllReferrers() {
+  const ids = new Set((await T.pq('SELECT DISTINCT referred_by id FROM tenants WHERE referred_by IS NOT NULL')).map((r) => r.id));
+  for (const r of await T.pq('SELECT id FROM tenants WHERE ref_discount > 0')) ids.add(r.id); // inclusive quem perdeu todas as indicadas
+  for (const id of ids) await refreshDiscount(id).catch((e) => console.error('indicação:', e.message));
 }
 
 // ---------- informações públicas para o site (mentez.com.br) ----------

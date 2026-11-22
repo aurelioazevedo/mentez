@@ -6,6 +6,8 @@ import bcrypt from 'bcryptjs';
 import * as T from '../lib/tenancy.js';
 import * as Evolution from '../lib/evolution.js';
 import * as Billing from '../lib/billing.js';
+import * as Referral from '../lib/referral.js';
+import { parseCookies } from '../lib/auth.js';
 import * as Brand from '../lib/brand.js';
 import { q, one, migrate, audit } from '../lib/db.js';
 import { html, raw } from '../lib/html.js';
@@ -40,12 +42,23 @@ export async function autoLogin(req, res) {
 
 // ---------- páginas (montadas no Painel/plataforma) ----------
 export function mount(r, layout) {
-  r.get('/criar-conta', (req, res) => send(res, layout(req, 'Criar conta', html`<section class="mzs">
-    <div class="mzs-intro"><p class="eyebrow">Teste grátis por ${Billing.TRIAL_DAYS()} dias · sem cartão</p><h1>Sua rotina mais leve, a partir de hoje.</h1>
+  // link curto de indicação: app.mentez.com.br/i/CODIGO
+  r.get('/i/:code', (req, res) => res.redirect(`/criar-conta?ref=${encodeURIComponent(Referral.cleanCode(req.params.code))}`));
+  r.get('/criar-conta', async (req, res) => {
+    // indicação: ?ref= (vinda do site ou do link) fica guardada por 30 dias neste navegador
+    let code = Referral.cleanCode(req.query.ref || parseCookies(req).mz_ref);
+    const rc = await Referral.config();
+    const ref = code && rc.enabled ? await Referral.byCode(code) : null;
+    if (!ref) code = '';
+    else if (req.query.ref) res.append('Set-Cookie', `mz_ref=${code}; Path=/; Max-Age=${30 * 86400}; HttpOnly; Secure; SameSite=Lax`);
+    const days = Billing.TRIAL_DAYS() + (ref ? rc.bonusDays : 0);
+    send(res, layout(req, 'Criar conta', html`<section class="mzs">
+    <div class="mzs-intro">${ref ? html`<p class="mzs-ref">Indicação de <b>${ref.name}</b>: você ganha <b>${rc.bonusDays} dias a mais</b> de teste grátis.</p>` : ''}<p class="eyebrow">Teste grátis por ${days} dias · sem cartão</p><h1>Sua rotina mais leve, a partir de hoje.</h1>
       <p class="muted">Agenda, prontuário, financeiro, lembretes e teleconsulta num só lugar — para psicólogas, psicólogos e clínicas de psicologia.</p>
       <ul class="mzs-list"><li>Cada clínica no seu endereço, com dados separados e criptografados</li><li>Prontuário que só quem atendeu enxerga</li><li>Cancele quando quiser, sem multa</li></ul></div>
     <form method="post" class="card stack mzs-form" data-signup>
       ${RL.botFields()}
+      ${code ? html`<input type="hidden" name="ref" value="${code}">` : ''}
       <label class="fld"><span>Seu nome completo</span><input name="name" required maxlength="120" autocomplete="name"></label>
       <div class="form-grid">
         <label class="fld"><span>Tratamento</span><select name="title"><option value="Dra.">Dra.</option><option value="Dr.">Dr.</option></select></label>
@@ -63,7 +76,8 @@ export function mount(r, layout) {
       <label class="check small"><input type="checkbox" name="terms" value="1" required> <span>Li e aceito os <a href="/termos-de-uso" target="_blank">Termos de Uso</a> e a <a href="/privacidade" target="_blank">Política de Privacidade</a> da Mentez.</span></label>
       <button class="btn big">Criar minha conta grátis</button>
       <p class="muted small">Já tem conta? Entre pelo endereço da sua clínica (ex.: suaclinica.${T.baseDomain()}).</p>
-    </form></section>`)));
+    </form></section>`));
+  });
 
   r.get('/criar-conta/endereco', async (req, res) => {
     const s = str(req.query.s, 40).toLowerCase();
@@ -85,6 +99,7 @@ export function mount(r, layout) {
     catch (e) { return res.flash(e.message, 'err').redirect('/criar-conta'); }
     await T.pq("UPDATE tenants SET billing_status = 'teste', trial_ends_at = DATE_ADD(NOW(), INTERVAL ? DAY), owner_phone = ?, owner_crp = ?, signup_ip = ? WHERE id = ?", [Billing.TRIAL_DAYS(), d.phone, d.crp, String(req.ip || '').slice(0, 64), t.id]);
     T.clearCache();
+    if (b.ref) await Referral.attach(t, b.ref, { email: d.email }).catch((e) => console.error('indicação:', e.message));
     t = await T.bySlug(d.slug);
     const uid = await T.run(t, async () => {
       await migrate();

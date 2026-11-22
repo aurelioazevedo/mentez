@@ -11,6 +11,7 @@ import { FEATURES, HELPBOT } from './lib/html.js';
 import * as Billing from './lib/billing.js';
 import * as HelpBot from './lib/helpbot.js';
 import { ROLES } from './lib/perm.js';
+import { referralSettings } from './routes/referral.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
@@ -229,6 +230,7 @@ app.post('/ajuda/chat', express.json({ limit: '40kb' }), async (req, res) => {
 app.get(/^\/usuarios\/(google|whatsapp|agente|acessos)(\/.*)?$/, (req, res) => res.redirect(301, req.originalUrl.replace(/^\/usuarios\//, '/configuracoes/')));
 app.use('/configuracoes/identidade', requirePerm('usuarios'), brandSettings);
 app.use('/configuracoes/assinatura', subscriptionSettings);
+app.use('/configuracoes/indicacao', referralSettings);
 app.use('/configuracoes/dominio', requirePerm('usuarios'), domainSettings);
 app.use('/configuracoes/google', requirePerm('usuarios'), googleAdmin);
 app.use('/configuracoes/whatsapp', requirePerm('usuarios'), waAdmin);

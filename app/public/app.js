@@ -2083,3 +2083,22 @@ document.querySelectorAll('[data-ai-slot]').forEach((box) => {
   box.querySelectorAll('[data-hb-q]').forEach((b) => b.addEventListener('click', () => ask(b.textContent)));
   log.addEventListener('click', (e) => { const a = e.target.closest('a[href^="/"]'); if (a && window.innerWidth < 700) open(false); });
 })();
+
+// Indique e ganhe: compartilhar pelo menu do celular (Instagram e outros apps) e indicar um colega pelo WhatsApp
+(() => {
+  document.querySelectorAll('[data-share-url]').forEach((b) => {
+    if (!navigator.share) return;
+    b.hidden = false;
+    b.addEventListener('click', () => { navigator.share({ title: 'Mentez', text: b.dataset.shareText, url: b.dataset.shareUrl }).catch(() => {}); });
+  });
+  const f = document.querySelector('form[data-ref-wa]');
+  if (f) f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    let d = String(f.fone.value || '').replace(/\D/g, '');
+    if (d.length < 10) { f.fone.focus(); f.fone.setCustomValidity('Informe o WhatsApp com DDD.'); f.fone.reportValidity(); f.fone.setCustomValidity(''); return; }
+    if (d.length <= 11) d = `55${d}`;
+    const nome = String(f.nome.value || '').trim().split(/\s+/)[0];
+    const txt = nome ? f.dataset.template.replace(/^Oi!/, `Oi, ${nome}!`) : f.dataset.template;
+    window.open(`https://wa.me/${d}?text=${encodeURIComponent(txt)}`, '_blank', 'noopener');
+  });
+})();
