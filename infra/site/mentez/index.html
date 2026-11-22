@@ -1,9 +1,329 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mentez · Inteligência para cuidar de quem cuida</title><meta name="robots" content="noindex"><link rel="icon" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#071936;color:#F5F7FC;overflow:hidden}
-.b1,.b2{position:fixed;border-radius:50%;filter:blur(70px);opacity:.55}.b1{width:420px;height:420px;background:#07C6BC;top:-140px;right:-120px}.b2{width:380px;height:380px;background:#8065E8;bottom:-150px;left:-110px}
-main{position:relative;text-align:center;padding:32px 20px;max-width:620px}.mk{margin:0}.mk img{width:min(420px,86vw);height:auto;display:block;margin:0 auto}.dot{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#07C6BC,#8065E8)}
-h1{font-size:clamp(44px,9vw,72px);font-weight:700;letter-spacing:-.03em;margin:0}p{color:#C9D2E3;font-size:clamp(17px,2.6vw,21px);line-height:1.5;margin:18px 0 0}
-.cta{margin:34px 0 0;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}.go,.in{display:inline-block;padding:14px 26px;border-radius:999px;font-weight:700;text-decoration:none}.go{background:linear-gradient(135deg,#07C6BC,#8065E8);color:#fff}.in{color:#F5F7FC;border:1px solid rgba(255,255,255,.3)}.tag{display:inline-block;margin-top:18px;padding:9px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.18);font-size:14px;font-weight:600;color:#07C6BC;background:rgba(255,255,255,.04)}</style></head>
-<body><i class="b1"></i><i class="b2"></i><main><h1 class="mk"><img src="/logo-dark.png" alt="mentez — Inteligência para cuidar de quem cuida" width="420" height="86"></h1>
-<p>Gestão completa para psicólogas, psicólogos e clínicas de psicologia.</p><p class="cta"><a class="go" href="https://app.mentez.com.br/criar-conta">Comece grátis por 14 dias</a><a class="in" href="https://app.mentez.com.br/inicio">Já tenho conta</a></p><span class="tag">Sem cartão · cancele quando quiser</span></main></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mentez · Sistema de gestão para psicólogos e clínicas de psicologia</title>
+<meta name="description" content="Agenda, prontuário, documentos do CFP, cobrança por Pix, NFS-e, convênios e um atendente de IA no WhatsApp que marca sessões por você. Teste grátis por 14 dias.">
+<meta name="theme-color" content="#071936">
+<link rel="canonical" href="https://mentez.com.br/">
+<meta property="og:type" content="website"><meta property="og:locale" content="pt_BR"><meta property="og:site_name" content="Mentez">
+<meta property="og:title" content="Mentez · Menos planilha. Mais escuta."><meta property="og:description" content="O consultório inteiro num só lugar: agenda, prontuário, cobrança e WhatsApp com IA. Para psicólogos e clínicas.">
+<meta property="og:image" content="https://mentez.com.br/img/agenda.webp">
+<link rel="icon" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css?v=1">
+<link rel="preload" as="image" href="/img/agenda.webp">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Mentez","applicationCategory":"BusinessApplication","operatingSystem":"Web, Android, iOS","url":"https://mentez.com.br","description":"Sistema de gestão para psicólogos e clínicas de psicologia: agenda, prontuário, documentos, financeiro, convênios e atendente de IA no WhatsApp.","offers":{"@type":"Offer","price":"79","priceCurrency":"BRL"}}</script>
+</head>
+<body>
+<a class="sr" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Mentez — página inicial"><img src="/img/simbolo-claro.png" alt="" width="34" height="34">mentez</a>
+    <nav class="nav" aria-label="Principal">
+      <a href="/recursos/">Recursos</a>
+      <a href="/clinicas/">Para clínicas</a>
+      <a href="/precos/">Preços</a>
+      <a href="/seguranca/">Segurança</a>
+    </nav>
+    <div class="acts"><a class="in" href="https://app.mentez.com.br/inicio">Entrar</a><a class="btn" href="https://app.mentez.com.br/criar-conta">Testar grátis</a></div>
+    <button class="burger" type="button" aria-label="Abrir menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<main id="conteudo">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <span class="kick">Gestão para psicologia</span>
+      <h1 class="h-xl">Menos planilha. <span class="s">Mais escuta.</span></h1>
+      <div class="hero-meta">
+        <div style="display:grid;gap:22px">
+          <p class="lede">Agenda, prontuário, cobrança e WhatsApp num só lugar — com um atendente de IA que marca, remarca e confirma sessões enquanto você está atendendo.</p>
+          <div class="hero-cta">
+            <a class="btn big" href="https://app.mentez.com.br/criar-conta">Testar 14 dias grátis <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+            <a class="btn big line" href="/recursos/">Ver tudo o que faz</a>
+          </div>
+          <p class="note"><span>Sem cartão de crédito</span><span>Cancele quando quiser</span><span>Dados protegidos pela LGPD</span></p>
+        </div>
+        <p class="stamp"><b>Para quem atende sozinho</b>e para clínicas com equipe,<br>salas e repasses.</p>
+      </div>
+    </div>
+
+    <div class="stage" aria-label="Tela da agenda da Mentez">
+      <div class="float f-pay" role="img" aria-label="Notificação: Pix recebido">
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <div><b>Pix recebido · R$ 180,00</b><small>Bruno L. · sessão de quinta · baixa automática</small></div>
+      </div>
+      <div class="float f-wa" role="img" aria-label="Conversa no WhatsApp com o atendente virtual">
+        <header><i></i><div>Espaço Ser<small>atendente virtual</small></div></header>
+        <div class="msg">Oi! Tem horário quinta à tarde? 🙂<time>12:31</time></div>
+        <div class="msg me">Tenho sim, Carla. Quinta, dia 27:<div class="opts"><b>14h</b><b>16h</b><b>17h</b></div><time>12:31</time></div>
+        <div class="msg">16h, por favor<time>12:32</time></div>
+        <div class="msg me">Pronto! Quinta às 16h com a Dra. Marina, on-line. Te lembro um dia antes. 💙<time>12:32</time></div>
+      </div>
+      <div class="float f-mood" role="img" aria-label="Check-in de humor do paciente na última semana">
+        <b>Humor da semana</b> <small>· Ana C.</small>
+        <div class="row"><span class="d" style="--h:70%"></span><span class="d" style="--h:55%"></span><span style="--h:45%"></span><span style="--h:60%"></span><span style="--h:70%"></span><span style="--h:78%"></span><span style="--h:82%"></span></div>
+        <small>registrado pelo app do paciente</small>
+      </div>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i><span>espacoser.mentez.com.br/agenda</span></div>
+        <img src="/img/agenda.webp" alt="Agenda semanal da Mentez com sessões coloridas por tipo e a lista de pacientes ao lado" width="1920" height="1200">
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="ticker" aria-hidden="true"><div class="track">
+  <ul><li>Agenda</li><li>Prontuário</li><li>Documentos do CFP</li><li>Teleconsulta</li><li>Atendente de IA no WhatsApp</li><li>Pix e cartão</li><li>NFS-e</li><li>Convênios</li><li>App do paciente</li><li>Escalas e exercícios</li><li>Painel da recepção</li><li>Cartão digital</li><li>Link na bio</li></ul>
+  <ul><li>Agenda</li><li>Prontuário</li><li>Documentos do CFP</li><li>Teleconsulta</li><li>Atendente de IA no WhatsApp</li><li>Pix e cartão</li><li>NFS-e</li><li>Convênios</li><li>App do paciente</li><li>Escalas e exercícios</li><li>Painel da recepção</li><li>Cartão digital</li><li>Link na bio</li></ul>
+</div></div>
+
+<!-- ============ UM DIA ============ -->
+<section class="pad">
+  <div class="wrap day">
+    <div class="side rv">
+      <span class="kick">Um dia com a Mentez</span>
+      <h2 class="h-l">A burocracia acontece <span class="s">sem você.</span></h2>
+      <p class="lede">O que antes era caderno, planilha, lembrete no celular e conversa perdida no WhatsApp vira um fluxo só. Você entra para atender — o resto anda sozinho.</p>
+      <p><a class="btn navy" href="https://app.mentez.com.br/criar-conta">Começar meu teste <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></p>
+    </div>
+    <ol class="tl" data-stagger>
+      <li><time>07:40</time><h3>Os lembretes já saíram.</h3><p>Cada paciente recebe a confirmação da sessão no WhatsApp ou por e-mail, e responde com um toque. Quem desmarca libera o horário para a lista de espera.</p><span class="chip"><i></i>4 de 5 sessões confirmadas</span></li>
+      <li><time>09:00</time><h3>Sessão on-line sem link de terceiros.</h3><p>Teleconsulta própria, aberta direto da agenda. O paciente entra pelo navegador, sem instalar nada.</p></li>
+      <li><time>09:52</time><h3>A evolução começa pronta.</h3><p>Com a autorização do paciente, a IA transcreve e sugere um rascunho da evolução. Você revisa, ajusta e assina — o prontuário fica visível só para quem escreveu.</p><span class="chip"><i></i>Rascunho pronto para revisar</span></li>
+      <li><time>12:31</time><h3>Alguém pediu horário no WhatsApp.</h3><p>O atendente virtual consulta a sua escala, oferece horários livres e agenda. Assuntos clínicos ou sinais de risco vão direto para você.</p></li>
+      <li><time>18:05</time><h3>O Pix caiu e a baixa foi feita.</h3><p>Cobrança por Pix, boleto ou cartão, recibo para a Receita Saúde e nota fiscal de serviço emitida no fechamento do mês.</p><span class="chip"><i></i>R$ 5.680 recebidos em novembro</span></li>
+      <li><time>21:10</time><h3>O paciente registrou como foi o dia.</h3><p>No app do paciente ficam as sessões, os pagamentos, os exercícios que você enviou e o check-in de humor — que chega até você em gráfico.</p></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ VITRINE ============ -->
+<section class="pad dark" id="vitrine">
+  <div class="wrap">
+    <div class="sec-head split">
+      <div style="display:grid;gap:22px"><span class="kick">Por dentro</span><h2 class="h-l">Telas de verdade, <span class="s">não promessa.</span></h2></div>
+      <p class="lede">Estas são as telas do sistema, com dados fictícios. Clara, rápida e com modo escuro para quem atende à noite.</p>
+    </div>
+    <div data-tabs>
+      <div class="tabs" role="tablist" aria-label="Partes do sistema">
+        <button role="tab" id="t1" aria-controls="p1" aria-selected="true">Painel</button>
+        <button role="tab" id="t2" aria-controls="p2" aria-selected="false" tabindex="-1">Ficha do paciente</button>
+        <button role="tab" id="t3" aria-controls="p3" aria-selected="false" tabindex="-1">Financeiro</button>
+        <button role="tab" id="t4" aria-controls="p4" aria-selected="false" tabindex="-1">Exercícios</button>
+        <button role="tab" id="t5" aria-controls="p5" aria-selected="false" tabindex="-1">Modo escuro</button>
+      </div>
+      <div class="panes">
+        <div class="pane on" id="p1" role="tabpanel" aria-labelledby="t1">
+          <div><h3>O dia inteiro numa olhada.</h3><ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Sessões, receita e comparecimento do mês</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Alertas do que precisa de você: exercícios respondidos, cobranças vencidas, sinais de risco</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Ocupação da escala da semana</li></ul></div>
+          <figure class="shot" style="margin:0"><img src="/img/inicio.webp" alt="Painel inicial com indicadores do mês, gráficos de receita e sessões e calendário" loading="lazy" width="1920" height="1200"></figure>
+        </div>
+        <div class="pane" id="p2" role="tabpanel" aria-labelledby="t2">
+          <div><h3>A história do paciente, organizada.</h3><ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Prontuário em linha do tempo, sessões, escalas e documentos</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Humor registrado pelo paciente, com aviso quando há sinal de risco</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Termos de consentimento assinados pelo WhatsApp ou e-mail</li></ul></div>
+          <figure class="shot" style="margin:0"><img src="/img/ficha.webp" alt="Ficha da paciente com a aba de humor e o gráfico dos check-ins diários" loading="lazy" width="1920" height="1200"></figure>
+        </div>
+        <div class="pane" id="p3" role="tabpanel" aria-labelledby="t3">
+          <div><h3>Dinheiro no lugar certo.</h3><ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Contas a receber por sessão, pacote ou mensalidade</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Conciliação com o extrato do banco e repasse por profissional</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Recibos para a Receita Saúde e NFS-e</li></ul></div>
+          <figure class="shot" style="margin:0"><img src="/img/financeiro.webp" alt="Tela do financeiro com recebimentos do mês" loading="lazy" width="1920" height="1200"></figure>
+        </div>
+        <div class="pane" id="p4" role="tabpanel" aria-labelledby="t4">
+          <div><h3>Tarefa entre sessões, com a sua marca.</h3><ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Biblioteca de técnicas clássicas para adaptar</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>O paciente preenche no celular; você vê as respostas em gráfico</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Folha para imprimir com o logo e as cores do consultório</li></ul></div>
+          <figure class="shot" style="margin:0"><img src="/img/biblioteca.webp" alt="Biblioteca de exercícios por categoria" loading="lazy" width="1920" height="1200"></figure>
+        </div>
+        <div class="pane" id="p5" role="tabpanel" aria-labelledby="t5">
+          <div><h3>Para quem atende até tarde.</h3><ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Modo escuro de verdade, em todas as telas</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Estilos visuais para escolher e a identidade do consultório</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Instala como aplicativo no computador e no celular</li></ul></div>
+          <figure class="shot" style="margin:0;background:#071936"><img src="/img/agenda-dark.webp" alt="Agenda da Mentez em modo escuro" loading="lazy" width="1920" height="1200"></figure>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MÓDULOS ============ -->
+<section class="pad" id="modulos">
+  <div class="wrap">
+    <div class="sec-head"><span class="kick">Módulos</span><h2 class="h-l">Um sistema. <span class="s">Doze ferramentas a menos.</span></h2><p class="lede">Ligue só o que faz sentido para a sua prática. Tudo conversa entre si: a sessão marcada vira cobrança, que vira recibo, que vira nota.</p></div>
+    <div class="bento" data-stagger>
+      <article class="cell w8 ink"><span class="n">01 · Agenda</span><h3>Uma agenda que entende psicologia.</h3><p>Sessões recorrentes, escala e bloqueios por profissional, lista de espera, férias e cores por tipo de atendimento. Arraste o paciente para o horário e pronto.</p><div class="tags"><span>Recorrência</span><span>Lista de espera</span><span>Google Agenda</span><span>Agendamento on-line</span></div></article>
+      <article class="cell tealc"><span class="n">02 · Atendente de IA</span><h3>Atende o WhatsApp por você.</h3><p>Agenda, remarca e cancela dentro das suas regras. Escolha o provedor de IA e tenha um de reserva.</p></article>
+      <article class="cell"><span class="n">03 · Prontuário</span><h3>Evolução, escalas e anexos.</h3><p>Linha do tempo por paciente, acesso só do autor e registro de quem abriu cada ficha.</p></article>
+      <article class="cell"><span class="n">04 · Documentos</span><h3>Os cinco documentos do CFP.</h3><p>Declaração, atestado, relatório, laudo e parecer, com assinatura digital ICP-Brasil.</p></article>
+      <article class="cell vio"><span class="n">05 · App do paciente</span><h3>O consultório no bolso do paciente.</h3><p>Sessões, pagamentos, exercícios e check-in de humor. Entra com o WhatsApp, sem senha.</p></article>
+      <article class="cell w6"><span class="n">06 · Financeiro</span><h3>Pix, cartão, recibo e nota.</h3><p>Cobrança automática, conciliação com o banco, repasse da clínica e emissão de NFS-e. Recibos prontos para a Receita Saúde.</p><div class="tags"><span>Pix</span><span>Boleto</span><span>Cartão</span><span>NFS-e</span><span>Repasses</span></div></article>
+      <article class="cell w6"><span class="n">07 · Convênios</span><h3>Do simples ao TISS.</h3><p>Carteirinhas, autorizações e o que cada operadora deve. No plano completo: lotes XML, glosas, recursos e webservice.</p><div class="tags"><span>Autorizações</span><span>TISS 4</span><span>Glosas</span></div></article>
+      <article class="cell w3"><span class="n">08 · Teleconsulta</span><h3>Sala on-line própria.</h3><p>Sem link de terceiros.</p></article>
+      <article class="cell w3"><span class="n">09 · Exercícios</span><h3>Tarefas entre sessões.</h3><p>Com a sua marca.</p></article>
+      <article class="cell w3"><span class="n">10 · Recepção</span><h3>Painel de chamada na TV.</h3><p>Fila e chegada do paciente.</p></article>
+      <article class="cell w3"><span class="n">11 · Marketing</span><h3>Cartão digital e link na bio.</h3><p>Com estatística de cliques.</p></article>
+      <article class="cell w8 ink"><span class="n">12 · CRM e relacionamento</span><h3>Ninguém fica esquecido.</h3><p>Funil de quem pediu informação, mensagem de aniversário, convite para quem parou de vir e pesquisa de satisfação — tudo dentro das normas de publicidade da psicologia.</p></article>
+      <article class="cell"><span class="n">+ Clínicas</span><h3>Salas e equipe.</h3><p>Locação de salas, perfis de acesso e repasse por profissional.</p></article>
+    </div>
+    <p style="margin-top:34px"><a class="btn navy" href="/recursos/">Ver todos os recursos <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></p>
+  </div>
+</section>
+
+<!-- ============ IA ============ -->
+<section class="pad paper2">
+  <div class="wrap ai">
+    <div class="rv">
+      <span class="kick">Inteligência artificial</span>
+      <h2 class="h-l" style="margin-top:22px">A IA escreve o rascunho. <span class="s">Quem assina é você.</span></h2>
+      <div class="rules">
+        <div><b>01</b><div><h3>Nada sai sem revisão.</h3><p>Evoluções, documentos e exercícios gerados por IA chegam como rascunho e só valem depois que um profissional revisa e aprova.</p></div></div>
+        <div><b>02</b><div><h3>O paciente não é identificado.</h3><p>Nome e CPF são trocados antes do envio. Gravação de sessão só com autorização registrada do paciente.</p></div></div>
+        <div><b>03</b><div><h3>Você escolhe a IA.</h3><p>Claude, OpenAI, Gemini, Groq e outros: um provedor principal e um de reserva, com a chave da clínica ou de cada profissional.</p></div></div>
+      </div>
+    </div>
+    <div class="doc rv" style="--d:120ms" role="img" aria-label="Exemplo de rascunho de evolução gerado por IA aguardando revisão">
+      <div class="lbl"><span>Evolução · sessão 12</span><em>Rascunho da IA</em></div>
+      <h4>Demanda e temas trazidos</h4>
+      <p><span class="pseudo">{paciente}</span> relata <mark>melhora no sono após manter horários regulares</mark> e retoma a ansiedade antes de reuniões de trabalho.</p>
+      <h4>Intervenções</h4>
+      <p>Revisão do registro de pensamentos da semana; reestruturação do pensamento “vou ser julgada”. Treino de respiração diafragmática.</p>
+      <h4>Encaminhamentos</h4>
+      <p>Manter o diário do sono; escada de exposição, degraus 1 e 2.</p>
+      <div class="act"><b>Revisar e assinar</b>editar antes<span>visível só para a autora</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PARA QUEM ============ -->
+<section class="pad" id="clinicas">
+  <div class="wrap">
+    <div class="sec-head"><span class="kick">Para quem</span><h2 class="h-l">Do primeiro paciente <span class="s">à clínica cheia.</span></h2></div>
+    <div class="who" data-stagger>
+      <article class="a">
+        <h3>Consultório individual</h3>
+        <p>Você atende, você organiza, você cobra. A Mentez tira o trabalho repetido do caminho.</p>
+        <ul><li>Agenda e lembretes automáticos no WhatsApp</li><li>Prontuário e documentos no padrão do CFP</li><li>Cobrança por Pix e recibo para a Receita Saúde</li><li>Cartão digital, link na bio e agendamento on-line</li><li>Funciona no celular, como aplicativo</li></ul>
+        <p><a class="btn navy" href="https://app.mentez.com.br/criar-conta">Começar sozinho(a)</a></p>
+      </article>
+      <article class="b">
+        <h3>Clínica com equipe</h3>
+        <p>Vários profissionais, salas e recepção — cada um vê só o que deve ver.</p>
+        <ul><li>Escala, salas e agenda por profissional</li><li>Perfis de acesso: administração, financeiro, recepção</li><li>Repasses, conciliação bancária e NFS-e</li><li>Painel de chamada na TV da recepção</li><li>Domínio próprio com a identidade da clínica</li></ul>
+        <p><a class="btn" href="/precos/">Ver o plano Clínica</a></p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SEGURANÇA ============ -->
+<section class="pad dark">
+  <div class="wrap">
+    <div class="sec-head split">
+      <div style="display:grid;gap:22px"><span class="kick">Segurança e ética</span><h2 class="h-l">Sigilo não é recurso. <span class="s">É o básico.</span></h2></div>
+      <p class="lede">Dado de saúde pede cuidado redobrado. Por isso a proteção vem ligada desde o primeiro acesso, sem configuração.</p>
+    </div>
+    <div class="sec-grid" data-stagger>
+      <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><h3>Criptografia AES-256</h3><p>Evoluções, documentos e anotações ficam cifrados no banco de dados.</p></div>
+      <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><h3>Prontuário do autor</h3><p>Só quem escreveu lê a evolução. Nem a administração da clínica abre.</p></div>
+      <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><h3>Assinatura ICP-Brasil</h3><p>Documentos assinados com certificado digital, com validade jurídica.</p></div>
+      <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><h3>Registro de acessos</h3><p>Cada abertura de ficha, documento ou envio fica registrada.</p></div>
+      <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a5 5 0 0 1-.6-9.96A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/><path d="M12 12v6M9.5 15.5L12 18l2.5-2.5"/></svg><h3>Backup no seu Google Drive</h3><p>Cópia cifrada automática numa conta que é sua.</p></div>
+      <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg><h3>LGPD de ponta a ponta</h3><p>Termos de consentimento, política de privacidade e exportação dos dados do paciente.</p></div>
+    </div>
+    <p style="margin-top:34px"><a class="btn line" href="/seguranca/">Como protegemos os dados</a></p>
+  </div>
+</section>
+
+<!-- ============ COMEÇAR ============ -->
+<section class="pad">
+  <div class="wrap">
+    <div class="sec-head"><span class="kick">Primeiros passos</span><h2 class="h-l">Pronto antes <span class="s">do próximo paciente.</span></h2></div>
+    <ol class="steps" data-stagger>
+      <li><h3>Crie a conta</h3><p>Nome, e-mail e CRP. Em dois minutos o consultório tem endereço próprio na Mentez.</p></li>
+      <li><h3>Monte a escala</h3><p>Dias, horários, valores e modalidade. Cadastre os pacientes ou comece pela agenda.</p></li>
+      <li><h3>Conecte o WhatsApp</h3><p>Leia um QR code com o celular do consultório e os lembretes e o atendente começam a trabalhar.</p></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ PREÇOS ============ -->
+<section class="pad paper2" id="precos">
+  <div class="wrap">
+    <div class="sec-head split">
+      <div style="display:grid;gap:22px"><span class="kick">Preços</span><h2 class="h-l">Simples, <span class="s">sem letra miúda.</span></h2></div>
+      <p class="lede">Todos os planos começam com 14 dias grátis, com os recursos do Profissional. Sem fidelidade.</p>
+    </div>
+    <div class="plans" data-stagger>
+      <article class="plan"><h3>Essencial</h3><p class="for">Para começar a organizar o consultório.</p><div class="price"><small>R$</small><b>79</b><small>/mês</small></div>
+        <ul><li>1 profissional</li><li>Agenda, prontuário e documentos</li><li>Financeiro e recibos</li><li>Lembretes automáticos</li><li>App do paciente</li></ul>
+        <a class="btn line" href="https://app.mentez.com.br/criar-conta">Testar grátis</a></article>
+      <article class="plan hot"><span class="tag">Mais escolhido</span><h3>Profissional</h3><p class="for">Tudo para quem atende sozinho.</p><div class="price"><small>R$</small><b>129</b><small>/mês</small></div>
+        <ul><li>Tudo do Essencial</li><li>Atendente de IA no WhatsApp</li><li>IA na sessão e escrita de documentos</li><li>Teleconsulta própria</li><li>NFS-e e convênios</li><li>Sua marca e domínio próprio</li></ul>
+        <a class="btn" href="https://app.mentez.com.br/criar-conta">Testar grátis</a></article>
+      <article class="plan"><h3>Clínica</h3><p class="for">Para equipes, salas e recepção.</p><div class="price"><small>R$</small><b>249</b><small>/mês</small></div>
+        <ul><li>Até 5 profissionais</li><li>Tudo do Profissional</li><li>Painel de chamada na TV</li><li>Locação de salas e repasses</li><li>Profissional extra: R$ 39/mês</li></ul>
+        <a class="btn line" href="https://app.mentez.com.br/criar-conta">Testar grátis</a></article>
+    </div>
+    <p class="plan-foot">Custos de provedores externos, como a IA e o envio de SMS, são cobrados por eles. <a href="/precos/">Comparar planos em detalhe →</a></p>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="pad">
+  <div class="wrap faq">
+    <div style="display:grid;gap:22px;align-content:start"><span class="kick">Perguntas</span><h2 class="h-l">Antes de <span class="s">começar.</span></h2><p class="lede">Não achou a sua? Crie a conta e fale com a gente por dentro do sistema.</p></div>
+    <div>
+      <details><summary>Preciso instalar alguma coisa?</summary><p>Não. A Mentez funciona no navegador do computador, do tablet e do celular, e pode ser instalada como aplicativo com um toque. O paciente também não instala nada.</p></details>
+      <details><summary>Como fica o sigilo do prontuário?</summary><p>As evoluções e os documentos ficam cifrados (AES-256) e só o profissional que escreveu consegue ler. Toda abertura de ficha fica registrada. Veja os detalhes na página de segurança.</p></details>
+      <details><summary>O atendente de IA conversa sobre assuntos clínicos?</summary><p>Não. Ele informa, agenda, remarca e cancela dentro das regras que você definir. Qualquer assunto clínico ou sinal de risco é transferido para você, com aviso no celular, e a mensagem de emergência (CVV 188 e SAMU 192) aparece na hora.</p></details>
+      <details><summary>Posso usar o WhatsApp que já uso hoje?</summary><p>Sim. Basta ler um QR code com o celular do consultório. As conversas continuam no seu aparelho, e você pode responder manualmente quando quiser — o atendente pausa sozinho.</p></details>
+      <details><summary>Atende convênios?</summary><p>Sim. Há um módulo simples, para controlar carteirinhas, autorizações e o que cada operadora deve, e um módulo integrado, com guias TISS, lotes XML, glosas, recursos e webservice das operadoras.</p></details>
+      <details><summary>E se eu quiser cancelar?</summary><p>Cancele quando quiser, sem multa. Os seus dados continuam guardados e você pode exportá-los.</p></details>
+      <details><summary>Serve para clínica com vários profissionais?</summary><p>Sim. O plano Clínica inclui até 5 profissionais, com perfis de acesso, salas, repasses e painel de chamada; dá para adicionar mais profissionais quando precisar.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHAMADA FINAL ============ -->
+<section class="pad final">
+  <div class="wrap">
+    <span class="kick">Mentez</span>
+    <h2 class="h-xl" style="margin-top:26px">Cuide de quem você atende. <span class="s">A gente cuida do resto.</span></h2>
+    <div class="row">
+      <p class="lede">14 dias com tudo liberado. Sem cartão, sem instalação, sem compromisso.</p>
+      <a class="btn big" href="https://app.mentez.com.br/criar-conta">Criar minha conta grátis <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="rule"></div>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="cols">
+      <div><a class="brand" href="/"><img src="/img/simbolo-claro.png" alt="" width="34" height="34">mentez</a><p>Inteligência para cuidar de quem cuida. Sistema de gestão para psicólogos e clínicas de psicologia.</p></div>
+      <div><h4>Produto</h4><ul><li><a href="/recursos/">Recursos</a></li><li><a href="/precos/">Preços</a></li><li><a href="/seguranca/">Segurança</a></li><li><a href="/clinicas/">Para clínicas</a></li></ul></div>
+      <div><h4>Conta</h4><ul><li><a href="https://app.mentez.com.br/criar-conta">Criar conta</a></li><li><a href="https://app.mentez.com.br/inicio">Entrar</a></li></ul></div>
+      <div><h4>Legal</h4><ul><li><a href="https://app.mentez.com.br/termos-de-uso">Termos de uso</a></li><li><a href="https://app.mentez.com.br/privacidade">Privacidade</a></li></ul></div>
+    </div>
+    <div class="legal"><span>© <span data-year>2026</span> Mentez. Feito no Brasil.</span><span>Em crise? CVV 188 · SAMU 192</span></div>
+  </div>
+</footer>
+<script src="/assets/site.js?v=1" defer></script>
+</body>
+</html>
