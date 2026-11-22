@@ -199,7 +199,7 @@ async function notifyTeam(id, kind) {
   const what = { novo: 'Novo chamado', resposta: 'A clínica respondeu', reaberto: 'Chamado reaberto' }[kind] || 'Chamado';
   const text = `${what} ${code(id)} — ${tk.tenant_name || 'clínica'}\n${CATEGORIES[tk.category]} · prioridade ${PRIORITY_SHORT[tk.priority]}\nAssunto: ${tk.subject}\nAberto por: ${tk.user_name || '—'}`;
   if (c.notifyEmail) await PlatComm.mailSend(c.notifyEmail, `[Chamado ${code(id)}] ${tk.subject} — ${tk.tenant_name || ''}`, text, { label: 'Abrir no painel', url: `${PANEL()}/chamados/${id}` }).catch((e) => console.error('chamados (e-mail):', e.message));
-  if (c.notifyPhone && (kind === 'novo' || tk.priority !== 'normal')) await PlatComm.waSend(c.notifyPhone, `${text}\n\n${PANEL()}/chamados/${id}`).catch((e) => console.error('chamados (WhatsApp):', e.message));
+  if (c.notifyPhone && (kind === 'novo' || tk.priority !== 'normal')) await PlatComm.waSend(c.notifyPhone, `${text}\n\n${PANEL()}/chamados/${id}`, { kind: 'equipe' }).catch((e) => console.error('chamados (WhatsApp):', e.message));
 }
 async function notifyClient(id, text, { whatsapp } = {}) {
   const tk = await get(id); if (!tk) return [];
@@ -209,7 +209,7 @@ async function notifyClient(id, text, { whatsapp } = {}) {
   const msg = `Olá, ${first}! A equipe Mentez respondeu o seu chamado ${code(id)} — “${tk.subject}”:\n\n${short}`;
   const out = [];
   if (tk.user_email) { try { await PlatComm.mailSend(tk.user_email, `Mentez — resposta ao chamado ${code(id)}: ${tk.subject}`, `${msg}\n\nPara responder, abra o chamado no sistema.`, { label: 'Ver e responder', url }); out.push('e-mail'); } catch (e) { console.error('chamados (e-mail cliente):', e.message); } }
-  if (whatsapp && tk.user_phone) { try { await PlatComm.waSend(tk.user_phone, `${msg}\n\nPara responder: ${url}`); out.push('WhatsApp'); } catch (e) { console.error('chamados (WhatsApp cliente):', e.message); } }
+  if (whatsapp && tk.user_phone) { try { await PlatComm.waSend(tk.user_phone, `${msg}\n\nPara responder: ${url}`, { kind: 'chamado', tenantId: tk.tenant_id }); out.push('WhatsApp'); } catch (e) { console.error('chamados (WhatsApp cliente):', e.message); } }
   return out;
 }
 

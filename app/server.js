@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import * as Tenancy from './lib/tenancy.js';
 import express from 'express';
 import path from 'node:path';
@@ -14,6 +15,8 @@ import { ROLES } from './lib/perm.js';
 import { referralSettings } from './routes/referral.js';
 import { support } from './routes/support.js';
 import * as Tickets from './lib/tickets.js';
+import * as PlatComm from './lib/platcomm.js';
+import * as PlatCRM from './lib/platcrm.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
@@ -125,6 +128,14 @@ app.get('/_mentez/tls', (req, res, next) => {
   Tenancy.allowCertificate(req.query.domain).then((ok) => res.sendStatus(ok ? 200 : 404), () => res.sendStatus(404));
 });
 app.get('/_mentez/saude', (_req, res) => res.json({ ok: true })); // verificação do contêiner
+// WhatsApp da Mentez (instância da plataforma): mensagens recebidas → conversas no Painel. Só pela rede interna.
+app.post('/_mentez/plataforma/whatsapp/:secret', express.json({ limit: '5mb' }), async (req, res) => {
+  if (!Tenancy.multi() || req.get('x-forwarded-for')) return res.sendStatus(404);
+  const want = await PlatComm.hookSecret().catch(() => '');
+  const got = String(req.params.secret || '');
+  if (!want || got.length !== want.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want))) return res.sendStatus(404);
+  try { res.json(await PlatCRM.handleWebhook(req.body, PlatComm.INSTANCE)); } catch (e) { console.error('whatsapp mentez (recebida):', e.message); res.status(500).json({ ok: false }); }
+});
 // Chamadas internas da Evolution (rede do Docker): /_mentez/t/<clínica>/webhooks/... → a clínica pelo caminho,
 // porque o Host interno (app:3000) não identifica a clínica. Só sem passar pelo proxy (sem X-Forwarded-For).
 app.use((req, res, next) => {

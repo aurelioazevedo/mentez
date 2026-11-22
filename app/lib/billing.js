@@ -415,7 +415,7 @@ async function notifyDiscount(row, pct, paying, plan) {
   const first = String(row.owner_name || '').split(' ')[0] || 'tudo bem';
   const value = plan ? ` Sua mensalidade passa a ser R$ ${charge(plan, row).toFixed(2).replace('.', ',')}.` : '';
   const text = `Olá, ${first}! Boa notícia da Mentez: ${paying === 1 ? 'uma clínica que você indicou já é assinante' : `${paying} clínicas que você indicou são assinantes`}. Seu desconto agora é de ${pct}%.${value}\n\nObrigado por indicar a Mentez!`;
-  if (row.owner_phone) await PlatComm.waSend(row.owner_phone, text).catch(() => {});
+  if (row.owner_phone) await PlatComm.waSend(row.owner_phone, text, { kind: 'indicacao', tenantId: row.id }).catch(() => {});
   if (row.owner_email) await PlatComm.mailSend(row.owner_email, `Mentez — seu desconto por indicação agora é ${pct}%`, text).catch(() => {});
 }
 async function refreshReferrerOf(id) {

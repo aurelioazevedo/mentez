@@ -3,7 +3,9 @@
 // Configuração no banco da plataforma; senha do SMTP selada com a chave mestra. A instância usa a chave geral da Evolution.
 import nodemailer from 'nodemailer';
 import * as T from './tenancy.js';
+import crypto from 'node:crypto';
 import * as Evolution from './evolution.js';
+import * as PlatCRM from './platcrm.js';
 
 export const INSTANCE = 'mentez-plataforma';
 async function getS(k) { return (await T.pone('SELECT v FROM platform_settings WHERE k = ?', [k]))?.v || null; }
@@ -23,6 +25,7 @@ export async function waStatus() {
 export async function waCreate() {
   const i = (await Evolution.listAll()).get(INSTANCE);
   if (!i) await Evolution.api('POST', '/instance/create', { instanceName: INSTANCE, integration: 'WHATSAPP-BAILEYS', qrcode: true, rejectCall: true, groupsIgnore: true, alwaysOnline: false, readMessages: false, syncFullHistory: false });
+  await ensureWebhook(true).catch((e) => console.error('whatsapp mentez (webhook):', e.message));
   return { created: !i };
 }
 // QR code (data URL) de uma instância qualquer da Evolution da Mentez (a da plataforma ou a de uma clínica)
@@ -35,11 +38,33 @@ export async function stateOf(instance) {
   try { return (await Evolution.api('GET', `/instance/connectionState/${encodeURIComponent(instance)}`)).instance?.state || 'desconhecido'; } catch (e) { return `erro: ${e.message}`; }
 }
 export async function waLogout() { await Evolution.api('DELETE', `/instance/logout/${INSTANCE}`); }
-export async function waSend(phone, text) {
+// Envio pelo WhatsApp da Mentez. Tudo o que sai fica registrado na conversa com a clínica (Painel → Conversas).
+export async function waSend(phone, text, { kind = 'aviso', author = null, tenantId = null } = {}) {
   const number = waNumber(phone);
   if (!number) throw new Error('Celular inválido.');
-  if ((await stateOf(INSTANCE)) !== 'open') throw new Error('O WhatsApp da Mentez não está conectado (Painel → Comunicação).');
-  return Evolution.api('POST', `/message/sendText/${INSTANCE}`, { number, text });
+  if ((await stateOf(INSTANCE)) !== 'open') throw new Error('O WhatsApp da Mentez não está conectado (Painel → WhatsApp e e-mail).');
+  try {
+    const r = await Evolution.api('POST', `/message/sendText/${INSTANCE}`, { number, text });
+    await PlatCRM.logOut({ phone: number, text, kind, author, tenantId, waId: r?.key?.id || null }).catch((e) => console.error('conversas mentez:', e.message));
+    return r;
+  } catch (e) {
+    await PlatCRM.logOut({ phone: number, text, kind, author, tenantId, status: 'erro', error: e.message }).catch(() => {});
+    throw e;
+  }
+}
+// Recebimento: a Evolution avisa o app (rede interna) a cada mensagem da instância da Mentez
+const internalUrl = () => String(process.env.MENTEZ_INTERNAL_URL || 'http://app:3000').replace(/\/+$/, '');
+export async function hookSecret() {
+  let s = await getS('plat_wa_hook');
+  if (!s) { s = crypto.randomBytes(24).toString('base64url'); await setS('plat_wa_hook', s); }
+  return s;
+}
+let hookOk = 0;
+export async function ensureWebhook(force = false) {
+  if (!waEnabled() || (!force && Date.now() - hookOk < 6 * 3600e3)) return;
+  const url = `${internalUrl()}/_mentez/plataforma/whatsapp/${await hookSecret()}`;
+  await Evolution.api('POST', `/webhook/set/${INSTANCE}`, { webhook: { enabled: true, url, events: ['MESSAGES_UPSERT'], byEvents: false, base64: false } });
+  hookOk = Date.now();
 }
 
 // ---------- e-mail (SMTP da Mentez) ----------

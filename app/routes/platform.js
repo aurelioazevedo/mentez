@@ -22,6 +22,8 @@ import * as Referral from '../lib/referral.js';
 import * as AISlot from '../lib/aislot.js';
 import { mount as mountSignup } from './signup.js';
 import { mount as mountTickets } from './platform-tickets.js';
+import { mount as mountCRM, clinicTabs, pinnedBox } from './platform-crm.js';
+import * as PlatCRM from '../lib/platcrm.js';
 import * as Tickets from '../lib/tickets.js';
 import { money } from '../lib/html.js';
 
@@ -98,6 +100,7 @@ const ICON = {
   planos: SV('<path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/>'),
   cobranca: SV('<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>'),
   presente: SV('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v9H5v-9M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>'),
+  conversas: SV('<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z"/><path d="M8.5 10.5h7M8.5 13.5h4.5"/>'),
   chamados: SV('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12.5h5"/>'),
   historico: SV('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'),
   sair: SV('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3"/>'),
@@ -110,7 +113,7 @@ const ICON = {
   equipe: SV('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3.2 3-5 5.5-5s4.7 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.4.2 4.2 1.9 5 4.8"/>'),
 };
 const MENU = [
-  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec'], ['/chamados', 'Chamados', 'chamados', 'chamados']]],
+  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec'], ['/chamados', 'Chamados', 'chamados', 'chamados'], ['/conversas', 'Conversas', 'conversas', 'conversas']]],
   ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/indicacoes', 'Indicações', 'presente'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
@@ -139,7 +142,8 @@ async function menuCounts() {
   if (Date.now() - counts.at < 30e3) return counts.v;
   const all = await T.all();
   const tk = await Tickets.teamCounts().catch(() => ({ novos: 0 }));
-  const v = { chamados: tk.novos, clinicas: all.length, testes: all.filter((t) => Billing.accessOf(t).state === 'teste').length, alertasRec: [...resCache.values()].filter((e) => Object.values(e.v || {}).some((x) => x?.tone === 'err')).length };
+  const cv = await PlatCRM.unreadTotal().catch(() => 0);
+  const v = { conversas: cv, chamados: tk.novos, clinicas: all.length, testes: all.filter((t) => Billing.accessOf(t).state === 'teste').length, alertasRec: [...resCache.values()].filter((e) => Object.values(e.v || {}).some((x) => x?.tone === 'err')).length };
   counts = { at: Date.now(), v }; return v;
 }
 function activeOf(path) {
@@ -189,6 +193,7 @@ const need = (req, res, next) => {
 };
 mountSignup(handle, layout);
 mountTickets(handle, { need, layout, log });
+mountCRM(handle, { need, layout, log, tenantOf: (req) => tenantOf(req) });
 handle.get('/inicio', (req, res) => (req.admin ? res.redirect('/') : send(res, layout(req, 'Mentez', html`<section class="card mzp-auth mzp-choose"><h1>Bem-vindo à Mentez</h1>
   <form method="get" action="/ir" class="stack"><label class="fld"><span>Entrar na minha clínica</span><span class="mzp-slug"><input name="c" required placeholder="suaclinica" pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]" autocomplete="off"><small>.${T.baseDomain()}</small></span></label><button class="btn">Ir para a minha clínica</button></form>
   <p class="mzp-or">ou</p><a class="btn ghost" href="/criar-conta">Criar conta grátis</a>
@@ -493,6 +498,7 @@ handle.get('/clinicas/:id', need, async (req, res, next) => {
   send(res, layout(req, t.name, html`<header class="ph"><div><p class="eyebrow">Clínica · <span class="badge b-${STATUS[t.status][0]}">${STATUS[t.status][1]}</span></p><h1>${t.name}</h1>
       <p class="muted"><a href="${t.env.PUBLIC_URL}" target="_blank" rel="noopener">${t.env.PUBLIC_URL}</a> · plano ${t.plan} · criada em ${brDate(row.created_at)}</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/clinicas">Voltar</a></div></header>
+    ${await clinicTabs(t.id, '')}${await pinnedBox(t.id)}
     <section class="kpis small"><div class="kpi"><span>Usuários ativos</span><b>${u?.users ?? '—'}</b></div><div class="kpi"><span>Pacientes ativos</span><b>${u?.patients ?? '—'}</b></div><div class="kpi"><span>Sessões (30 dias)</span><b>${u?.sessions30 ?? '—'}</b></div><div class="kpi"><span>Último acesso</span><b>${u?.lastLogin ? brDateTime(u.lastLogin) : '—'}</b></div></section>
     ${invite ? html`<div class="flash ok">Convite de primeiro acesso (uso único — envie ao responsável por um canal privado): <input readonly value="${invite}" id="inv" class="mono"> <button type="button" class="chip" data-copy="#inv">Copiar</button></div>` : ''}
     <div class="grid2">
@@ -632,7 +638,7 @@ async function sendBilling(t, link, { phone, email, via }) {
   const body = `Olá, ${first}! Aqui é da Mentez.\n\nA assinatura da clínica ${t.name}${plan ? ` — plano ${plan.name}, ${value}` : ''} — está disponível.`;
   const out = [];
   if (via === 'whatsapp' || via === 'ambos') {
-    try { await PlatComm.waSend(phone, `${body}\n\n${action}\n${link.url}\n\nQualquer dúvida, é só responder aqui ou escrever para ${contact}.`); out.push('WhatsApp enviado'); } catch (e) { out.push(`WhatsApp não enviado: ${e.message}`); }
+    try { await PlatComm.waSend(phone, `${body}\n\n${action}\n${link.url}\n\nQualquer dúvida, é só responder aqui ou escrever para ${contact}.`, { kind: 'cobranca', tenantId: t.id }); out.push('WhatsApp enviado'); } catch (e) { out.push(`WhatsApp não enviado: ${e.message}`); }
   }
   if (via === 'email' || via === 'ambos') {
     try { await PlatComm.mailSend(email, `Mentez — assinatura da clínica ${t.name}`, `${body}\n\n${action}\n\nQualquer dúvida, responda este e-mail ou escreva para ${contact}.`, { label: link.kind === 'autorizar' ? 'Autorizar no Mercado Pago' : 'Pagar a mensalidade', url: link.url }); out.push('e-mail enviado'); } catch (e) { out.push(`e-mail não enviado: ${e.message}`); }
@@ -725,6 +731,7 @@ async function qrPage({ title, instance, back, hint }) {
 }
 handle.get('/comunicacao', need, async (req, res) => {
   const wa = await PlatComm.waStatus().catch((e) => ({ state: `erro: ${e.message}` }));
+  if (wa.state === 'open') PlatComm.ensureWebhook().catch((e) => console.error('whatsapp mentez (webhook):', e.message)); // mensagens recebidas → Conversas
   const m = await PlatComm.mailConfig();
   const sel = (a2, b2) => (a2 === b2 ? raw('selected') : '');
   send(res, layout(req, 'WhatsApp e e-mail', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>WhatsApp e e-mail da Mentez</h1><p class="muted">Canais da própria Mentez para falar com as clínicas: cobrança, avisos e relacionamento. Independentes do WhatsApp de cada clínica.</p></div></header>
@@ -759,7 +766,7 @@ handle.post('/comunicacao/whatsapp/sair', need, async (req, res) => {
   res.redirect('/comunicacao');
 });
 handle.post('/comunicacao/whatsapp/teste', need, async (req, res) => {
-  try { await PlatComm.waSend(req.body.phone, 'Teste do WhatsApp da Mentez ✅'); res.flash('Mensagem de teste enviada.'); } catch (e) { res.flash(e.message, 'err'); }
+  try { await PlatComm.waSend(req.body.phone, 'Teste do WhatsApp da Mentez ✅', { kind: 'teste', author: req.admin.name }); res.flash('Mensagem de teste enviada.'); } catch (e) { res.flash(e.message, 'err'); }
   res.redirect('/comunicacao');
 });
 handle.post('/comunicacao/email', need, async (req, res) => {

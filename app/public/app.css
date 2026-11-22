@@ -2666,3 +2666,26 @@ tr.tk-unread td { font-weight: 600; }
 .tk-filters .fld { margin: 0; min-width: 150px; }
 .tk-pri-urgente { color: #b3261e; font-weight: 700; } .tk-pri-alta { color: #a15c00; font-weight: 600; }
 @media (max-width: 980px) { .tk-wrap { grid-template-columns: 1fr; } .tk-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Painel: ficha da clínica (abas, anotações, conversa) e caixa de entrada */
+.pc-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
+.pc-tabs a { padding: 10px 14px; border-radius: 10px 10px 0 0; color: var(--muted); text-decoration: none; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.pc-tabs a:hover { color: var(--ink); }
+.pc-tabs a.on { color: var(--accent, #04857E); border-bottom-color: var(--accent, #04857E); }
+.pc-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--err, #c0392b); color: #fff; font: 700 11px/1 var(--sans); font-style: normal; }
+.pc-pinned { display: grid; gap: 8px; margin: 0 0 16px; padding: 12px 16px; border-radius: 14px; background: rgba(255, 196, 0, .12); border: 1px solid rgba(255, 196, 0, .35); }
+.pc-pinned p { margin: 2px 0 0; white-space: pre-wrap; }
+.pc-notes { display: grid; gap: 12px; }
+.pc-note header { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; } .pc-note header time { color: var(--muted); }
+.pc-note p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; line-height: 1.55; }
+.pc-note footer { display: flex; gap: 14px; } .pc-note footer form { margin: 0; } .pc-note footer .link { padding: 0; border: 0; background: none; cursor: pointer; color: var(--accent, #04857E); }
+.pc-note.pin { border-color: rgba(255, 196, 0, .5); }
+.pc-chat .chat-body { min-height: 360px; max-height: 62vh; }
+.pc-to { max-width: 170px; }
+.pc-inbox { list-style: none; margin: 0; padding: 0; }
+.pc-inbox li a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
+.pc-inbox li a:hover { background: var(--surface-2, rgba(0, 0, 0, .02)); }
+.pc-in-main { display: flex; flex-direction: column; min-width: 0; } .pc-in-main small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-in-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; } .pc-in-side time { font-size: 12px; color: var(--muted); }
+.pc-inbox li.unread b { color: var(--ink); } .pc-inbox li.unread .pc-in-main small { color: var(--ink); font-weight: 600; }
+.pc-form h2 { margin: 10px 0 0; font-size: 16px; }
