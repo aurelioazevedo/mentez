@@ -1,7 +1,12 @@
 // Service worker: recebe notificações push do sistema do consultório.
 // Não guarda páginas em cache (dados sensíveis); só exibe as notificações.
-self.addEventListener('install', () => self.skipWaiting());
+// Página “sem internet” da clínica (com logo e cores dela), guardada para quando a conexão cair
+const OFF = 'mz-offline-v1';
+const saveOffline = () => caches.open(OFF).then((c) => c.add(new Request('/offline', { cache: 'no-store' }))).catch(() => {});
+self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(saveOffline()); });
+self.addEventListener('message', (e) => { if (e.data === 'mz-offline-refresh') e.waitUntil(saveOffline()); });
 self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  await saveOffline();
   // a página começa a ser baixada enquanto o service worker acorda (troca de tela mais rápida, sobretudo no iPhone)
   if (self.registration.navigationPreload) await self.registration.navigationPreload.enable().catch(() => {});
   await self.clients.claim();
@@ -42,6 +47,9 @@ const OFFLINE = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><
 self.addEventListener('fetch', (event) => {
   if (event.request.mode !== 'navigate') return;
   event.respondWith((async () => {
-    try { return (await event.preloadResponse) || (await fetch(event.request)); } catch { return new Response(OFFLINE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }); }
+    try { return (await event.preloadResponse) || (await fetch(event.request)); } catch {
+      const saved = await caches.match('/offline', { cacheName: OFF }).catch(() => null);
+      return saved || new Response(OFFLINE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }
   })());
 });

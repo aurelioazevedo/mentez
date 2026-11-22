@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import * as T from './tenancy.js';
 import * as Referral from './referral.js';
 import * as PlatComm from './platcomm.js';
+import * as PlatPush from './platpush.js';
 
 export const FEATURES = {
   teleconsulta: 'Teleconsulta própria', ia_sessao: 'IA na sessão (transcrição e rascunho)', atendente: 'Atendente virtual no WhatsApp',
@@ -304,9 +305,11 @@ export async function handleEvent(ev) {
   catch (e) { if (/Duplicate/.test(e.message)) return { duplicate: true }; throw e; }
   if (!t) return { ignored: true };
   if (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(ev.event) || PAID.includes(p.status)) {
+    if (!String(ev.dateCreated || '').startsWith('conferencia')) PlatPush.notify('pagamentos', { title: '💰 Mensalidade paga', body: `${t.name}${p.value ? ` · R$ ${Number(p.value).toFixed(2).replace('.', ',')}` : ''}`, url: `/clinicas/${t.id}` });
     const until = addMonth(p.dueDate || today());
     await T.pq("UPDATE tenants SET billing_status = 'ativa', overdue_since = NULL, paid_until = GREATEST(COALESCE(paid_until, '1970-01-01'), ?) WHERE id = ?", [until, t.id]);
   } else if (ev.event === 'PAYMENT_OVERDUE') {
+    if (t.billing_status !== 'atrasada') PlatPush.notify('pagamentos', { title: '⚠ Mensalidade em atraso', body: t.name, url: `/clinicas/${t.id}` });
     await T.pq("UPDATE tenants SET billing_status = IF(billing_status = 'cortesia', billing_status, 'atrasada'), overdue_since = COALESCE(overdue_since, ?) WHERE id = ?", [p.dueDate || today(), t.id]);
   } else if (['SUBSCRIPTION_DELETED', 'SUBSCRIPTION_INACTIVATED'].includes(ev.event)) {
     await T.pq("UPDATE tenants SET billing_status = IF(billing_status = 'cortesia', billing_status, 'cancelada'), asaas_subscription = NULL WHERE id = ?", [t.id]);
@@ -346,6 +349,7 @@ export async function handleMercadoPago(type, id) {
     who = t;
     const due = String(ap.debit_date || ap.date_created || today()).slice(0, 10);
     if (!(await log(t, 'MP_AUTHORIZED_PAYMENT', st, ap.transaction_amount, due)) || !t) return { ignored: !t };
+    if (st === 'approved') PlatPush.notify('pagamentos', { title: '💰 Mensalidade paga (Mercado Pago)', body: `${t.slug}${ap.transaction_amount ? ` · R$ ${Number(ap.transaction_amount).toFixed(2).replace('.', ',')}` : ''}`, url: `/clinicas/${t.id}` });
     if (st === 'approved') await T.pq("UPDATE tenants SET billing_status = 'ativa', overdue_since = NULL, paid_until = GREATEST(COALESCE(paid_until, '1970-01-01'), ?) WHERE id = ?", [addMonth(due), t.id]);
     else if (st === 'rejected') await T.pq("UPDATE tenants SET billing_status = IF(billing_status = 'cortesia', billing_status, 'atrasada'), overdue_since = COALESCE(overdue_since, ?) WHERE id = ?", [due, t.id]);
   } else if (type === 'subscription_preapproval') {

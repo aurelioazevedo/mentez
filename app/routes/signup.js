@@ -7,6 +7,7 @@ import * as T from '../lib/tenancy.js';
 import * as Evolution from '../lib/evolution.js';
 import * as Billing from '../lib/billing.js';
 import * as Referral from '../lib/referral.js';
+import * as PlatPush from '../lib/platpush.js';
 import { parseCookies } from '../lib/auth.js';
 import * as Brand from '../lib/brand.js';
 import { q, one, migrate, audit } from '../lib/db.js';
@@ -179,6 +180,7 @@ export function mount(r, layout) {
       return r2.insertId;
     });
     await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', [d.email, 'cadastro-teste', t.id, `${d.slug} · CRP ${d.crp}`]);
+    PlatPush.notify('cadastros', { title: 'Nova clínica em teste grátis', body: `${d.clinic} · ${d.name}${b.ref ? ' (por indicação)' : ''}`, url: `/clinicas/${t.id}` });
     Evolution.provisionLater(t, `cadastro:${d.email}`); // instância do WhatsApp: a clínica lê o QR code no primeiro acesso
     const scheme = req.protocol === 'http' && process.env.NODE_ENV !== 'production' ? 'http' : 'https';
     const host = new URL(t.env.PUBLIC_URL).host + (scheme === 'http' && req.get('host')?.includes(':') ? `:${req.get('host').split(':')[1]}` : '');

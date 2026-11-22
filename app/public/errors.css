@@ -1,0 +1,44 @@
+/* Páginas de erro (404): Mentez (com o mascote) e clínicas (estilo de cada clínica) */
+.e4-body { margin: 0; background: #071936; }
+.e4-mz { --teal: #07C6BC; --violet: #8065E8; position: relative; isolation: isolate; overflow: hidden; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 90px clamp(16px, 4vw, 40px) 40px; color: #F5F7FC; font: 400 17px/1.6 'Plus Jakarta Sans', system-ui, sans-serif; }
+.e4-bg { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.e4-orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .45; mix-blend-mode: screen; }
+.e4-orb.o1 { width: 440px; height: 440px; background: #07C6BC; top: -140px; left: 10%; animation: e4d1 24s ease-in-out infinite alternate; }
+.e4-orb.o2 { width: 420px; height: 420px; background: #8065E8; bottom: -160px; right: -60px; animation: e4d2 30s ease-in-out infinite alternate; }
+.e4-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(245, 247, 252, .05) 1px, transparent 1px), linear-gradient(90deg, rgba(245, 247, 252, .05) 1px, transparent 1px); background-size: 56px 56px; mask-image: radial-gradient(ellipse at 50% 40%, #000 15%, transparent 70%); -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 15%, transparent 70%); }
+@keyframes e4d1 { to { transform: translate(120px, 80px) scale(1.15); } }
+@keyframes e4d2 { to { transform: translate(-140px, -60px) scale(.9); } }
+.e4-brand { position: absolute; top: 22px; left: clamp(16px, 4vw, 40px); display: inline-flex; align-items: center; gap: 10px; color: #F5F7FC; text-decoration: none; font: 800 23px/1 'Plus Jakarta Sans', sans-serif; letter-spacing: -.045em; }
+.e4-in { display: grid; grid-template-columns: auto minmax(0, 520px); gap: clamp(24px, 5vw, 64px); align-items: center; max-width: 960px; }
+.e4-mascot { position: relative; margin: 0; }
+.e4-mascot img { width: clamp(150px, 22vw, 230px); height: auto; filter: drop-shadow(0 30px 40px rgba(0, 0, 0, .45)); animation: e4float 4.5s ease-in-out infinite; }
+@keyframes e4float { 50% { transform: translateY(-14px) rotate(-2deg); } }
+.e4-bubble { position: absolute; top: -18px; left: 70%; width: 210px; background: #fff; color: #0D2246; font-size: 14px; line-height: 1.4; font-weight: 600; padding: 12px 14px; border-radius: 16px 16px 16px 4px; box-shadow: 0 18px 40px -18px rgba(0, 0, 0, .55); animation: e4pop 600ms 400ms cubic-bezier(.23, 1, .32, 1) both; }
+@keyframes e4pop { from { opacity: 0; transform: translateY(10px) scale(.9); } }
+.e4-code { margin: 0; font: 800 clamp(84px, 14vw, 150px)/.9 'Plus Jakarta Sans', sans-serif; letter-spacing: -.06em; background: linear-gradient(120deg, #07C6BC, #A08CF2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.e4-txt h1 { margin: 12px 0 10px; font-size: clamp(28px, 3.6vw, 42px); line-height: 1.08; letter-spacing: -.035em; font-weight: 800; }
+.e4-txt p { margin: 0; color: #C3CDE0; }
+.e4-acts { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 26px; }
+.e4-btn { display: inline-flex; align-items: center; padding: 14px 22px; border-radius: 14px; background: #07C6BC; color: #071936; font-weight: 700; text-decoration: none; transition: background 200ms, transform 160ms; }
+.e4-btn:active { transform: scale(.97); }
+.e4-btn.ghost { background: transparent; color: #F5F7FC; border: 1px solid rgba(245, 247, 252, .3); }
+.e4-link { color: #A9F0EB; font-weight: 600; text-decoration: none; }
+@media (hover: hover) and (pointer: fine) { .e4-btn:hover { background: #3BD6CD; } .e4-btn.ghost:hover { background: rgba(245, 247, 252, .08); } .e4-link:hover { text-decoration: underline; } }
+@media (max-width: 720px) {
+  .e4-in { grid-template-columns: 1fr; text-align: center; justify-items: center; }
+  .e4-bubble { left: 55%; top: -30px; width: 180px; font-size: 13px; }
+  .e4-acts { justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { .e4-orb, .e4-mascot img { animation: none; } }
+
+/* clínica: usa as cores e o estilo da clínica (variáveis do tema) */
+.e4-cl { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+.e4-card { width: min(520px, 100%); text-align: center; padding: clamp(28px, 4vw, 44px) clamp(20px, 4vw, 40px) !important; }
+.e4-logo { display: flex; justify-content: center; margin-bottom: 18px; }
+.e4-logo-img { max-height: 56px; max-width: 220px; width: auto; object-fit: contain; }
+.e4-cl .e4-code { margin: 0; font: 800 clamp(72px, 12vw, 110px)/.95 var(--serif, Georgia, serif); color: var(--terracota); background: none; -webkit-text-fill-color: currentColor; letter-spacing: -.04em; }
+.e4-cl h1 { margin: 6px 0 10px; }
+.e4-cl .e4-acts { justify-content: center; margin-top: 22px; }
+.e4-path { margin-top: 18px; word-break: break-all; opacity: .7; }
+.e4-mz .e4-txt h1 { color: #F5F7FC; }
+.e4-mz .e4-txt .e4-code { color: transparent; -webkit-text-fill-color: transparent; }

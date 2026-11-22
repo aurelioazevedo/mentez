@@ -17,6 +17,7 @@ import { support } from './routes/support.js';
 import * as Tickets from './lib/tickets.js';
 import * as PlatComm from './lib/platcomm.js';
 import * as PlatCRM from './lib/platcrm.js';
+import * as ErrorPages from './lib/errorpages.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
@@ -158,13 +159,15 @@ app.use(async (req, res, next) => {
     if (now && req.mzSlug) { t = await Tenancy.bySlug(now); }
     else if (now) return res.redirect(301, `https://${now}.${Tenancy.baseDomain()}${req.originalUrl}`);
   }
-  if (!t) return res.status(404).send(String(bare('Clínica não encontrada', html`<div class="center-card"><h1>Endereço não encontrado</h1><p>Não há nenhuma clínica neste endereço. Confira o link recebido.</p></div>`)));
+  if (!t) return res.status(404).send(ErrorPages.mentez404(req, { title: 'Não encontramos esta clínica.', text: 'Nenhuma clínica usa este endereço. Confira o link recebido; se a clínica trocou de endereço, peça o link novo a ela.' }));
   if (t.status !== 'ativa') return res.status(403).send(String(bare('Acesso suspenso', html`<div class="center-card"><h1>Acesso temporariamente suspenso</h1><p>O acesso a esta clínica está suspenso. Fale com a administração da clínica.</p></div>`)));
   // domínio próprio só nos planos com personalização; fora deles, volta ao endereço da Mentez
   if (!req.mzSlug && !Tenancy.slugOfHost(host) && !(await Brand.canCustomize(t).catch(() => true))) return res.redirect(302, `https://${t.slug}.${Tenancy.baseDomain()}${req.originalUrl}`);
   Tenancy.run(t, next); // tudo o que vem depois (banco, chaves, caches) é desta clínica
 });
 app.use(Brand.middleware); // identidade da clínica (nome, logo, cores) disponível para todas as páginas
+// Página “sem internet” da clínica (guardada pelo aplicativo para quando a conexão cair)
+app.get('/offline', (req, res, next) => ErrorPages.offlinePage().then((h) => res.set('Cache-Control', 'no-cache').type('html').send(h), next));
 app.get('/_mentez/entrar', (req, res, next) => autoLogin(req, res).catch(next)); // entrada automática logo depois de criar a conta
 app.use(billingGate); // Mentez: teste grátis, mensalidade em dia ou acesso restrito à tela de assinatura
 app.get(/^\/marca\/(logo|logo-escuro|simbolo|simbolo-escuro|favicon|foto)$/, (req, res, next) => { req.params.tipo = req.params[0]; logoRoute(req, res).catch(next); });
@@ -316,7 +319,7 @@ app.get('/folhas/:dir/:file', requirePerm('prontuario'), (req, res) => {
   res.sendFile(p);
 });
 
-app.use((req, res) => res.status(404).send(String(bare('Página não encontrada', html`<div class="center-card"><h1>Página não encontrada</h1><p><a href="/">Voltar ao início</a></p></div>`))));
+app.use((req, res) => res.status(404).send(ErrorPages.clinic404(req)));
 app.use((err, req, res, _next) => {
   if (err.status === 403) {
     return res.status(403).send(String(bare('Acesso restrito', html`<div class="center-card"><h1>Acesso restrito</h1><p>Seu perfil de acesso não permite abrir esta página.</p><p><a href="/">Voltar ao início</a></p></div>`)));

@@ -24,6 +24,11 @@ import { mount as mountSignup } from './signup.js';
 import { mount as mountTickets } from './platform-tickets.js';
 import { mount as mountCRM, clinicTabs, pinnedBox } from './platform-crm.js';
 import * as PlatCRM from '../lib/platcrm.js';
+import * as ErrorPages from '../lib/errorpages.js';
+import * as PlatPush from '../lib/platpush.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 import * as Tickets from '../lib/tickets.js';
 import { money } from '../lib/html.js';
 
@@ -52,6 +57,14 @@ handle.get('/api/site', async (req, res) => {
 });
 // chamados: respostas com anexos aceitam corpo maior (o restante do painel, 50 kB)
 handle.use(/^\/chamados\/\d+\/responder$/, express.urlencoded({ extended: false, limit: '9mb', parameterLimit: 50 }));
+// Aplicativo do Painel (instalável) e notificações: manifesto e service worker
+handle.get('/manifest.webmanifest', (req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').send(JSON.stringify({
+  name: 'Painel Mentez', short_name: 'Mentez', id: '/', start_url: '/', scope: '/', display: 'standalone', background_color: '#071936', theme_color: '#071936', lang: 'pt-BR',
+  description: 'Painel da equipe Mentez: clínicas, chamados, conversas e cobrança.',
+  icons: [{ src: '/static/img/mentez/app-192.png', sizes: '192x192', type: 'image/png' }, { src: '/static/img/mentez/app-512.png', sizes: '512x512', type: 'image/png' }, { src: '/static/img/mentez/app-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
+  shortcuts: [{ name: 'Chamados', url: '/chamados' }, { name: 'Conversas', url: '/conversas' }, { name: 'Clínicas', url: '/clinicas' }],
+})));
+handle.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(PUBLIC_DIR, 'sw.js')));
 handle.use(express.urlencoded({ extended: false, limit: '50kb' }), checkOrigin, flash);
 handle.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); next(); });
 
@@ -177,13 +190,15 @@ function layout(req, title, body) {
         <label for="mz2-menu" class="mz2-burger" role="button" aria-label="Abrir menu" aria-controls="mz2-side"><span></span><span></span><span></span></label>
         <a class="mz2-toplogo" href="/">${LOGO()}</a>
         <form class="mz2-search" action="/clinicas" method="get" role="search">${ICON.busca}<input type="search" name="q" placeholder="Buscar clínica, endereço ou e-mail" aria-label="Buscar clínica" value="${req.path === '/clinicas' ? str(req.query.q, 80) : ''}"><kbd>⌘ K</kbd></form>
-        <div class="mz2-tools"><a class="mz2-ic" href="/historico" title="Histórico">${ICON.sino}</a><a class="mz2-ic" href="/termos-de-uso" title="Termos de uso">${ICON.ajuda}</a>
+        <div class="mz2-tools"><button type="button" class="mz2-ic" data-install hidden title="Instalar o aplicativo do Painel" aria-label="Instalar o aplicativo do Painel">${ICON.baixar}</button><a class="mz2-ic" href="/historico" title="Histórico">${ICON.sino}</a><a class="mz2-ic" href="/termos-de-uso" title="Termos de uso">${ICON.ajuda}</a>
           <a class="mz2-me" href="/minha-conta" title="Minha conta · ${req.admin.email}"><i>${initialsOf(req.admin.name)}</i><span><b>${req.admin.name}</b><small>${ROLES[req.admin.role]?.label || 'Equipe Mentez'}</small></span></a></div>
       </header>
       <main class="mz2-main">${flash}${body}</main>
       <nav class="mz2-tabbar" aria-label="Atalhos">${[['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas'], ['/faturas', 'Faturas', 'faturas'], ['/testes', 'Testes', 'testes']].filter(([h]) => allowed(req.admin.role, 'GET', h)).map(([h, l, ic]) => html`<a href="${h}" class="${act === h ? 'on' : ''}">${ICON[ic]}<span>${l}</span></a>`)}<label for="mz2-menu">${SV('<path d="M4 7h16M4 12h16M4 17h16"/>')}<span>Menu</span></label></nav>
     </div>
-  </div></div>`, 'bare mz2-body', req, { suffix: 'Painel Mentez' });
+  </div></div>
+  <dialog class="inst-dlg" data-install-dlg><form method="dialog"><h2>Instalar o aplicativo do Painel</h2><ol data-install-steps></ol>
+    <p class="muted small">Depois é só abrir pelo ícone “Mentez”. Para receber avisos, ative as notificações em Minha conta.</p><div class="actions"><button class="btn">Entendi</button></div></form></dialog>`, 'bare mz2-body', req, { suffix: 'Painel Mentez', appTitle: 'Mentez' });
 }
 const need = (req, res, next) => {
   if (!req.admin) return res.redirect('/inicio');
@@ -1012,8 +1027,9 @@ handle.post('/convite-equipe/:code', RL.limit({ name: 'painel-convite', windowMs
   res.flash('Senha criada. Bem-vindo(a) ao Painel da Mentez!').redirect('/');
 });
 // minha conta
-handle.get('/minha-conta', need, (req, res) => {
+handle.get('/minha-conta', need, async (req, res) => {
   const u = req.admin;
+  const [vapidKey, prefs, devs] = await Promise.all([PlatPush.keys().then((k) => k.publicKey), PlatPush.prefsOf(u), PlatPush.devices(u.id)]);
   send(res, layout(req, 'Minha conta', html`<div class="mz2-hello"><div><h1>Minha conta</h1><p>${u.email} · ${ROLES[u.role]?.label || u.role}</p></div></div>
     <div class="mz2-grid2">
       <section class="mz2-card"><header><span class="mz2-cardic">${ICON.equipe}</span><h2>Dados</h2></header>
@@ -1024,8 +1040,27 @@ handle.get('/minha-conta', need, (req, res) => {
           <label class="fld"><span>Nova senha (mínimo 12 caracteres)</span><input type="password" name="password" minlength="12" required autocomplete="new-password"></label>
           <label class="fld"><span>Repita a nova senha</span><input type="password" name="password2" minlength="12" required autocomplete="new-password"></label><button class="btn">Trocar senha</button></form>
         <form method="post" action="/minha-conta/sair-todos"><button class="btn ghost" data-confirm="Sair do painel em todos os aparelhos, inclusive este?">Sair de todos os aparelhos</button></form></section>
+      <section class="mz2-card"><header><span class="mz2-cardic">${ICON.baixar}</span><h2>Aplicativo do Painel</h2></header>
+        <p class="small">Instale o Painel no celular ou no computador: abre pelo ícone, em tela cheia, e recebe notificações.</p>
+        <div class="actions"><button type="button" class="btn" data-install hidden>Instalar aplicativo</button></div>
+        <p class="small muted">Se o botão não aparecer, o aplicativo já está instalado neste aparelho (ou você já está nele). No iPhone: Safari → Compartilhar → <b>Adicionar à Tela de Início</b>.</p></section>
+      <section class="mz2-card" id="push" data-vapid="${vapidKey}" data-push-base="/minha-conta/push"><header><span class="mz2-cardic">${ICON.sino}</span><h2>Notificações neste aparelho</h2></header>
+        <p class="push-status small muted" data-push-status>Verificando…</p>
+        <div class="actions"><button type="button" class="btn" data-push-on hidden>Ativar notificações</button><button type="button" class="btn ghost" data-push-test hidden>Enviar teste</button><button type="button" class="btn ghost" data-push-off hidden>Desativar neste aparelho</button></div>
+        <form method="post" action="/minha-conta/push/preferencias" class="stack"><p class="small"><b>O que você quer receber</b></p>
+          ${Object.entries(PlatPush.TOPICS).map(([k, l]) => html`<label class="check"><input type="checkbox" name="t_${k}" value="1" ${prefs[k] ? raw('checked') : ''}> ${l}</label>`)}
+          <button class="btn ghost btn-sm">Salvar preferências</button></form>
+        ${devs.length ? html`<p class="small"><b>Aparelhos com notificações (${devs.length})</b></p><ul class="plain small">${devs.map((d) => html`<li>${d.device || 'Aparelho'} <span class="muted">· desde ${brDate(d.created_at)}</span>
+          <form method="post" action="/minha-conta/push/remover" class="inline"><input type="hidden" name="id" value="${d.id}"><button class="link small btnlink">remover</button></form></li>`)}</ul>` : ''}</section>
     </div>`));
 });
+handle.post('/minha-conta/push/inscrever', need, express.json({ limit: '10kb' }), async (req, res) => {
+  try { await PlatPush.subscribe(req.admin.id, req.body?.subscription, req.body?.device); res.json({ ok: true }); } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+handle.post('/minha-conta/push/cancelar', need, express.json({ limit: '10kb' }), async (req, res) => { await PlatPush.unsubscribe(req.admin.id, String(req.body?.endpoint || '')); res.json({ ok: true }); });
+handle.post('/minha-conta/push/teste', need, async (req, res) => { const n = await PlatPush.test(req.admin.id).catch(() => 0); res.json({ ok: n > 0, sent: n }); });
+handle.post('/minha-conta/push/remover', need, async (req, res) => { await PlatPush.unsubscribe(req.admin.id, int(req.body.id)); res.flash('Aparelho removido.').redirect('/minha-conta#push'); });
+handle.post('/minha-conta/push/preferencias', need, async (req, res) => { await PlatPush.savePrefs(req.admin.id, req.body); res.flash('Preferências de notificação salvas.').redirect('/minha-conta#push'); });
 handle.post('/minha-conta', need, async (req, res) => {
   const name = str(req.body.name, 120).trim(); if (!name) return res.redirect('/minha-conta');
   await T.pq('UPDATE platform_users SET name = ?, phone = ? WHERE id = ?', [name, str(req.body.phone, 40) || null, req.admin.id]);
@@ -1053,4 +1088,4 @@ handle.get('/historico', need, async (req, res) => {
     <section class="card flush"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Clínica</th><th>Detalhe</th></tr></thead><tbody>
     ${rows.map((r) => html`<tr><td>${brDateTime(r.created_at)}</td><td>${r.actor || '—'}</td><td>${r.action}</td><td>${r.tname || '—'}</td><td class="small">${r.detail || ''}</td></tr>`)}</tbody></table></div></section>`));
 });
-handle.use((req, res) => res.status(404).send(String(layout(req, 'Não encontrado', html`<div class="center-card"><h1>Página não encontrada</h1><p><a href="/">Voltar</a></p></div>`))));
+handle.use((req, res) => res.status(404).send(ErrorPages.mentez404(req, { admin: !!req.admin })));

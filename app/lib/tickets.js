@@ -4,6 +4,7 @@
 // Avisos: e-mail (e WhatsApp, se ligado) da Mentez para a equipe quando chega algo novo, e para quem abriu quando a equipe responde.
 import * as T from './tenancy.js';
 import * as PlatComm from './platcomm.js';
+import * as PlatPush from './platpush.js';
 
 export const CATEGORIES = { suporte: 'Suporte técnico ou dúvida de uso', financeiro: 'Financeiro e cobrança', reclamacao: 'Reclamação', sugestao: 'Sugestão de melhoria', comercial: 'Plano e contratação', outro: 'Outro assunto' };
 export const PRIORITIES = { normal: 'Normal', alta: 'Alta — atrapalha o atendimento', urgente: 'Urgente — sistema parado' };
@@ -200,6 +201,7 @@ const PANEL = () => `https://app.${T.baseDomain()}`;
 async function notifyTeam(id, kind) {
   const c = await config(); const tk = await get(id); if (!tk) return;
   const what = { novo: 'Novo chamado', resposta: 'A clínica respondeu', reaberto: 'Chamado reaberto' }[kind] || 'Chamado';
+  PlatPush.notify('chamados', { title: `${tk.priority === 'urgente' ? '🔴 ' : ''}${what} ${code(id)}`, body: `${tk.tenant_name || 'Clínica'}: ${tk.subject}`, url: `/chamados/${id}` });
   const text = `${what} ${code(id)} — ${tk.tenant_name || 'clínica'}\n${CATEGORIES[tk.category]} · prioridade ${PRIORITY_SHORT[tk.priority]}\nAssunto: ${tk.subject}\nAberto por: ${tk.user_name || '—'}`;
   if (c.notifyEmail) await PlatComm.mailSend(c.notifyEmail, `[Chamado ${code(id)}] ${tk.subject} — ${tk.tenant_name || ''}`, text, { label: 'Abrir no painel', url: `${PANEL()}/chamados/${id}` }).catch((e) => console.error('chamados (e-mail):', e.message));
   if (c.notifyPhone && (kind === 'novo' || tk.priority !== 'normal')) await PlatComm.waSend(c.notifyPhone, `${text}\n\n${PANEL()}/chamados/${id}`, { kind: 'equipe' }).catch((e) => console.error('chamados (WhatsApp):', e.message));

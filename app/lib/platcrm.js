@@ -3,6 +3,7 @@
 // e tudo o que chega (respostas das clínicas e de contatos novos). Textos guardados cifrados com a chave mestra.
 import * as T from './tenancy.js';
 import { phoneKey } from './whatsapp.js';
+import * as PlatPush from './platpush.js';
 
 const seal = (t) => T.seal({ t: String(t ?? '') });
 export const open = (s) => { try { return T.unseal(s).t ?? ''; } catch { return ''; } };
@@ -140,6 +141,8 @@ export async function handleWebhook(body, instance) {
     await T.pq('INSERT INTO plat_wa_messages (phone, phone_key, tenant_id, direction, kind, author, body_enc, wa_id, status) VALUES (?,?,?,?,?,?,?,?,?)',
       [digits(phone), phoneKey(phone), tid, 'in', 'recebida', d.pushName ? String(d.pushName).slice(0, 120) : null, seal(text), d.key.id || null, 'recebido']);
     await touch(phone, tid, 'in', text, { name: d.pushName, unread: true }); n++;
+    const tname = tid ? (await T.pone('SELECT name FROM tenants WHERE id = ?', [tid]))?.name : null;
+    PlatPush.notify('conversas', { title: tname || d.pushName || fmtPhone(phone), body: text.slice(0, 140), url: tid ? `/clinicas/${tid}/conversa` : `/conversas/${digits(phone)}` });
   }
   return { ok: true, saved: n };
 }

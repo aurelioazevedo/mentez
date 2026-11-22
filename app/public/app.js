@@ -254,6 +254,7 @@ function initPage() {
   const pushBox = document.getElementById('push');
   if (pushBox) {
     const st = pushBox.querySelector('[data-push-status]');
+    const pushBase = pushBox.dataset.pushBase || '/conta/push'; // Painel Mentez usa /minha-conta/push
     const bOn = pushBox.querySelector('[data-push-on]'), bOff = pushBox.querySelector('[data-push-off]'), bTest = pushBox.querySelector('[data-push-test]');
     const b64 = (s) => { const p = '='.repeat((4 - (s.length % 4)) % 4); const raw = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); };
     const device = () => { const u = navigator.userAgent; const os = /iPhone|iPad/.test(u) ? 'iPhone/iPad' : /Android/.test(u) ? 'Android' : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'Computador'; const b = /Edg\//.test(u) ? 'Edge' : /Chrome\//.test(u) ? 'Chrome' : /Firefox\//.test(u) ? 'Firefox' : /Safari\//.test(u) ? 'Safari' : 'Navegador'; return `${os} · ${b}`; };
@@ -274,18 +275,18 @@ function initPage() {
           const perm = await Notification.requestPermission();
           if (perm !== 'granted') { show('Permissão negada. Libere as notificações nas configurações do navegador.', null); return; }
           const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(pushBox.dataset.vapid) });
-          const r = await post('/conta/push/inscrever', { subscription: sub.toJSON(), device: device() });
+          const r = await post(`${pushBase}/inscrever`, { subscription: sub.toJSON(), device: device() });
           if (!r.ok) throw new Error(r.error || 'falha');
           show('✓ Notificações ativadas neste aparelho.', true);
         } catch (e) { st.textContent = `Não foi possível ativar: ${e.message}`; } finally { bOn.disabled = false; }
       });
       bOff.addEventListener('click', async () => {
         const s = await reg.pushManager.getSubscription();
-        if (s) { await post('/conta/push/cancelar', { endpoint: s.endpoint }); await s.unsubscribe(); }
+        if (s) { await post(`${pushBase}/cancelar`, { endpoint: s.endpoint }); await s.unsubscribe(); }
         show('Notificações desativadas neste aparelho.', false);
       });
       bTest.addEventListener('click', async () => {
-        const r = await post('/conta/push/teste');
+        const r = await post(`${pushBase}/teste`);
         st.textContent = r.ok ? `Notificação de teste enviada (${r.sent} aparelho(s)).` : 'Nenhum aparelho recebeu. Tente desativar e ativar de novo.';
       });
     })().catch((e) => { st.textContent = `Erro: ${e.message}`; });
@@ -2138,3 +2139,10 @@ document.querySelectorAll('[data-ticket-files]').forEach((inp) => {
     inp.value = ''; render();
   });
 });
+
+// Aplicativo instalado: atualiza a página “sem internet” guardada (logo e cores da clínica) uma vez por sessão
+(() => {
+  if (!('serviceWorker' in navigator) || location.pathname === '/offline') return;
+  try { if (sessionStorage.getItem('mz-off')) return; sessionStorage.setItem('mz-off', '1'); } catch { return; }
+  navigator.serviceWorker.ready.then((r) => r.active && r.active.postMessage('mz-offline-refresh')).catch(() => {});
+})();
