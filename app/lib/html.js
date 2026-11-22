@@ -202,8 +202,8 @@ ${u ? html`<div class="inst-banner" data-install-banner hidden role="region" ari
   <p class="muted small">Depois é só abrir pelo ícone “Consultório”. Para receber avisos, ative as notificações em Minha conta.</p>
   <div class="actions"><button class="btn">Entendi</button></div>
 </form></dialog>` : ''}
-${u && Tenancy.multi() && HELPBOT.on ? html`<div class="hb" data-helpbot>
-  <button type="button" class="hb-fab" data-hb-open aria-label="Abrir o assistente de ajuda" aria-expanded="false"><img src="/static/img/mentez/assistente.png" alt="" width="64" height="64"><span class="hb-tip">Precisa de ajuda?</span></button>
+${u && Tenancy.multi() && HELPBOT.on ? html`<div class="hb${/(?:^|;\s*)hb_seen=1/.test(req?.headers?.cookie || '') ? ' mini' : ''}" data-helpbot>
+  <button type="button" class="hb-fab" data-hb-open aria-label="Abrir o assistente de ajuda" aria-expanded="false"><img src="/static/img/mentez/assistente.png" alt="" width="64" height="64"><span class="hb-q" aria-hidden="true">?</span><span class="hb-tip">Precisa de ajuda?</span></button>
   <section class="hb-panel" role="dialog" aria-label="Assistente Mentez" hidden>
     <header><img class="hb-av" src="/static/img/mentez/assistente-rosto.png" alt="" width="40" height="40"><div><b>Assistente Mentez</b><small>Tire dúvidas e aprenda a usar o sistema</small></div><button type="button" class="hb-x" data-hb-close aria-label="Fechar">×</button></header>
     <div class="hb-log" data-hb-log aria-live="polite">
