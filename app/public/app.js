@@ -2044,3 +2044,41 @@ document.querySelectorAll('[data-ai-slot]').forEach((box) => {
   key.addEventListener('change', load);
   base?.addEventListener('change', load);
 });
+
+// ---------- Assistente de ajuda (chat) ----------
+(() => {
+  const box = document.querySelector('[data-helpbot]'); if (!box) return;
+  const fab = box.querySelector('[data-hb-open]'); const panel = box.querySelector('.hb-panel'); const log = box.querySelector('[data-hb-log]');
+  const form = box.querySelector('[data-hb-form]'); const ta = form.q; const sugs = box.querySelector('[data-hb-sugs]');
+  const KEY = 'mz-hb'; let hist = []; try { hist = JSON.parse(sessionStorage.getItem(KEY) || '[]'); } catch { hist = []; }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // formatação simples e segura: **negrito**, [texto](/caminho interno), listas e quebras de linha
+  const fmt = (t) => esc(t)
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, (m, a, h) => `<a href="${h}">${a}</a>`)
+    .split(/\n/).map((l) => (/^\s*(\d+[.)]|[-•])\s+/.test(l) ? `<span class="hb-li">${l.replace(/^\s*[-•]\s+/, '• ')}</span>` : l)).join('<br>');
+  const add = (role, text) => { const d = document.createElement('div'); d.className = `hb-msg ${role === 'user' ? 'me' : 'bot'}`; d.innerHTML = role === 'user' ? esc(text) : fmt(text); log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
+  hist.forEach((m) => add(m.role, m.content)); if (hist.length && sugs) sugs.hidden = true;
+  const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(hist.slice(-20))); } catch { /* sem armazenamento */ } };
+  const open = (on) => { panel.hidden = !on; fab.setAttribute('aria-expanded', on ? 'true' : 'false'); box.classList.toggle('on', on); if (on) { ta.focus(); log.scrollTop = log.scrollHeight; } };
+  fab.addEventListener('click', () => open(panel.hidden));
+  box.querySelector('[data-hb-close]').addEventListener('click', () => open(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) open(false); });
+  let busy = false;
+  const ask = async (q) => {
+    q = q.trim(); if (!q || busy) return; busy = true; if (sugs) sugs.hidden = true;
+    add('user', q); hist.push({ role: 'user', content: q }); save(); ta.value = '';
+    const wait = add('bot', '…'); wait.classList.add('typing');
+    try {
+      const r = await fetch('/ajuda/chat', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: hist, page: location.pathname }) });
+      const d = await r.json().catch(() => ({}));
+      wait.remove();
+      if (d.ok) { add('bot', d.reply); hist.push({ role: 'assistant', content: d.reply }); save(); } else add('bot', d.error || 'Não consegui responder agora. Tente de novo.');
+    } catch { wait.remove(); add('bot', 'Sem conexão. Tente de novo em instantes.'); }
+    busy = false;
+  };
+  form.addEventListener('submit', (e) => { e.preventDefault(); ask(ta.value); });
+  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(ta.value); } });
+  box.querySelectorAll('[data-hb-q]').forEach((b) => b.addEventListener('click', () => ask(b.textContent)));
+  log.addEventListener('click', (e) => { const a = e.target.closest('a[href^="/"]'); if (a && window.innerWidth < 700) open(false); });
+})();

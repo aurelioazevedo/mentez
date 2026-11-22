@@ -7,8 +7,10 @@ import { migrate } from './lib/db.js';
 import * as Platform from './routes/platform.js';
 import * as Brand from './lib/brand.js';
 import * as Modules from './lib/modules.js';
-import { FEATURES } from './lib/html.js';
+import { FEATURES, HELPBOT } from './lib/html.js';
 import * as Billing from './lib/billing.js';
+import * as HelpBot from './lib/helpbot.js';
+import { ROLES } from './lib/perm.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
@@ -210,6 +212,19 @@ app.use('/conta/fiscal/nfse', (req, res, next) => (['admin', 'psicologo'].includ
 app.use('/teleconsulta', teleStaff);
 app.use('/conta', googleAccount);
 app.use('/conta', accountRoutes);
+// O botão do assistente só aparece quando ele está ligado e configurado no Painel
+const hbAt = { at: 0 };
+app.use((req, res, next) => { if (Tenancy.multi() && Date.now() - hbAt.at > 60e3) { hbAt.at = Date.now(); HelpBot.config().then((c) => { HELPBOT.on = HelpBot.ready(c); }, () => {}).finally(next); } else next(); });
+// Assistente de ajuda (chat): só a dúvida, a tela atual, o perfil e os recursos do plano vão para a IA da Mentez
+app.post('/ajuda/chat', express.json({ limit: '40kb' }), async (req, res) => {
+  try {
+    const t = Tenancy.current();
+    const feats = t ? await Billing.featuresOf(t) : [];
+    const ctx = { slug: t?.slug, userId: req.user.id, role: ROLES[req.user.role]?.label || req.user.role, clinic: Brand.get().name, page: String(req.body?.page || '/').slice(0, 120),
+      features: feats.map((k) => Billing.FEATURES[k]).filter(Boolean).join('; '), contact: await Billing.siteContact().catch(() => 'contato@mentez.com.br') };
+    res.json(await HelpBot.reply({ messages: req.body?.messages, ctx, who: `${t?.slug || '-'}:${req.user.id}` }));
+  } catch (e) { console.error('ajuda/chat:', e.message); res.status(500).json({ ok: false, error: 'O assistente não respondeu agora. Tente de novo.' }); }
+});
 // Endereços antigos (antes de Configurações) → novos
 app.get(/^\/usuarios\/(google|whatsapp|agente|acessos)(\/.*)?$/, (req, res) => res.redirect(301, req.originalUrl.replace(/^\/usuarios\//, '/configuracoes/')));
 app.use('/configuracoes/identidade', requirePerm('usuarios'), brandSettings);

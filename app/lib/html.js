@@ -62,6 +62,8 @@ export const icon = (n) => raw(`<svg viewBox="0 0 24 24" aria-hidden="true">${IC
 
 // Módulos que podem ser ligados/desligados (o próprio módulo atualiza ao carregar a configuração)
 // Módulos ligáveis do menu (um conjunto por clínica)
+// Assistente de ajuda ligado no Painel da Mentez (atualizado pelo servidor a cada minuto)
+export const HELPBOT = { on: false };
 export const FEATURES = Tenancy.scoped({ locacao: false, exercicios: !Tenancy.multi() });
 const NAV = [
   ['/', 'Início', 'home', ['agenda', 'cadastro']],
@@ -198,6 +200,18 @@ ${u ? html`<div class="inst-banner" data-install-banner hidden role="region" ari
   <p class="muted small">Depois é só abrir pelo ícone “Consultório”. Para receber avisos, ative as notificações em Minha conta.</p>
   <div class="actions"><button class="btn">Entendi</button></div>
 </form></dialog>` : ''}
+${u && Tenancy.multi() && HELPBOT.on ? html`<div class="hb" data-helpbot>
+  <button type="button" class="hb-fab" data-hb-open aria-label="Abrir o assistente de ajuda" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.3M12 16.5h.01"/></svg><span>Ajuda</span></button>
+  <section class="hb-panel" role="dialog" aria-label="Assistente Mentez" hidden>
+    <header><span class="hb-av" aria-hidden="true">M</span><div><b>Assistente Mentez</b><small>Tire dúvidas e aprenda a usar o sistema</small></div><button type="button" class="hb-x" data-hb-close aria-label="Fechar">×</button></header>
+    <div class="hb-log" data-hb-log aria-live="polite">
+      <div class="hb-msg bot">Olá, ${(u.name || '').split(' ')[0]}! Sou o assistente da Mentez. Posso explicar qualquer parte do sistema e mostrar o caminho. O que você quer fazer?</div>
+      <div class="hb-sugs" data-hb-sugs>${['Como agendar uma sessão recorrente?', 'Como conectar o WhatsApp?', 'Como enviar um exercício?', 'Como emitir um recibo?', 'Como ligar o app do paciente?'].map((q) => html`<button type="button" data-hb-q>${q}</button>`)}</div>
+    </div>
+    <form class="hb-form" data-hb-form><textarea name="q" rows="1" maxlength="1500" placeholder="Escreva sua dúvida…" aria-label="Sua dúvida" required></textarea><button class="hb-send" aria-label="Enviar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></form>
+    <p class="hb-note">Respostas geradas por IA. Não escreva dados de pacientes.</p>
+  </section>
+</div>` : ''}
 <script src="/static/app.js?v=${VERSION}"></script>
 </body></html>`;
 }

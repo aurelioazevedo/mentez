@@ -16,6 +16,8 @@ import { router, send, str, int, flash } from '../lib/router.js';
 import { parseCookies, checkOrigin } from '../lib/auth.js';
 import * as RL from '../lib/ratelimit.js';
 import * as Billing from '../lib/billing.js';
+import * as HelpBot from '../lib/helpbot.js';
+import * as AISlot from '../lib/aislot.js';
 import { mount as mountSignup } from './signup.js';
 import { money } from '../lib/html.js';
 
@@ -101,7 +103,7 @@ const ICON = {
 };
 const MENU = [
   ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec']]],
-  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
+  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
 const ROLES = {
@@ -113,6 +115,7 @@ const ROLES = {
 const RULES = [
   ['*', /^\/equipe(\/|$)/, ['admin']],
   ['*', /^\/(faturas|planos|cobranca)(\/|$|\.)/, ['admin', 'financeiro']],
+  ['*', /^\/assistente(\/|$)/, ['admin']],
   ['POST', /^\/clinicas\/\d+\/assinatura$/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas(\/|$)/, ['admin', 'suporte']],
   ['GET', /^\/clinicas\/nova$/, ['admin', 'suporte']],
@@ -686,6 +689,28 @@ handle.post('/cobranca/testar', need, async (req, res) => {
 handle.post('/cobranca/webhook', need, async (req, res) => {
   try { await Billing.registerWebhook(await Billing.config(), `https://${req.get('host')}/webhooks/asaas`, req.admin.email); await log(req, 'cobranca-webhook'); res.flash('Webhook registrado no Asaas.'); } catch (e) { res.flash(e.message, 'err'); }
   res.redirect('/cobranca');
+});
+// ---------- assistente de ajuda (chat dentro do sistema das clínicas) ----------
+handle.get('/assistente', need, async (req, res) => {
+  const c = await HelpBot.config(); const u = await HelpBot.usage(30);
+  const [m1, m2] = await Promise.all([AISlot.modelsSafe(c.p1), AISlot.modelsSafe(c.p2)]);
+  send(res, layout(req, 'Assistente de ajuda', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Assistente de ajuda</h1>
+      <p class="muted">Chat que aparece no canto de todas as telas do sistema das clínicas para tirar dúvidas e ensinar a usar a Mentez (como o assistente da Hostinger). Usa a IA da Mentez — as clínicas não pagam nada. Não recebe dados de pacientes.</p></div>
+      <div class="ph-actions">${HelpBot.ready(c) ? html`<span class="badge b-realizada">Ligado</span>` : html`<span class="badge b-cancelada">Desligado</span>`}</div></header>
+    <section class="kpis small"><div class="kpi"><span>Perguntas (30 dias)</span><b>${u.n}</b></div><div class="kpi"><span>Clínicas que usaram</span><b>${u.clinics}</b></div><div class="kpi"><span>Tokens (entrada/saída)</span><b>${Number(u.tin).toLocaleString('pt-BR')} / ${Number(u.tout).toLocaleString('pt-BR')}</b></div><div class="kpi"><span>Falhas</span><b>${u.fails || 0}</b></div></section>
+    <form method="post" class="card stack">
+      <label class="check"><input type="checkbox" name="enabled" value="1" ${c.enabled ? raw('checked') : ''}> <b>Mostrar o assistente nas clínicas</b></label>
+      ${AISlot.fields('p1', c.p1, { title: 'Provedor de IA principal', hint: 'Recomendado: um modelo rápido e barato (ex.: Claude Haiku, GPT-4o mini, Gemini Flash). Cada resposta custa frações de centavo.', models: m1.list, error: m1.err })}
+      ${AISlot.fields('p2', c.p2, { title: 'Provedor de reserva', hint: 'Entra sozinho se o principal falhar.', toggle: true, models: m2.list, error: m2.err })}
+      <label class="fld"><span>Informações adicionais para o assistente <small class="muted">(novidades, horário do suporte, avisos — o manual do sistema já vem embutido)</small></span><textarea name="extra" rows="5" maxlength="4000">${c.extra}</textarea></label>
+      <div class="actions"><button class="btn">Salvar</button></div>
+    </form>`));
+});
+handle.post('/assistente', need, async (req, res) => {
+  const r = await HelpBot.saveConfig(req.body, await HelpBot.config());
+  if (r.error) return res.flash(r.error, 'err').redirect('/assistente');
+  await log(req, 'assistente-config', null, req.body.enabled ? 'ligado' : 'desligado');
+  res.flash('Assistente de ajuda salvo.').redirect('/assistente');
 });
 // ---------- equipe (usuários do painel) ----------
 const inviteHash = (code) => crypto.createHash('sha256').update(String(code)).digest('hex');
