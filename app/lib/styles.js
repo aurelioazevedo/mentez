@@ -73,6 +73,17 @@ export const STYLES = {
       ':root[data-theme="dark"] .side nav a.on{background:linear-gradient(135deg,#3BD6CD,#07C6BC 55%,#A08CF2);border-color:transparent;color:#071936}',
       ':root[data-theme="dark"] .btn:not(.ghost):not(.danger){color:#071936}',
       '@media (prefers-color-scheme: dark){:root[data-theme="auto"] .side nav a{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}:root[data-theme="auto"] .side nav a.on{background:linear-gradient(135deg,#3BD6CD,#07C6BC 55%,#A08CF2);border-color:transparent;color:#071936}:root[data-theme="auto"] .btn:not(.ghost):not(.danger){color:#071936}:root[data-theme="auto"] .btn.ghost{background:rgba(255,255,255,.06)}:root[data-theme="auto"] .card,:root[data-theme="auto"] .kpi,:root[data-theme="auto"] .side-card,:root[data-theme="auto"] .tsearch{border-color:rgba(255,255,255,.10) !important}}',
+      // celular e tablet: o desfoque ao vivo (backdrop-filter) em todos os cartões pesa muito no iPhone e deixa a troca de tela lenta;
+      // no lugar, cartões quase opacos (mesmo visual, sem custo de pintura)
+      '@media (max-width: 900px), (hover: none) {',
+      '.card,.kpi,.side-card,.tsearch,.st-opt,.cfg-item,.btn.ghost{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}',
+      'body{background-attachment:scroll !important}',
+      // o que flutua sobre o conteúdo (menu de baixo, aviso de instalar) fica sólido para o texto de trás não aparecer
+      '.side-card,.inst-banner{background:#F7FAFD !important}:root[data-theme="dark"] .side-card,:root[data-theme="dark"] .inst-banner{background:#0F2549 !important}',
+      '.card,.kpi,.side-card,.cfg-item,.st-opt{background:rgba(255,255,255,.9)}.tsearch{background:rgba(255,255,255,.94)}.btn.ghost{background:rgba(255,255,255,.85)}',
+      ':root[data-theme="dark"] .card,:root[data-theme="dark"] .kpi,:root[data-theme="dark"] .side-card,:root[data-theme="dark"] .cfg-item,:root[data-theme="dark"] .st-opt,:root[data-theme="dark"] .tsearch{background:rgba(16,38,77,.94)}:root[data-theme="dark"] .btn.ghost{background:rgba(255,255,255,.08)}',
+      '}',
+      '@media (max-width: 900px) and (prefers-color-scheme: dark), (hover: none) and (prefers-color-scheme: dark) {:root[data-theme="auto"] .side-card,:root[data-theme="auto"] .inst-banner{background:#0F2549 !important}:root[data-theme="auto"] .card,:root[data-theme="auto"] .kpi,:root[data-theme="auto"] .side-card,:root[data-theme="auto"] .cfg-item,:root[data-theme="auto"] .st-opt,:root[data-theme="auto"] .tsearch{background:rgba(16,38,77,.94)}:root[data-theme="auto"] .btn.ghost{background:rgba(255,255,255,.08)}}',
     ].join(''),
     swatch: { bg: '#E9F3F6', accent: '#04857E', ink: '#0D2246', soft: '#D3F3EF', dark: '#071936' },
   },

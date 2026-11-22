@@ -1,6 +1,10 @@
 // Interações leves do sistema (sem dependências).
 document.addEventListener('click', (e) => {
   const t = e.target;
+  // janelas com <form method="dialog">: o Safari do iPhone aplica a política de segurança (form-action) a esse envio
+  // e não fecha a janela; fecha aqui direto
+  const db = t.closest('dialog form[method="dialog"] button:not([type="button"]), dialog form[method="dialog"] input[type="submit"]');
+  if (db) { e.preventDefault(); const d = db.closest('dialog'); d.close(db.value || ''); return; }
   // linhas de tabela clicáveis
   const tr = t.closest('tr[data-href]');
   if (tr && !t.closest('a,button,form,input,select')) { location.href = tr.dataset.href; return; }

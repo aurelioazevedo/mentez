@@ -1,7 +1,11 @@
 // Service worker: recebe notificações push do sistema do consultório.
 // Não guarda páginas em cache (dados sensíveis); só exibe as notificações.
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  // a página começa a ser baixada enquanto o service worker acorda (troca de tela mais rápida, sobretudo no iPhone)
+  if (self.registration.navigationPreload) await self.registration.navigationPreload.enable().catch(() => {});
+  await self.clients.claim();
+})()));
 
 self.addEventListener('push', (event) => {
   let d = {};
@@ -37,5 +41,7 @@ const OFFLINE = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><
 <body><main><h1>Sem conexão com a internet</h1><p>Verifique o Wi-Fi ou os dados móveis e tente de novo.</p><button onclick="location.reload()">Tentar de novo</button></main></body></html>`;
 self.addEventListener('fetch', (event) => {
   if (event.request.mode !== 'navigate') return;
-  event.respondWith(fetch(event.request).catch(() => new Response(OFFLINE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
+  event.respondWith((async () => {
+    try { return (await event.preloadResponse) || (await fetch(event.request)); } catch { return new Response(OFFLINE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }); }
+  })());
 });
