@@ -22,14 +22,34 @@ export const TITLE_OPTIONS = { iniciais: 'Iniciais (ex.: “Sessão · M. S.”)
 
 // ---------- configuração (credenciais OAuth guardadas criptografadas no banco) ----------
 const S = Tenancy.scoped({ cfgCache: null }); // caches com um valor por clínica
+// Credencial usada pela clínica: a própria (se cadastrada) ou a credencial geral da Mentez (Painel → Google).
+// Com a da Mentez, o Google sempre devolve para app.mentez.com.br/google/retorno, que repassa para o endereço da clínica.
 export async function config() {
   if (S.cfgCache && S.cfgCache.at > Date.now() - 60e3) return S.cfgCache.v;
   const id = await getSetting('google_client_id');
   const secret = await getSetting('google_client_secret_enc');
-  const v = id && secret ? { clientId: id, clientSecret: decrypt(secret) } : null;
+  let v = id && secret ? { clientId: id, clientSecret: decrypt(secret), own: true } : null;
+  if (!v && Tenancy.multi()) { const c = await centralConfig().catch(() => null); if (c) v = { ...c, central: true }; }
   S.cfgCache = { at: Date.now(), v };
   return v;
 }
+// ---------- credencial geral da Mentez (banco da plataforma) ----------
+let central = null;
+export async function centralConfig(fresh = false) {
+  if (!fresh && central && central.at > Date.now() - 60e3) return central.v;
+  let v = null;
+  try { const raw = (await Tenancy.pone("SELECT v FROM platform_settings WHERE k = 'plat_google'"))?.v; if (raw) { const o = JSON.parse(raw); if (o.clientId && o.secret_sealed) v = { clientId: o.clientId, clientSecret: Tenancy.unseal(o.secret_sealed).s }; } } catch { v = null; }
+  central = { at: Date.now(), v };
+  return v;
+}
+export async function saveCentral(clientId, secret) {
+  const cur = await centralConfig(true);
+  const s = String(secret || '').trim() || cur?.clientSecret || '';
+  await Tenancy.pq("INSERT INTO platform_settings (k, v) VALUES ('plat_google', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)", [JSON.stringify({ clientId: String(clientId).trim(), secret_sealed: s ? Tenancy.seal({ s }) : null })]);
+  central = null;
+}
+export async function clearCentral() { await Tenancy.pq("DELETE FROM platform_settings WHERE k = 'plat_google'"); central = null; }
+export const centralRedirect = () => `https://app.${Tenancy.baseDomain()}/google/retorno`;
 export async function saveConfig(clientId, clientSecret) {
   await setSetting('google_client_id', clientId);
   if (clientSecret) await setSetting('google_client_secret_enc', encrypt(clientSecret));
@@ -43,6 +63,7 @@ export async function clearConfig() {
 // Endereço de retorno do Google: o mesmo endereço em que a pessoa está usando o sistema (o login vale por endereço;
 // se voltasse para outro endereço da clínica, a sessão não estaria lá). O endereço já foi validado como desta clínica.
 export function redirectUri(req) {
+  if (S.cfgCache?.v?.central) return centralRedirect();
   const pub = String(Tenancy.env('PUBLIC_URL') || '').replace(/\/+$/, '');
   const host = String(req?.get?.('host') || '').toLowerCase();
   if (Tenancy.multi() && host && Tenancy.current() && !/^(localhost|127\.|\[)/.test(host) && pub && new URL(pub).host !== host) return `https://${host}/conta/google/retorno`;
@@ -57,8 +78,10 @@ export async function redirectUris() {
 
 // ---------- OAuth ----------
 function stateSecret() { return Tenancy.env('SESSION_SECRET'); }
-export function makeState(uid) {
-  const body = Buffer.from(JSON.stringify({ uid, n: crypto.randomBytes(8).toString('hex'), exp: Date.now() + 10 * 60e3 })).toString('base64url');
+// h: endereço da clínica de onde a pessoa saiu (o retorno central da Mentez devolve para lá)
+export function makeState(uid, req = null) {
+  const h = String(req?.get?.('host') || '').toLowerCase() || undefined;
+  const body = Buffer.from(JSON.stringify({ uid, h, n: crypto.randomBytes(8).toString('hex'), exp: Date.now() + 10 * 60e3 })).toString('base64url');
   return `${body}.${crypto.createHmac('sha256', stateSecret()).update('g:' + body).digest('base64url')}`;
 }
 export function readState(state) {
@@ -74,7 +97,7 @@ export async function authUrl(req, uid) {
   const c = await config();
   const p = new URLSearchParams({
     client_id: c.clientId, redirect_uri: redirectUri(req), response_type: 'code', scope: SCOPES.join(' '),
-    access_type: 'offline', prompt: 'select_account consent', include_granted_scopes: 'true', state: makeState(uid),
+    access_type: 'offline', prompt: 'select_account consent', include_granted_scopes: 'true', state: makeState(uid, req),
   });
   return `${AUTH}/o/oauth2/v2/auth?${p}`;
 }
@@ -93,6 +116,7 @@ async function tokenRequest(params) {
 }
 
 export async function exchangeCode(req, code) {
+  await config(); // define a credencial (própria ou da Mentez) antes de montar o endereço de retorno
   const t = await tokenRequest({ code, grant_type: 'authorization_code', redirect_uri: redirectUri(req) });
   let email = null;
   if (t.id_token) { try { email = JSON.parse(Buffer.from(t.id_token.split('.')[1], 'base64url').toString()).email; } catch { /* ignore */ } }

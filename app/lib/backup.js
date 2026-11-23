@@ -42,7 +42,7 @@ export async function authUrl(req, uid) {
   if (!g) return null;
   const p = new URLSearchParams({
     client_id: g.clientId, redirect_uri: G.redirectUri(req), response_type: 'code', scope: `openid email ${DRIVE_SCOPE}`,
-    access_type: 'offline', prompt: 'select_account consent', state: G.makeState(`drive:${uid}`),
+    access_type: 'offline', prompt: 'select_account consent', state: G.makeState(`drive:${uid}`, req),
   });
   return `${AUTH}/o/oauth2/v2/auth?${p}`;
 }
@@ -55,6 +55,7 @@ async function tokenReq(params) {
   return d;
 }
 export async function connect(req, code) {
+  await G.config(); // define a credencial (própria ou da Mentez) antes de montar o endereço de retorno
   const t = await tokenReq({ code, grant_type: 'authorization_code', redirect_uri: G.redirectUri(req) });
   if (!t.refresh_token) throw new Error('O Google não enviou a autorização permanente. Remova o acesso em myaccount.google.com/permissions e conecte de novo.');
   let email = null;

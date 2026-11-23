@@ -178,20 +178,25 @@ admin.get('/', async (req, res) => {
   const pros = await q(`SELECT u.id, u.name, u.role, u.active, u.google_email, u.google_connected_at, u.google_error, u.google_refresh_enc IS NOT NULL conectado, u.ical_token_hash IS NOT NULL ical,
     (SELECT COUNT(*) FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE p.owner_id = u.id AND a.starts_at >= NOW() AND a.google_error IS NOT NULL) erros
     FROM users u WHERE u.role IN ('admin','psicologo') AND u.attends = 1 ORDER BY u.active DESC, u.name`);
+  const central = await G.centralConfig().catch(() => null);
   const redirect = G.redirectUri(req); const allRedirects = (await G.redirectUris()).filter((u) => u !== redirect);
   send(res, page(req, {
     title: 'Google Agenda', active: 'config',
     body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Google Agenda</h1></div><div class="ph-actions"><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
     <div class="grid2">
       <section class="card"><h2>Credenciais do Google</h2>
-        ${cfg ? html`<p><span class="badge b-realizada">Configurada</span> <small class="muted">ID do cliente: ${cfg.clientId.slice(0, 18)}…</small></p>` : html`<p><span class="badge b-agendada">Não configurada</span></p>`}
+        ${cfg?.central ? html`<p><span class="badge b-realizada">Conexão da Mentez</span></p><p class="small">Nada a configurar: cada profissional só clica em <b>Conectar</b> em Conta → Google Agenda, e o backup se conecta em Configurações → Backup.</p>`
+          : cfg?.own ? html`<p><span class="badge b-realizada">Credencial própria</span> <small class="muted">ID do cliente: ${cfg.clientId.slice(0, 18)}…</small></p>${central ? html`<form method="post" action="/configuracoes/google/remover" data-confirm="Passar a usar a conexão da Mentez? Cada profissional (e o backup no Drive) vai precisar conectar de novo uma vez."><button class="btn ghost btn-sm">Usar a conexão da Mentez (sem credencial própria)</button></form>` : ''}`
+          : html`<p><span class="badge b-agendada">Não configurada</span></p>`}
+        <details ${cfg?.central ? '' : raw('open')}><summary class="small">${cfg?.central ? 'Usar uma credencial própria (avançado)' : 'Credencial própria'}</summary>
         <form method="post" action="/configuracoes/google" class="stack">
-          <label class="fld"><span>ID do cliente OAuth (Client ID)</span><input name="client_id" required value="${cfg?.clientId || ''}" placeholder="000000000000-xxxx.apps.googleusercontent.com" autocomplete="off"></label>
-          <label class="fld"><span>Chave secreta do cliente (Client secret)</span><input type="password" name="client_secret" ${cfg ? '' : raw('required')} placeholder="${cfg ? 'deixe em branco para manter a atual' : 'GOCSPX-…'}" autocomplete="off"></label>
+          <label class="fld"><span>ID do cliente OAuth (Client ID)</span><input name="client_id" required value="${cfg?.own ? cfg.clientId : ''}" placeholder="000000000000-xxxx.apps.googleusercontent.com" autocomplete="off"></label>
+          <label class="fld"><span>Chave secreta do cliente (Client secret)</span><input type="password" name="client_secret" ${cfg?.own ? '' : raw('required')} placeholder="${cfg?.own ? 'deixe em branco para manter a atual' : 'GOCSPX-…'}" autocomplete="off"></label>
           <div class="actions"><button class="btn">Salvar credenciais</button></div>
-        </form>
+        </form></details>
         <p class="muted small">A chave secreta é guardada criptografada e nunca é exibida novamente.</p>
       </section>
+      ${cfg?.central ? html`<section class="card"><h2>Como funciona</h2><p class="small">A clínica usa a conexão geral da Mentez com o Google. Ao conectar, cada profissional escolhe a própria conta Google e autoriza a criação dos eventos das sessões na agenda dela. Ninguém da clínica vê a agenda pessoal de outra pessoa.</p></section>` : html`
       <section class="card"><h2>Como obter (uma vez, ~10 min)</h2>
         <ol class="bullets small">
           <li>Acesse <b>console.cloud.google.com</b> com a conta Google do consultório e crie um projeto (ex.: “${Brand.get().appName}”).</li>
@@ -211,7 +216,7 @@ admin.get('/', async (req, res) => {
             <li>Depois de salvar no Google, aguarde de 5 a 10 minutos antes de tentar de novo.</li>
           </ul></div>
         <p class="muted small">Ao conectar, o Google pode mostrar “O Google não verificou este app”: clique em <b>Avançado → Acessar ${Brand.get().appName}</b>. Isso é esperado para apps de uso interno (até 100 usuários).</p>
-      </section>
+      </section>`}
     </div>
     <section class="card flush"><h2 class="pad-h">Profissionais</h2>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Profissional</th><th>Google Agenda</th><th>Conta Google</th><th>Link iCal</th><th>Erros</th></tr></thead>
@@ -222,7 +227,7 @@ admin.get('/', async (req, res) => {
       <p class="muted small pad-h" style="padding-bottom:18px">Cada profissional conecta a própria conta em <b>Conta → Google Agenda</b>. A administradora não tem acesso às agendas pessoais.</p>
     </section>
     <section class="card"><h2>Privacidade (LGPD)</h2><p class="small">O Google passa a ser operador dos dados enviados: data, horário, duração, modalidade e o identificador escolhido (iniciais por padrão). Nenhuma informação clínica, telefone ou CPF é enviada. Os eventos são marcados como privados.</p></section>
-    ${cfg ? html`<form method="post" action="/configuracoes/google/remover" class="danger-zone" data-confirm="Remover as credenciais? Todas as conexões deixam de sincronizar."><button class="btn danger">Remover credenciais</button></form>` : ''}`,
+    ${cfg?.own ? html`<form method="post" action="/configuracoes/google/remover" class="danger-zone" data-confirm="Remover as credenciais? Todas as conexões deixam de sincronizar."><button class="btn danger">Remover credenciais</button></form>` : ''}`,
   }));
 });
 
@@ -230,7 +235,7 @@ admin.post('/', async (req, res) => {
   const id = str(req.body.client_id, 200);
   const secret = str(req.body.client_secret, 200);
   if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(id)) return res.flash('O ID do cliente deve terminar em “.apps.googleusercontent.com”.', 'err').redirect('/configuracoes/google');
-  if (!secret && !(await G.config())) return res.flash('Informe a chave secreta.', 'err').redirect('/configuracoes/google');
+  if (!secret && !(await G.config())?.own) return res.flash('Informe a chave secreta.', 'err').redirect('/configuracoes/google');
   await G.saveConfig(id, secret || null);
   await audit(req, 'google-credenciais');
   res.flash('Credenciais salvas. Agora cada profissional pode conectar a agenda em Conta.').redirect('/configuracoes/google');

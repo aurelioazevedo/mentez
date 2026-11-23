@@ -26,6 +26,8 @@ import { mount as mountCRM, clinicTabs, pinnedBox } from './platform-crm.js';
 import * as PlatCRM from '../lib/platcrm.js';
 import * as ErrorPages from '../lib/errorpages.js';
 import * as PlatPush from '../lib/platpush.js';
+import * as G from '../lib/google.js';
+import { getSetting as getSettingTenant } from '../lib/db.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -64,6 +66,17 @@ handle.get('/manifest.webmanifest', (req, res) => res.set('Cache-Control', 'no-c
   icons: [{ src: '/static/img/mentez/app-192.png', sizes: '192x192', type: 'image/png' }, { src: '/static/img/mentez/app-512.png', sizes: '512x512', type: 'image/png' }, { src: '/static/img/mentez/app-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
   shortcuts: [{ name: 'Chamados', url: '/chamados' }, { name: 'Conversas', url: '/conversas' }, { name: 'Clínicas', url: '/clinicas' }],
 })));
+// Retorno central do Google (credencial geral da Mentez): repassa a resposta do Google para o endereço da clínica
+// de onde a pessoa saiu (vem no “state”, que a própria clínica assinou e confere). Só repassa para endereços de clínicas.
+handle.get('/google/retorno', async (req, res) => {
+  let host = '';
+  try { host = String(JSON.parse(Buffer.from(String(req.query.state || '').split('.')[0], 'base64url').toString()).h || '').toLowerCase(); } catch { host = ''; }
+  const name = host.replace(/:\d+$/, '');
+  const t = name && !T.platformHosts().has(name) ? await T.byHost(name).catch(() => null) : null;
+  if (!t || t.status !== 'ativa') return res.status(400).send(ErrorPages.mentez404(req, { title: 'Não foi possível voltar para a clínica.', text: 'O retorno do Google não indicou de qual clínica veio o pedido. Volte ao sistema da clínica e tente conectar de novo.' }));
+  const qs = new URLSearchParams(); for (const k of ['code', 'state', 'error', 'scope']) if (req.query[k]) qs.set(k, String(req.query[k]).slice(0, 4000));
+  res.redirect(`https://${host}/conta/google/retorno?${qs}`);
+});
 handle.get('/sw.js', (_req, res) => res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }).type('application/javascript').sendFile(path.join(PUBLIC_DIR, 'sw.js')));
 handle.use(express.urlencoded({ extended: false, limit: '50kb' }), checkOrigin, flash);
 handle.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); next(); });
@@ -127,7 +140,7 @@ const ICON = {
 };
 const MENU = [
   ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec'], ['/chamados', 'Chamados', 'chamados', 'chamados'], ['/conversas', 'Conversas', 'conversas', 'conversas']]],
-  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/indicacoes', 'Indicações', 'presente'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
+  ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/indicacoes', 'Indicações', 'presente'], ['/google', 'Google', 'site'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
 const ROLES = {
@@ -143,6 +156,7 @@ const RULES = [
   ['*', /^\/comunicacao(\/|$)/, ['admin', 'financeiro']],
   ['*', /^\/indicacoes(\/|$)/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas\/\d+\/endereco$/, ['admin']],
+  ['*', /^\/google(\/|$)/, ['admin']],
   ['POST', /^\/clinicas\/\d+\/assinatura$/, ['admin', 'financeiro']],
   ['POST', /^\/clinicas(\/|$)/, ['admin', 'suporte']],
   ['GET', /^\/clinicas\/nova$/, ['admin', 'suporte']],
@@ -745,6 +759,37 @@ handle.post('/clinicas/:id/enviar-cobranca', need, async (req, res, next) => {
   await log(req, 'cobranca-enviar', t.id, out.join(' · '));
   res.flash(out.join(' · '), out.some((x) => /não/.test(x)) ? 'warn' : 'ok').redirect(`/clinicas/${t.id}`);
 });
+// ---------- credencial geral do Google (Agenda e backup no Drive de todas as clínicas) ----------
+handle.get('/google', need, async (req, res) => {
+  const c = await G.centralConfig(true);
+  const own = []; for (const t of await T.all()) { const id = await T.run(t, () => getSettingTenant('google_client_id')).catch(() => null); if (id) own.push(t.name); }
+  const redirect = G.centralRedirect();
+  send(res, layout(req, 'Google', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Google (Agenda e Drive)</h1><p class="muted">Uma credencial da Mentez no Google Cloud para todas as clínicas: cada profissional só clica em “Conectar” — sem criar credenciais por clínica.</p></div></header>
+    <div class="grid2">
+      <form method="post" action="/google" class="card form-grid"><h2 class="span2">Credencial da Mentez</h2>
+        <p class="span2">${c ? html`<span class="badge b-realizada">Ativa</span> usada pelas clínicas sem credencial própria.` : html`<span class="badge b-falta">Não configurada</span> As clínicas sem credencial própria ainda não conseguem conectar o Google.`}</p>
+        <label class="fld span2"><span>ID do cliente OAuth (Client ID)</span><input name="client_id" required maxlength="200" value="${c?.clientId || ''}" placeholder="000000000000-xxxx.apps.googleusercontent.com" autocomplete="off"></label>
+        <label class="fld span2"><span>Chave secreta do cliente ${c ? html`<small class="muted">(cadastrada — preencha só para trocar)</small>` : ''}</span><input type="password" name="client_secret" maxlength="200" autocomplete="new-password" ${c ? '' : raw('required')}></label>
+        <div class="span2 actions"><button class="btn">Salvar</button>${c ? html`<button class="btn ghost danger-text" formaction="/google/remover" formnovalidate data-confirm="Remover a credencial da Mentez? As clínicas que usam a conexão da Mentez vão precisar reconectar depois.">Remover</button>` : ''}</div>
+        <p class="span2 muted small">A chave fica guardada criptografada. ${own.length ? `Clínicas com credencial própria (continuam com a delas): ${own.join(', ')}.` : 'Nenhuma clínica usa credencial própria.'}</p>
+      </form>
+      <section class="card"><h2>Como configurar no Google Cloud (uma vez)</h2><ol class="small" style="padding-left:18px;line-height:1.7">
+        <li>Em <b>console.cloud.google.com</b>, crie o projeto <b>Mentez</b>.</li>
+        <li><b>APIs e serviços → Biblioteca</b>: ative <b>Google Calendar API</b> e <b>Google Drive API</b>.</li>
+        <li><b>Tela de consentimento OAuth</b>: tipo Externo; nome <b>Mentez</b>, logo, e-mail de suporte; domínio autorizado <b>${T.baseDomain()}</b>; política de privacidade <b>https://${T.baseDomain()}/seguranca/</b>; escopos: <i>calendar.events</i>, <i>calendar.calendarlist.readonly</i>, <i>drive.file</i>, <i>openid</i>, <i>email</i>.</li>
+        <li><b>Credenciais → Criar credenciais → ID do cliente OAuth</b> → tipo <b>Aplicativo da Web</b>. Em <b>URIs de redirecionamento autorizados</b>, cole:
+          <div class="copy"><input readonly value="${redirect}" id="gredir"><button class="btn ghost" type="button" data-copy="#gredir">Copiar</button></div></li>
+        <li>Copie o <b>ID do cliente</b> e a <b>chave secreta</b> para o formulário ao lado.</li>
+        <li>Na tela de consentimento, clique em <b>Publicar app</b> e peça a <b>verificação</b> (a Agenda usa um escopo sensível). Até a aprovação, aparece “o Google não verificou este app” (dá para continuar em “Avançado”) e o limite é de 100 usuários.</li></ol>
+      </section></div>`));
+});
+handle.post('/google', need, async (req, res) => {
+  const id = str(req.body.client_id, 200);
+  if (!/\.apps\.googleusercontent\.com$/.test(id)) return res.flash('O ID do cliente termina com .apps.googleusercontent.com — confira.', 'err').redirect('/google');
+  await G.saveCentral(id, req.body.client_secret); await log(req, 'google-credencial-mentez');
+  res.flash('Credencial do Google salva. As clínicas sem credencial própria já podem conectar a Agenda e o backup no Drive.').redirect('/google');
+});
+handle.post('/google/remover', need, async (req, res) => { await G.clearCentral(); await log(req, 'google-credencial-mentez-remover'); res.flash('Credencial removida.').redirect('/google'); });
 // ---------- indicações ----------
 async function refInfo(row) {
   const by = row.referred_by ? await T.pone('SELECT id, name FROM tenants WHERE id = ?', [row.referred_by]) : null;
