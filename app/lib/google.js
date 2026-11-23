@@ -40,7 +40,20 @@ export async function clearConfig() {
   await setSetting('google_client_secret_enc', null);
   S.cfgCache = null;
 }
-export const redirectUri = (req) => `${(Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '')}/conta/google/retorno`;
+// Endereço de retorno do Google: o mesmo endereço em que a pessoa está usando o sistema (o login vale por endereço;
+// se voltasse para outro endereço da clínica, a sessão não estaria lá). O endereço já foi validado como desta clínica.
+export function redirectUri(req) {
+  const pub = String(Tenancy.env('PUBLIC_URL') || '').replace(/\/+$/, '');
+  const host = String(req?.get?.('host') || '').toLowerCase();
+  if (Tenancy.multi() && host && Tenancy.current() && !/^(localhost|127\.|\[)/.test(host) && pub && new URL(pub).host !== host) return `https://${host}/conta/google/retorno`;
+  return `${pub || `${req.protocol}://${req.get('host')}`}/conta/google/retorno`;
+}
+// Todos os endereços desta clínica (endereço da Mentez e domínios próprios ativos): cada um precisa estar cadastrado no Google
+export async function redirectUris() {
+  const t = Tenancy.current(); if (!t || !Tenancy.multi()) return [];
+  const rows = await Tenancy.pq('SELECT domain FROM tenant_domains WHERE tenant_id = ? AND verified_at IS NOT NULL ORDER BY is_primary DESC, domain', [t.id]).catch(() => []);
+  return [...new Set([...rows.map((r) => `https://${r.domain}/conta/google/retorno`), `https://${t.slug}.${Tenancy.baseDomain()}/conta/google/retorno`])];
+}
 
 // ---------- OAuth ----------
 function stateSecret() { return Tenancy.env('SESSION_SECRET'); }

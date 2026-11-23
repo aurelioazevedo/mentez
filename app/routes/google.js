@@ -178,7 +178,7 @@ admin.get('/', async (req, res) => {
   const pros = await q(`SELECT u.id, u.name, u.role, u.active, u.google_email, u.google_connected_at, u.google_error, u.google_refresh_enc IS NOT NULL conectado, u.ical_token_hash IS NOT NULL ical,
     (SELECT COUNT(*) FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE p.owner_id = u.id AND a.starts_at >= NOW() AND a.google_error IS NOT NULL) erros
     FROM users u WHERE u.role IN ('admin','psicologo') AND u.attends = 1 ORDER BY u.active DESC, u.name`);
-  const redirect = G.redirectUri(req);
+  const redirect = G.redirectUri(req); const allRedirects = (await G.redirectUris()).filter((u) => u !== redirect);
   send(res, page(req, {
     title: 'Google Agenda', active: 'config',
     body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Google Agenda</h1></div><div class="ph-actions"><a class="btn ghost" href="/configuracoes">Voltar</a></div></header>
@@ -198,7 +198,9 @@ admin.get('/', async (req, res) => {
           <li>Em <b>APIs e serviços → Biblioteca</b>, ative a <b>Google Calendar API</b>.</li>
           <li>Em <b>Tela de consentimento OAuth</b>: tipo <b>Externo</b>, nome do app “${Brand.get().appName}”, seu e-mail de suporte. Em escopos, adicione <code>calendar.events</code> e <code>calendar.calendarlist.readonly</code>. Depois clique em <b>Publicar app</b> (status “Em produção”) — no modo teste o acesso expira a cada 7 dias.</li>
           <li>Em <b>Credenciais → Criar credenciais → ID do cliente OAuth</b>: tipo <b>Aplicativo da Web</b>; em “URIs de redirecionamento autorizados” cole exatamente:
-            <div class="copy"><input readonly value="${redirect}" id="redir"><button class="btn ghost" type="button" data-copy="#redir">Copiar</button></div></li>
+            <div class="copy"><input readonly value="${redirect}" id="redir"><button class="btn ghost" type="button" data-copy="#redir">Copiar</button></div>
+            ${allRedirects.length ? html`<p class="small" style="margin:8px 0 4px">A clínica também abre por ${allRedirects.length === 1 ? 'outro endereço' : 'outros endereços'}. Cadastre ${allRedirects.length === 1 ? 'este também' : 'estes também'} (um por linha), para o Google funcionar de qualquer um deles:</p>
+              ${allRedirects.map((u, i) => html`<div class="copy"><input readonly value="${u}" id="redir${i}"><button class="btn ghost" type="button" data-copy="#redir${i}">Copiar</button></div>`)}` : ''}</li>
           <li>Copie o <b>ID do cliente</b> e a <b>chave secreta</b> para o formulário ao lado.</li>
         </ol>
         <div class="flash warn small"><b>Apareceu “Erro 400: redirect_uri_mismatch”?</b> O endereço acima não está cadastrado no cliente OAuth. Confira:
