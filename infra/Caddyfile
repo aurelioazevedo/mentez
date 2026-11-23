@@ -49,11 +49,28 @@ https:// {
 	}
 	import seg
 	@dev host dev.mentez.com.br *.dev.mentez.com.br
+	# Durante uma atualização o app fica alguns segundos fora: o Caddy segura o acesso e tenta de novo
+	# (até 60 s) em vez de mostrar erro. Passando disso, mostra a página “Estamos atualizando”, que recarrega sozinha.
 	handle @dev {
 		header X-Robots-Tag "noindex, nofollow"
-		reverse_proxy app-dev:3000
+		reverse_proxy app-dev:3000 {
+			lb_try_duration 60s
+			lb_try_interval 300ms
+		}
 	}
 	handle {
-		reverse_proxy app:3000
+		reverse_proxy app:3000 {
+			lb_try_duration 60s
+			lb_try_interval 300ms
+		}
+	}
+	handle_errors 502 503 504 {
+		root * /srv/mentez
+		rewrite * /atualizando.html
+		header Cache-Control "no-store"
+		header Retry-After "10"
+		file_server {
+			status 503
+		}
 	}
 }

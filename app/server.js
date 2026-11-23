@@ -344,10 +344,25 @@ async function boot() {
     await Tenancy.forEachTenant(() => migrate(), 'migração'); // cada clínica no seu banco, sempre no esquema atual
   } else await migrate();
 }
+// Atualização sem erro para quem está usando: ao receber o pedido de desligamento (nova versão subindo),
+// para de aceitar conexões novas, deixa terminar as que estão em andamento e sai em poucos segundos
+// (sem isso o Docker esperava 10 s e derrubava à força). O Caddy segura e repete os acessos enquanto a nova versão liga.
+let httpServer = null; let stopping = false;
+function shutdown(sig) {
+  if (stopping) return; stopping = true;
+  console.log(`${sig}: encerrando com calma (nova versão subindo)`);
+  if (!httpServer) process.exit(0);
+  httpServer.close(() => process.exit(0));
+  httpServer.closeIdleConnections?.();
+  setTimeout(() => httpServer.closeAllConnections?.(), 3000).unref(); // conexões longas (atualização ao vivo) reconectam sozinhas
+  setTimeout(() => process.exit(0), 6000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 boot()
   .then(() => console.log(Tenancy.multi() ? 'Mentez: plataforma e clínicas prontas.' : 'Banco de dados pronto.'))
   .catch((e) => console.error('Falha ao preparar o banco:', e.message))
-  .finally(() => app.listen(port, () => {
+  .finally(() => (httpServer = app.listen(port, () => {
     console.log(`Sistema rodando na porta ${port}`);
     startWhatsApp();
     if (Tenancy.multi()) { const dt = () => Domains.tick().catch((e) => console.error('domínios:', e.message)); setTimeout(dt, 60e3).unref(); setInterval(dt, Number(process.env.DOMAIN_TICK_MS) || 10 * 60e3).unref(); }
@@ -368,7 +383,7 @@ boot()
     every(Number(process.env.GATEWAY_TICK_MS) || 10 * 60e3, () => Gateway.tick(), 'cobrança online');
     if (Tenancy.multi()) every(3600e3, () => Tickets.tick(), 'chamados', 120e3);
     if (Tenancy.multi()) setInterval(() => Billing.tick().catch((e) => console.error('cobrança Mentez:', e.message)), Number(process.env.MENTEZ_BILLING_TICK_MS) || 3600e3).unref(); // conferência das mensalidades
-  }));
+  })));
 process.on('unhandledRejection', (e) => { console.error('unhandledRejection', e); Monitor.recordError(e, 'processo'); });
 
 export default app;

@@ -61,12 +61,12 @@ services:
           st=$$(docker inspect -f '{{.State.Status}}' mentez-$$s-1 2>/dev/null || echo ausente)
           if [ "$$st" != running ]; then echo "SERVICO: $$s estava $$st, ligando"; docker start mentez-$$s-1 >/dev/null || true; fi
         done
-        docker compose -p mentez -f /opt/mentez/src/infra/vps.yml up -d --no-deps --no-build app
-        for i in $$(seq 1 30); do h=$$(docker inspect -f '{{.State.Health.Status}}' mentez-app-1 2>/dev/null); [ "$$h" = healthy ] && break; sleep 2; done
-        echo "APP: $$(docker inspect -f '{{.Config.Image}} {{.State.Health.Status}}' mentez-app-1)"
-        # Caddy: aplica o Caddyfile novo sem reiniciar (valida antes; se der erro, segue a configuração atual)
+        # Caddy primeiro (segura e repete os acessos durante a troca do app): aplica o Caddyfile novo sem reiniciar (valida antes; se der erro, segue a configuração atual)
         if docker exec -i mentez-caddy-1 caddy validate --adapter caddyfile --config /dev/stdin < /opt/mentez/src/infra/Caddyfile >/dev/null 2>&1; then
           docker exec -i mentez-caddy-1 caddy reload --adapter caddyfile --config /dev/stdin < /opt/mentez/src/infra/Caddyfile >/dev/null 2>&1 && echo "CADDY: configuração aplicada" || echo "CADDY: falha ao aplicar (segue a anterior)"
         else echo "CADDY: Caddyfile inválido (segue a configuração anterior)"; fi
+        docker compose -p mentez -f /opt/mentez/src/infra/vps.yml up -d --no-deps --no-build app
+        for i in $$(seq 1 30); do h=$$(docker inspect -f '{{.State.Health.Status}}' mentez-app-1 2>/dev/null); [ "$$h" = healthy ] && break; sleep 2; done
+        echo "APP: $$(docker inspect -f '{{.Config.Image}} {{.State.Health.Status}}' mentez-app-1)"
         for s in db evodb evolution caddy app; do echo "STATUS: $$s $$(docker inspect -f '{{.State.Status}}' mentez-$$s-1)"; done
         docker image prune -f >/dev/null || true
