@@ -2069,8 +2069,13 @@ document.querySelectorAll('[data-ai-slot]').forEach((box) => {
   // botão flutuante (robô) e o ícone de ajuda na barra de cima abrem o mesmo chat
   document.querySelectorAll('[data-hb-open]').forEach((b) => b.addEventListener('click', () => open(panel.hidden)));
   box.querySelector('[data-hb-close]').addEventListener('click', () => open(false));
-  // toda página abre com o mascote de corpo inteiro; depois de alguns segundos ele vira a cabecinha do robô (discreta)
-  { const shrink = () => { if (!panel.hidden) return setTimeout(shrink, 4000); box.classList.add('mini', 'mini-in'); }; setTimeout(shrink, 5000); }
+  // ao abrir o sistema: mascote de corpo inteiro; depois de alguns segundos vira a cabecinha do robô (com o chat aberto, espera fechar).
+  // Nas outras páginas da mesma visita já vem só a cabeça (cookie de sessão, que some ao fechar o navegador ou o aplicativo).
+  if (!box.classList.contains('mini')) {
+    document.cookie = 'hb_seen=1; path=/; SameSite=Lax';
+    const shrink = () => { if (!panel.hidden) return setTimeout(shrink, 4000); box.classList.add('mini', 'mini-in'); };
+    setTimeout(shrink, 5000);
+  }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) open(false); });
   let busy = false;
   const ask = async (q) => {
