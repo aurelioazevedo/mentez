@@ -2069,11 +2069,8 @@ document.querySelectorAll('[data-ai-slot]').forEach((box) => {
   // botão flutuante (robô) e o ícone de ajuda na barra de cima abrem o mesmo chat
   document.querySelectorAll('[data-hb-open]').forEach((b) => b.addEventListener('click', () => open(panel.hidden)));
   box.querySelector('[data-hb-close]').addEventListener('click', () => open(false));
-  // o mascote aparece por alguns segundos na primeira tela da sessão e depois vira um “?” discreto (nas próximas telas já vem assim)
-  if (!box.classList.contains('mini')) {
-    const shrink = () => { if (!panel.hidden) return setTimeout(shrink, 4000); box.classList.add('mini', 'mini-in'); document.cookie = 'hb_seen=1; path=/; SameSite=Lax'; };
-    setTimeout(shrink, 6000);
-  }
+  // toda página abre com o mascote de corpo inteiro; depois de alguns segundos ele vira a cabecinha do robô (discreta)
+  { const shrink = () => { if (!panel.hidden) return setTimeout(shrink, 4000); box.classList.add('mini', 'mini-in'); }; setTimeout(shrink, 5000); }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) open(false); });
   let busy = false;
   const ask = async (q) => {
