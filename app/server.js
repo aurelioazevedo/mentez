@@ -166,6 +166,17 @@ app.use(async (req, res, next) => {
   Tenancy.run(t, next); // tudo o que vem depois (banco, chaves, caches) é desta clínica
 });
 app.use(Brand.middleware); // identidade da clínica (nome, logo, cores) disponível para todas as páginas
+// Agendamento on-line dentro do site da clínica (iframe): libera o site cadastrado na Identidade (com e sem www)
+// e os endereços extras de EMBED_ORIGINS. Calculado aqui, já com a clínica identificada.
+app.use((req, res, next) => {
+  if (!(req.path === '/agendar' || req.path.startsWith('/agendar/'))) return next();
+  const site = String(Brand.get()?.site || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+  const list = [...String(Tenancy.env('EMBED_ORIGINS') || '').split(/[\s,]+/).filter((o) => /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(o)),
+    ...(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(site) ? [`https://${site}`, `https://www.${site}`] : [])];
+  const csp = String(res.get('Content-Security-Policy') || '');
+  if (csp) res.set('Content-Security-Policy', csp.replace(/frame-ancestors [^;]*/, `frame-ancestors 'self'${list.length ? ` ${[...new Set(list)].join(' ')}` : ''}`));
+  next();
+});
 // Página “sem internet” da clínica (guardada pelo aplicativo para quando a conexão cair)
 app.get('/offline', (req, res, next) => ErrorPages.offlinePage().then((h) => res.set('Cache-Control', 'no-cache').type('html').send(h), next));
 app.get('/_mentez/entrar', (req, res, next) => autoLogin(req, res).catch(next)); // entrada automática logo depois de criar a conta
