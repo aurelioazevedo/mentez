@@ -338,6 +338,67 @@
     paint(); setInterval(paint, 1000);
     return { start() { if (!st) { st = { acc: 0, run: Date.now() }; save(); paint(); } }, get value() { return elapsed(); }, get state() { return st; } };
   })();
+  // ---------- layout dos vídeos: destaque (o outro grande), lado a lado, ou eu em destaque; tamanho do vídeo pequeno ----------
+  // Clique no vídeo pequeno troca os dois de lugar. A escolha fica guardada neste aparelho (separada para profissional e paciente).
+  const lay = (() => {
+    const KEY = `tele-layout-${cfg.role}`; const get = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
+    let st = { mode: 'foco', main: 'remote', pip: 'p', ...get() };
+    const lbl = $('[data-layout-label]'); const sizeBtn = $('[data-pipsize]');
+    const NAMES = { foco: 'Destaque', lado: 'Lado a lado' };
+    function apply() {
+      root.dataset.lay = st.mode; root.dataset.main = st.main; root.dataset.pip = st.pip;
+      if (lbl) lbl.textContent = NAMES[st.mode] || 'Destaque';
+      if (sizeBtn) { sizeBtn.textContent = st.pip.toUpperCase(); sizeBtn.hidden = st.mode === 'lado'; }
+      try { localStorage.setItem(KEY, JSON.stringify(st)); } catch { /* sem armazenamento */ }
+    }
+    const pipOf = () => (st.main === 'remote' ? local : remote);
+    [local, remote].forEach((v) => v.addEventListener('click', () => {
+      if (st.mode === 'lado') { st.mode = 'foco'; st.main = v === local ? 'local' : 'remote'; }
+      else if (v === pipOf()) st.main = st.main === 'remote' ? 'local' : 'remote';
+      apply();
+    }));
+    root.addEventListener('click', (e) => {
+      if (e.target.closest('[data-layout]')) { st.mode = st.mode === 'foco' ? 'lado' : 'foco'; apply(); }
+      else if (e.target.closest('[data-pipsize]')) { st.pip = { p: 'm', m: 'g', g: 'p' }[st.pip] || 'p'; apply(); }
+    });
+    apply();
+    return { get state() { return st; } };
+  })();
+
+  // ---------- paciente: anel com o andamento da sessão e o horário de término (sem cronômetro) ----------
+  (() => {
+    const box = $('[data-pclock]'); const T = cfg.timer; if (!box || !T) return;
+    const ring = box.querySelector('[data-pclock-ring]'); const tEl = box.querySelector('[data-pclock-t]'); const sEl = box.querySelector('[data-pclock-s]');
+    const C = 2 * Math.PI * 15; ring.style.strokeDasharray = `${C}`;
+    const start = new Date(`${T.start}-03:00`).getTime(); const end = start + T.min * 60e3;
+    const hm = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+    function paint() {
+      const now = Date.now(); const p = Math.min(1, Math.max(0, (now - start) / (end - start)));
+      ring.style.strokeDashoffset = `${C * (1 - p)}`;
+      const left = Math.ceil((end - now) / 60e3);
+      tEl.textContent = now < start ? `Começa às ${hm(start)}` : `Sessão até ${hm(end)}`;
+      sEl.textContent = now < start ? `${hm(start)} – ${hm(end)}` : left > 5 ? 'Sessão em andamento' : left > 0 ? 'Últimos minutos' : 'Horário encerrado';
+      box.classList.toggle('soon', left <= 5 && left > 0); box.classList.toggle('over', left <= 0);
+    }
+    paint(); setInterval(paint, 15e3);
+  })();
+
+  // ---------- profissional: barra de andamento e avisos discretos aos 10 e aos 5 minutos do fim ----------
+  (() => {
+    const bar2 = $('[data-prog]'); const warn = $('[data-clock-warn]'); const T = cfg.timer; if (!bar2 || !T) return;
+    const fill = bar2.querySelector('i'); const start = new Date(`${T.start}-03:00`).getTime(); const end = start + T.min * 60e3;
+    const shown = new Set(); let hideT = null;
+    const say = (t, cls) => { warn.textContent = t; warn.className = `tele-warn ${cls || ''}`; warn.hidden = false; clearTimeout(hideT); hideT = setTimeout(() => { warn.hidden = true; }, 12e3); };
+    function paint() {
+      const now = Date.now(); const p = Math.min(1, Math.max(0, (now - start) / (end - start))); const left = Math.ceil((end - now) / 60e3);
+      fill.style.width = `${(p * 100).toFixed(1)}%`;
+      bar2.className = `tele-prog ${left <= 0 ? 'over' : left <= 5 ? 'soon' : left <= 10 ? 'near' : ''}`;
+      if (!joined) return;
+      for (const m of [10, 5]) if (left === m && !shown.has(m)) { shown.add(m); say(`Faltam ${m} minutos para o fim da sessão`, m === 5 ? 'soon' : 'near'); }
+      if (left === 0 && !shown.has(0)) { shown.add(0); say('Horário da sessão encerrado', 'over'); }
+    }
+    paint(); setInterval(paint, 5e3);
+  })();
   root.dataset.ready = '1';
-  window.__tele = { clock, get pc() { return pc; }, get joined() { return joined; }, get dc() { return dc?.readyState || null; } };
+  window.__tele = { clock, lay, get pc() { return pc; }, get joined() { return joined; }, get dc() { return dc?.readyState || null; } };
 })();

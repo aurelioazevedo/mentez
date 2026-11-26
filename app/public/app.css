@@ -2690,3 +2690,58 @@ tr.tk-unread td { font-weight: 600; }
 .pc-inbox li.unread b { color: var(--ink); } .pc-inbox li.unread .pc-in-main small { color: var(--ink); font-weight: 600; }
 .pc-form h2 { margin: 10px 0 0; font-size: 16px; }
 .tk-wa { display: flex; flex-direction: column; gap: 6px; } .tk-wa input[name=whatsapp_phone] { max-width: 240px; }
+
+/* ---------- Teleconsulta: identidade visual da clínica, layouts e relógios por papel ---------- */
+.tele { --tv-a: var(--terracota, #04857E); --tv-al: var(--terracota-l, #07C6BC); --tv-d: color-mix(in srgb, var(--strong-bg, #071936) 78%, #000); --tv-pip: min(26vw, 220px); }
+.tele[data-pip="m"] { --tv-pip: min(36vw, 340px); } .tele[data-pip="g"] { --tv-pip: min(48vw, 480px); }
+body.tele-body { background: var(--tv-d, #0b0f17); color: #eef2f7; }
+.tele .tele-stage, .tele .tele-remote { background: color-mix(in srgb, var(--strong-bg, #071936) 60%, #000); }
+.tele .tele-wait { background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--tv-a) 22%, transparent), transparent 70%), color-mix(in srgb, var(--strong-bg, #071936) 70%, #000); }
+.tele .tele-meter i { background: var(--tv-al); }
+.tele .tele-top small, .tele .tele-hint, .tele .tele-q, .tele .tele-share { color: color-mix(in srgb, #fff 62%, var(--tv-a)) !important; }
+.tele .tele-back { color: color-mix(in srgb, #fff 70%, var(--tv-al)); }
+.tele .tele-bar button:hover { border-color: var(--tv-al); color: #fff; }
+.tele .tele-bar button.off { background: color-mix(in srgb, var(--tv-a) 25%, transparent); border-color: var(--tv-a); color: #fff; }
+.tele .tele-bar button.on { background: var(--tv-a); border-color: var(--tv-a); color: #fff; }
+.tele .tele-bar button.dot { box-shadow: 0 0 0 2px var(--tv-al); }
+.tele .tele-bar .tele-end { background: #c0392b; border-color: #c0392b; } .tele .tele-bar .tele-end:hover { background: #a02e22; }
+.tele .tele-msgs .me { background: var(--tv-a); color: #fff; }
+.tele .tele-admit-ic { background: var(--tv-a); } .tele .tele-admit-ai input { accent-color: var(--tv-a); }
+.tele .tele-mute { color: var(--tv-a); }
+.tele .tele-recbadge { background: color-mix(in srgb, var(--tv-a) 22%, transparent); color: #fff; border-color: color-mix(in srgb, var(--tv-a) 50%, transparent); }
+.tele .tele-aimsg { background: color-mix(in srgb, var(--tv-a) 14%, transparent); color: #e8eef5; }
+.tele-brand { display: flex; align-items: center; flex: none; }
+.tele-brand .tele-logo { max-height: 34px; max-width: 150px; width: auto; object-fit: contain; }
+.tele .tele-brand .logo-dark { display: block !important; } .tele .tele-brand .logo-light { display: none !important; }
+.tele-brand .brand-word { font-weight: 700; color: #fff; }
+.tele-who { min-width: 0; }
+/* vídeo pequeno: tamanho P/M/G e troca de lugar com o grande */
+.tele .tele-local { width: var(--tv-pip); cursor: pointer; transition: width 220ms cubic-bezier(.23, 1, .32, 1); }
+.tele-pipsize { position: absolute; right: 18px; bottom: calc(14px + var(--tv-pip) * .75 - 32px); z-index: 4; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .55); color: #fff; font: 700 12px/1 var(--sans); cursor: pointer; transition: bottom 220ms cubic-bezier(.23, 1, .32, 1); }
+.tele-pipsize[hidden] { display: none; }
+.tele[data-main="local"] .tele-local { inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; border: 0; object-fit: contain; z-index: 0; }
+.tele[data-main="local"] .tele-remote { inset: auto; right: 14px; bottom: 14px; width: var(--tv-pip); height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .25); z-index: 3; cursor: pointer; transition: width 220ms cubic-bezier(.23, 1, .32, 1); }
+/* lado a lado */
+.tele[data-lay="lado"] .tele-stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: 12px; padding: 12px; }
+.tele[data-lay="lado"] .tele-remote, .tele[data-lay="lado"] .tele-local { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 16px; border: 0; z-index: 1; }
+.tele[data-lay="lado"] .tele-local { order: 2; } .tele[data-lay="lado"] .tele-remote { order: 1; }
+@media (max-width: 760px) { .tele[data-lay="lado"] .tele-stage { grid-template-columns: 1fr; } .tele[data-lay="lado"] .tele-remote, .tele[data-lay="lado"] .tele-local { aspect-ratio: 16 / 10; } }
+/* profissional: barra de andamento e avisos */
+.tele-prog { height: 4px; background: rgba(255, 255, 255, .08); }
+.tele-prog i { display: block; height: 100%; width: 0; background: var(--tv-al); transition: width 1s linear, background 300ms; }
+.tele-prog.near i { background: #f0b429; } .tele-prog.soon i { background: #f08c2b; } .tele-prog.over i { background: #e5484d; }
+.tele-warn { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); z-index: 6; padding: 9px 16px; border-radius: 999px; background: rgba(16, 24, 40, .88); color: #fff; font-size: 14px; font-weight: 600; box-shadow: 0 12px 30px -12px rgba(0, 0, 0, .6); border: 1px solid rgba(255, 255, 255, .12); }
+.tele-warn[hidden] { display: none; } .tele-warn.near { border-color: #f0b429; } .tele-warn.soon { border-color: #f08c2b; } .tele-warn.over { border-color: #e5484d; }
+.tele-pro .tele-clock .tc-left.soon { color: #f0b429; } .tele-pro .tele-clock .tc-left.over { color: #ff8a8a; }
+/* paciente: visual mais calmo — anel com o andamento e o horário de término */
+.tele-pac .tele-top { justify-content: flex-start; background: linear-gradient(180deg, rgba(0, 0, 0, .35), transparent); }
+.tele-top .tele-pclock { display: flex; flex-direction: row; align-items: center; gap: 10px; margin-left: auto; padding: 5px 12px 5px 6px; border-radius: 999px; background: rgba(255, 255, 255, .08); }
+.tele-pclock svg { width: 34px; height: 34px; transform: rotate(-90deg); flex: none; }
+.tele-pclock circle { fill: none; stroke-width: 3.5; } .tele-pclock .bg { stroke: rgba(255, 255, 255, .15); }
+.tele-pclock .fg { stroke: var(--tv-al); stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 300ms; }
+.tele-pclock span { display: grid; line-height: 1.2; } .tele-pclock b { font-size: 14px; } .tele-pclock small { font-size: 12px; color: rgba(255, 255, 255, .7) !important; }
+.tele-pclock.soon .fg { stroke: #f0b429; } .tele-pclock.over .fg { stroke: rgba(255, 255, 255, .45); }
+.tele-pac .tele-status { margin-left: 10px; }
+.tele-pac .tele-local { border-radius: 18px; }
+@media (max-width: 640px) { .tele-brand .tele-logo { max-height: 26px; max-width: 110px; } .tele-top .tele-pclock { order: 5; margin-left: 0; padding: 4px 12px 4px 5px; } .tele-pclock svg { width: 28px; height: 28px; } .tele-warn { top: 120px; } .tele { --tv-pip: 30vw; } .tele[data-pip="m"] { --tv-pip: 42vw; } .tele[data-pip="g"] { --tv-pip: 58vw; } }
+.tele .tele-local { background: color-mix(in srgb, var(--strong-bg, #071936) 60%, #000); }

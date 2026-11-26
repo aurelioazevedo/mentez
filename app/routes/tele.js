@@ -2,7 +2,8 @@
 import * as Tenancy from '../lib/tenancy.js';
 import express from 'express';
 import { q, one, audit } from '../lib/db.js';
-import { page, bare, html, raw, brDate, weekday, VERSION } from '../lib/html.js';
+import { page, bare, html, raw, brDate, weekday, VERSION, appLogo } from '../lib/html.js';
+import * as Brand from '../lib/brand.js';
 import { router, send, int, str } from '../lib/router.js';
 import { canSeePatient, forbidden, isClinician } from '../lib/perm.js';
 import * as T from '../lib/tele.js';
@@ -134,20 +135,22 @@ const IC = {
   chat: SV('<path d="M20 15a2 2 0 0 1-2 2H8l-4.5 3.5V6a2 2 0 0 1 2-2H18a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 12.5h5"/>'),
   bell: SV('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>'),
   full: SV('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+  layout: SV('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/>'),
   ai: SV('<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/>'),
   end: SV('<path d="M3.5 14.5c4.7-4.2 12.3-4.2 17 0l-2.2 2.6a1.2 1.2 0 0 1-1.5.3l-2.3-1.2a1.2 1.2 0 0 1-.6-1.1V13a11 11 0 0 0-3.8 0v2.1a1.2 1.2 0 0 1-.6 1.1L7.2 17.4a1.2 1.2 0 0 1-1.5-.3z"/>'),
 };
 
 // Emojis de emoções para o chat (com nome, para leitores de tela)
 const EMOJIS = [['😊', 'Feliz'], ['🙂', 'Tranquilo(a)'], ['😌', 'Aliviado(a)'], ['😄', 'Animado(a)'], ['😂', 'Rindo'], ['🥰', 'Carinho'], ['😢', 'Triste'], ['😭', 'Chorando'], ['😔', 'Desanimado(a)'], ['😟', 'Preocupado(a)'], ['😰', 'Ansioso(a)'], ['😨', 'Com medo'], ['😠', 'Bravo(a)'], ['😤', 'Frustrado(a)'], ['😳', 'Envergonhado(a)'], ['😴', 'Cansado(a)'], ['🤔', 'Pensativo(a)'], ['😮', 'Surpreso(a)'], ['❤️', 'Coração'], ['🤗', 'Abraço'], ['🙏', 'Obrigado(a)'], ['👍', 'Ok'], ['👋', 'Olá / tchau'], ['💪', 'Força']];
-function roomPage(req, { role, title, who, when, sigUrl, ice, relay = false, backHref, patientLink, closed, ai = null, timer = null, after = null }) {
+function roomPage(req, { role, title, who, when, sigUrl, ice, relay = false, backHref, patientLink, closed, ai = null, timer = null, after = null, pro = null }) {
   const cfg = { role, sigUrl, ice, relay, patientLink, ai, timer, after };
-  return bare(title, html`<main class="tele" data-tele>
+  return bare(title, html`<main class="tele tele-${role}" data-tele data-role="${role}">
     <script type="application/json" id="tele-cfg">${raw(JSON.stringify(cfg).replace(/</g, '\\u003c'))}</script>
-    <header class="tele-top"><div><b>${who}</b><small>${when}</small></div><span class="tele-recbadge" data-recbadge hidden><i></i>${role === 'pro' ? 'Transcrevendo' : 'Sessão sendo transcrita'}</span>${role === 'pro' && timer ? html`<div class="tele-clock" data-clock aria-label="Relógio e tempo de sessão"><span class="tc-now" data-clock-now title="Horário atual">--:--</span>
+    <header class="tele-top"><span class="tele-brand">${appLogo('tele-logo')}</span><div class="tele-who"><b>${who}</b><small>${role === 'pac' && pro ? `com ${pro} · ` : ''}${when}</small></div>${role === 'pac' && timer && !closed ? html`<div class="tele-pclock" data-pclock aria-live="polite"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="bg"/><circle cx="18" cy="18" r="15" class="fg" data-pclock-ring/></svg><span><b data-pclock-t></b><small data-pclock-s></small></span></div>` : ''}<span class="tele-recbadge" data-recbadge hidden><i></i>${role === 'pro' ? 'Transcrevendo' : 'Sessão sendo transcrita'}</span>${role === 'pro' && timer ? html`<div class="tele-clock" data-clock aria-label="Relógio e tempo de sessão"><span class="tc-now" data-clock-now title="Horário atual">--:--</span>
       <span class="tc-timer"><button type="button" data-clock-timer title="Tempo de sessão — clique para pausar ou continuar" aria-label="Tempo de sessão">00:00</button><button type="button" class="tc-reset" data-clock-reset title="Zerar o cronômetro" aria-label="Zerar o cronômetro">↺</button></span>
       <span class="tc-left" data-clock-left title="Pelo horário marcado na agenda"></span></div>` : ''}<span class="tele-status" data-status>${closed || (role === 'pac' ? 'Teste sua câmera e entre na sala de espera' : 'Pronta para entrar')}</span>
       ${backHref ? html`<a class="tele-back" href="${backHref}">Sair da sala</a>` : ''}</header>
+    ${role === 'pro' && timer ? html`<div class="tele-prog" data-prog aria-hidden="true"><i></i></div><div class="tele-warn" data-clock-warn hidden role="status"></div>` : ''}
     <section class="tele-stage">
       <video class="tele-remote" data-remote playsinline autoplay></video>
       <div class="tele-wait" data-wait><div><p class="tele-wait-t" data-wait-t>${closed || (role === 'pac' ? 'Antes de entrar, confira se a sua câmera e o microfone estão funcionando.' : 'Entre na sala. Assim que o paciente chegar, a chamada começa.')}</p>
@@ -157,7 +160,8 @@ function roomPage(req, { role, title, who, when, sigUrl, ice, relay = false, bac
         <div><b data-admit-name>Paciente</b><small>está na sala de espera aguardando autorização</small></div>
         ${ai ? html`<label class="tele-admit-ai ${ai.state === 'ok' ? '' : 'na'}" title="${ai.state === 'ok' ? 'A transcrição começa assim que o paciente entrar; o rascunho vai para o prontuário' : ai.reason}"><input type="checkbox" data-admit-ai ${ai.state === 'ok' ? (ai.pref ? raw('checked') : '') : raw('disabled')}><span>Já iniciar com a transcrição${ai.state === 'ok' ? '' : html` <small>(${ai.state === 'sem-autorizacao' ? 'sem autorização do paciente' : 'indisponível'})</small>`}</span></label>` : ''}
         <button type="button" class="btn" data-admit-ok>Autorizar entrada</button><button type="button" class="tele-mute" data-admit-mute title="Silenciar o alerta" aria-pressed="false">${IC.bell}</button></div>` : ''}
-      <video class="tele-local" data-local playsinline autoplay muted></video>
+      <video class="tele-local" data-local playsinline autoplay muted title="Clique para trocar os vídeos de lugar"></video>
+      <button type="button" class="tele-pipsize" data-pipsize title="Tamanho do vídeo pequeno" aria-label="Tamanho do vídeo pequeno">P</button>
       <aside class="tele-chat" data-chat hidden><div class="tele-msgs" data-msgs></div>
         <div class="tele-emojis" data-emojis hidden role="group" aria-label="Emojis">${EMOJIS.map(([e, t]) => html`<button type="button" data-emoji="${e}" title="${t}" aria-label="${t}">${e}</button>`)}</div>
         <form data-chat-form><button type="button" class="tele-emoji-btn" data-emoji-toggle title="Emojis de emoções" aria-label="Emojis" aria-expanded="false">😊</button><input name="m" maxlength="500" placeholder="Mensagem" autocomplete="off" aria-label="Mensagem"><button class="btn">Enviar</button></form></aside>
@@ -168,6 +172,7 @@ function roomPage(req, { role, title, who, when, sigUrl, ice, relay = false, bac
       ${role === 'pro' ? html`<button type="button" data-screen title="Compartilhar tela">${IC.screen}<span>Tela</span></button>` : ''}
       ${ai ? html`<button type="button" data-ai class="${ai.state === 'ok' ? '' : 'na'}" title="Transcrever com IA: o rascunho da evolução vai para o prontuário">${IC.ai}<span data-ai-label>Transcrever</span></button>` : ''}
       <button type="button" data-chat-toggle title="Mensagens">${IC.chat}<span>Mensagens</span></button>
+      <button type="button" data-layout title="Layout dos vídeos">${IC.layout}<span data-layout-label>Destaque</span></button>
       <button type="button" data-full title="Tela cheia">${IC.full}<span>Tela cheia</span></button>
       <span class="tele-q" data-quality title="Qualidade da conexão"></span>
       <button type="button" class="tele-end" data-end title="Encerrar">${IC.end}<span>${role === 'pro' ? 'Encerrar' : 'Sair'}</span></button>
@@ -246,7 +251,10 @@ patient.get('/:tok', async (req, res) => {
   const c = await T.config(); const w = T.windowOf(a, c); const now = Date.now();
   const closed = a.status === 'cancelada' ? 'Esta sessão foi cancelada.' : a.modality !== 'online' ? 'Esta sessão é presencial.' : now > w.closesAt ? 'O horário desta sessão já passou.'
     : now < w.opensAt ? `A sala abre ${c.openBefore} minutos antes da sessão (${whenOf(a)}). Volte um pouco antes do horário.` : null;
-  send(res, roomPage(req, { role: 'pac', title: 'Teleconsulta', who: `Olá, ${firstName(a)}!`, when: whenOf(a), sigUrl: `/tc/${req.params.tok}/sinal`, ice: closed ? [] : await T.iceServers(c), relay: T.relayReady(c), backHref: null, closed }));
+  const proU = await one('SELECT name, title FROM users WHERE id = ?', [a.owner_id]).catch(() => null);
+  const pro = proU ? `${proU.title ? `${proU.title} ` : ''}${proU.name}`.trim() : (Brand.get().proName || '');
+  send(res, roomPage(req, { role: 'pac', title: 'Teleconsulta', who: `Olá, ${firstName(a)}!`, when: whenOf(a), sigUrl: `/tc/${req.params.tok}/sinal`, ice: closed ? [] : await T.iceServers(c), relay: T.relayReady(c), backHref: null, closed, pro,
+    timer: { appt: a.id, start: String(a.starts_at).slice(0, 19).replace(' ', 'T'), min: Number(a.duration_min) || 50 } }));
 });
 async function patientOpen(req) {
   const a = await patientAppt(req);
