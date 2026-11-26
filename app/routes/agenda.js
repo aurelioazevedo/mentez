@@ -410,7 +410,7 @@ async function patientOptions(req, selected, prof = null) {
 
 function apptForm(a, opts, action, isNew) {
   return html`<form method="post" action="${action}" class="card form-grid">
-    <label class="fld span2"><span>Paciente *</span><select name="patient_id" required ${isNew ? '' : raw('disabled')}><option value="">Selecione…</option>${opts}</select></label>
+    <label class="fld span2"><span>Paciente *</span><select name="patient_id" required ${isNew ? raw(`data-patient-combo data-quick="${a.quickNew ? 1 : 0}" data-prof="${a.prof || ''}"`) : raw('disabled')}><option value="">Selecione…</option>${opts}</select></label>
     <label class="fld"><span>Data *</span><input type="date" name="date" required value="${a.starts_at ? a.starts_at.slice(0, 10) : a.date || todayLocal()}"></label>
     <label class="fld"><span>Horário *</span><input type="time" name="time" required step="300" value="${a.starts_at ? a.starts_at.slice(11, 16) : a.time || ''}"></label>
     <label class="fld"><span>Duração (min)</span><input type="number" name="duration_min" min="10" max="240" value="${a.duration_min || 40}"></label>
@@ -455,7 +455,7 @@ r.get('/nova', async (req, res) => {
   const pros = Object.fromEntries(prosRows.map((u) => [u.id, { name: u.name, phone: u.phone || '' }]));
   send(res, page(req, {
     title: 'Agendar sessão', active: 'agenda',
-    body: html`<header class="ph"><div><p class="eyebrow">Agenda</p><h1>Agendar sessão</h1></div></header>${apptForm({ teleAllowed: Tele.allowed(await Tele.config()), escalas, notify: { waOn, pros }, date: isYmd(req.query.data) ? req.query.data : null, time: isHm(req.query.hora) ? req.query.hora : null }, await patientOptions(req, pid, int(req.query.prof)), '/agenda/nova', true)}`,
+    body: html`<header class="ph"><div><p class="eyebrow">Agenda</p><h1>Agendar sessão</h1></div></header>${apptForm({ teleAllowed: Tele.allowed(await Tele.config()), escalas, notify: { waOn, pros }, quickNew: can(req.user, 'cadastro'), prof: int(req.query.prof) || '', date: isYmd(req.query.data) ? req.query.data : null, time: isHm(req.query.hora) ? req.query.hora : null }, await patientOptions(req, pid, int(req.query.prof)), '/agenda/nova', true)}`,
   }));
 });
 

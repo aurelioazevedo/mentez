@@ -2156,3 +2156,77 @@ document.addEventListener('click', (e) => {
   i.type = show ? 'text' : 'password'; b.classList.toggle('on', show);
   b.setAttribute('aria-label', show ? 'Ocultar a senha' : 'Mostrar a senha'); b.title = b.getAttribute('aria-label'); i.focus();
 });
+
+// Agenda → agendar: buscar o paciente digitando o nome (ou o telefone); se não existir, cadastrar ali mesmo
+// (nome, WhatsApp e e-mail). O seletor original continua por baixo: as demais funções da tela seguem funcionando.
+document.querySelectorAll('select[data-patient-combo]').forEach((sel) => {
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const opts = () => [...sel.options].filter((o) => o.value);
+  const wrap = document.createElement('div'); wrap.className = 'pc-combo';
+  const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off'; inp.placeholder = 'Digite o nome ou o telefone do paciente…';
+  inp.setAttribute('role', 'combobox'); inp.setAttribute('aria-autocomplete', 'list'); inp.setAttribute('aria-expanded', 'false');
+  const list = document.createElement('ul'); list.className = 'pc-list'; list.hidden = true; list.setAttribute('role', 'listbox');
+  const quick = document.createElement('div'); quick.className = 'pc-quick'; quick.hidden = true;
+  quick.innerHTML = `<b>Cadastrar novo paciente</b>
+    <label class="fld"><span>Nome completo *</span><input data-q="name" maxlength="160"></label>
+    <div class="pc-quick-row"><label class="fld"><span>WhatsApp</span><input data-q="phone" inputmode="tel" maxlength="40" placeholder="(62) 99999-9999"></label>
+    <label class="fld"><span>E-mail</span><input data-q="email" type="email" maxlength="190"></label></div>
+    <label class="check small"><input type="checkbox" data-q="whatsapp_optin" checked> O paciente autorizou receber lembretes e mensagens pelo WhatsApp</label>
+    <p class="muted small">Os demais dados (CPF, endereço, valor da sessão) podem ser completados depois na ficha do paciente.</p>
+    <p class="pc-err" data-q-err hidden></p>
+    <div class="actions"><button type="button" class="btn btn-sm" data-q-save>Cadastrar e selecionar</button><button type="button" class="btn ghost btn-sm" data-q-cancel>Cancelar</button></div>`;
+  sel.classList.add('pc-native'); sel.removeAttribute('required'); sel.tabIndex = -1; sel.setAttribute('aria-hidden', 'true');
+  sel.parentNode.insertBefore(wrap, sel); wrap.append(inp, list, quick, sel);
+  const canQuick = sel.dataset.quick === '1';
+  let items = []; let act = -1;
+  const show = (on) => { list.hidden = !on; inp.setAttribute('aria-expanded', on ? 'true' : 'false'); };
+  const pick = (o) => { sel.value = o.value; inp.value = o.textContent.trim(); show(false); quick.hidden = true; inp.setCustomValidity(''); sel.dispatchEvent(new Event('change', { bubbles: true })); };
+  function render() {
+    if (!quick.hidden) { show(false); return; } // cadastro rápido aberto: sem lista por cima
+    const qn = norm(inp.value); const qd = inp.value.replace(/\D/g, '');
+    const found = opts().filter((o) => !qn || norm(o.textContent).includes(qn) || (qd.length >= 4 && (o.dataset.phone || '').replace(/\D/g, '').includes(qd))).slice(0, 8);
+    items = found.map((o) => ({ o })); if (canQuick && qn.replace(/[^a-z]/g, '').length >= 2 && !found.some((o) => norm(o.textContent) === qn)) items.push({ add: inp.value.trim() });
+    list.replaceChildren(...items.map((it, i) => {
+      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.className = i === act ? 'on' : '';
+      if (it.add) { li.className += ' pc-add'; li.textContent = `+ Cadastrar “${it.add}” como novo paciente`; }
+      else { li.textContent = it.o.textContent.trim(); if (it.o.dataset.phone) { const s = document.createElement('small'); s.textContent = it.o.dataset.phone; li.appendChild(s); } }
+      li.addEventListener('mousedown', (e) => { e.preventDefault(); choose(it); });
+      return li;
+    }));
+    if (!items.length) { const li = document.createElement('li'); li.className = 'pc-none'; li.textContent = canQuick ? 'Digite o nome para buscar ou cadastrar' : 'Nenhum paciente encontrado'; list.replaceChildren(li); }
+    show(true);
+  }
+  function choose(it) {
+    if (it.o) return pick(it.o);
+    show(false); quick.hidden = false; quick.querySelector('[data-q-err]').hidden = true;
+    const n = quick.querySelector('[data-q=name]'); n.value = it.add; quick.querySelector('[data-q=phone]').focus();
+  }
+  inp.addEventListener('input', () => { act = -1; quick.hidden = true; if (sel.value) { sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); } render(); });
+  inp.addEventListener('focus', render);
+  inp.addEventListener('blur', () => setTimeout(() => show(false), 150));
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.hidden) render(); act = Math.max(0, Math.min(items.length - 1, act + (e.key === 'ArrowDown' ? 1 : -1))); render(); }
+    else if (e.key === 'Enter') { if (!list.hidden && items[act >= 0 ? act : 0]) { e.preventDefault(); choose(items[act >= 0 ? act : 0]); } }
+    else if (e.key === 'Escape') show(false);
+  });
+  quick.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-q-cancel]')) { quick.hidden = true; inp.focus(); return; }
+    if (!e.target.closest('[data-q-save]')) return;
+    const v = (k) => quick.querySelector(`[data-q=${k}]`); const err = quick.querySelector('[data-q-err]'); const btn = e.target.closest('[data-q-save]');
+    const body = new URLSearchParams({ name: v('name').value.trim(), phone: v('phone').value.trim(), email: v('email').value.trim(), modality: document.querySelector('select[name=modality]')?.value || '', owner_id: sel.dataset.prof || '' });
+    if (v('whatsapp_optin').checked) body.set('whatsapp_optin', '1');
+    if (v('email').value.trim()) body.set('email_optin', '1');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/pacientes/rapido', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body });
+      const d = await r.json().catch(() => ({ ok: false, error: r.status === 403 ? 'Você não tem permissão para cadastrar pacientes.' : 'Não foi possível cadastrar.' }));
+      if (!d.ok) throw new Error(d.error || 'Não foi possível cadastrar.');
+      const o = document.createElement('option'); o.value = d.id; o.textContent = d.name;
+      Object.assign(o.dataset, { mod: d.modality || '', owner: d.owner || '', phone: d.phone || '', optin: d.optin ? '1' : '0', plans: '[]', defplan: '' });
+      sel.appendChild(o); pick(o);
+      const ok = document.createElement('p'); ok.className = 'pc-ok small'; ok.textContent = `✓ ${d.name} cadastrado(a). Complete a ficha depois em Pacientes.`; wrap.appendChild(ok); setTimeout(() => ok.remove(), 6000);
+    } catch (x) { err.textContent = x.message; err.hidden = false; } finally { btn.disabled = false; }
+  });
+  sel.form?.addEventListener('submit', (e) => { if (!sel.value) { e.preventDefault(); e.stopImmediatePropagation(); inp.setCustomValidity('Escolha o paciente na lista (ou cadastre um novo).'); inp.reportValidity(); } }, true);
+  if (sel.value) inp.value = sel.selectedOptions[0]?.textContent.trim() || '';
+});

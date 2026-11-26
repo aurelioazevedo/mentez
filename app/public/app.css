@@ -2745,3 +2745,20 @@ body.tele-body { background: var(--tv-d, #0b0f17); color: #eef2f7; }
 .tele-pac .tele-local { border-radius: 18px; }
 @media (max-width: 640px) { .tele-brand .tele-logo { max-height: 26px; max-width: 110px; } .tele-top .tele-pclock { order: 5; margin-left: 0; padding: 4px 12px 4px 5px; } .tele-pclock svg { width: 28px; height: 28px; } .tele-warn { top: 120px; } .tele { --tv-pip: 30vw; } .tele[data-pip="m"] { --tv-pip: 42vw; } .tele[data-pip="g"] { --tv-pip: 58vw; } }
 .tele .tele-local { background: color-mix(in srgb, var(--strong-bg, #071936) 60%, #000); }
+
+/* Agenda → agendar: busca de paciente e cadastro rápido */
+.pc-combo { position: relative; display: grid; gap: 8px; }
+.pc-native { position: absolute !important; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.pc-list { position: absolute; top: 46px; left: 0; right: 0; z-index: 30; margin: 0; padding: 6px; list-style: none; background: var(--card, #fff); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 40px -20px rgba(0, 0, 0, .35); max-height: 300px; overflow: auto; }
+.pc-list[hidden] { display: none; }
+.pc-list li { display: flex; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+.pc-list li small { color: var(--muted); }
+.pc-list li:hover, .pc-list li.on { background: var(--creme, rgba(0, 0, 0, .05)); }
+.pc-list li.pc-add { color: var(--terracota); font-weight: 600; border-top: 1px dashed var(--line); margin-top: 4px; }
+.pc-list li.pc-none { color: var(--muted); cursor: default; }
+.pc-quick { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2, transparent); }
+.pc-quick[hidden] { display: none; }
+.pc-quick-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pc-err { margin: 0; color: var(--err, #b3261e); font-size: 13.5px; } .pc-err[hidden] { display: none; }
+.pc-ok { margin: 0; color: var(--ok, #2e7d32); }
+@media (max-width: 640px) { .pc-quick-row { grid-template-columns: 1fr; } }

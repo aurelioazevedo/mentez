@@ -195,6 +195,17 @@ r.get('/novo', async (req, res) => send(res, page(req, {
   body: html`<header class="ph"><div><p class="eyebrow">Pacientes</p><h1>Novo paciente</h1></div></header>${form(req, { pay_kind: 'particular' }, '/pacientes/novo', await clinicians(), { list: await Ins.list(true) })}`,
 })));
 
+// Cadastro rápido direto da agenda (nome, WhatsApp e e-mail): devolve o paciente para já agendar; o resto da ficha fica para depois
+r.post('/rapido', async (req, res) => {
+  const b = req.body;
+  const d = readBody({ name: b.name, phone: b.phone, email: b.email, modality: b.modality, whatsapp_optin: b.whatsapp_optin, email_optin: b.email_optin }, null, await ownerFrom(req));
+  if (!d.name || d.name.length < 3) return res.status(400).json({ ok: false, error: 'Informe o nome do paciente.' });
+  if (d.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) return res.status(400).json({ ok: false, error: 'E-mail inválido.' });
+  const cols = Object.keys(d);
+  const out = await q(`INSERT INTO patients (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, Object.values(d));
+  await audit(req, 'paciente-criar', `patient:${out.insertId} (agenda)`);
+  res.json({ ok: true, id: out.insertId, name: d.name, owner: d.owner_id || '', phone: d.phone || '', optin: d.whatsapp_optin, modality: d.modality });
+});
 r.post('/novo', async (req, res) => {
   const d = readBody(req.body, null, await ownerFrom(req));
   if (!d.name) return res.flash('Informe o nome.', 'err').redirect('/pacientes/novo');
