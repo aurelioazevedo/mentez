@@ -403,3 +403,4 @@ html { scrollbar-width: thin; scrollbar-color: #07C6BC #071936; }
 
 /* ---------- hero: avisos em branco ---------- */
 .hero .note { color: #F5F7FC; }
+.panes > .pane, .pane .plans { min-width: 0; }
