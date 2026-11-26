@@ -1405,6 +1405,9 @@ const COLUMNS = [
   ['appointments', 'call_count', 'INT NOT NULL DEFAULT 0'],
   ['appointments', 'room_id', 'INT NULL'],
   ['appointments', 'created_via', "ENUM('sistema','agente','lista_espera','online') NOT NULL DEFAULT 'sistema'"],
+  // “Seu dia”: resumo da manhã de cada profissional (canais, horário, dias) e o último envio
+  ['users', 'brief_cfg', 'VARCHAR(255) NULL'],
+  ['users', 'brief_last', 'DATE NULL'],
 ];
 
 export async function getSetting(k) {

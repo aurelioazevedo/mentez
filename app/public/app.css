@@ -2762,3 +2762,15 @@ body.tele-body { background: var(--tv-d, #0b0f17); color: #eef2f7; }
 .pc-err { margin: 0; color: var(--err, #b3261e); font-size: 13.5px; } .pc-err[hidden] { display: none; }
 .pc-ok { margin: 0; color: var(--ok, #2e7d32); }
 @media (max-width: 640px) { .pc-quick-row { grid-template-columns: 1fr; } }
+
+/* Início → Seu dia (resumo da manhã) */
+.sd { margin-bottom: 18px; }
+.sd-h { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.sd-h h2 { margin: 4px 0 0; font-size: 22px; } .sd-h h2 small { font-size: 14px; font-weight: 400; }
+.sd-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.sd-col h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.sd-col h3 + .sd-list + h3 { margin-top: 14px; }
+.sd-list { gap: 6px; } .sd-list li { line-height: 1.4; } .sd-list a { font-weight: 600; }
+.sd-list .sd-warn { padding-left: 10px; border-left: 3px solid var(--warn, #b07a1f); }
+.sd-days { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+@media (max-width: 900px) { .sd-grid { grid-template-columns: 1fr; } }

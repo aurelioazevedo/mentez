@@ -18,6 +18,7 @@ import * as Tickets from './lib/tickets.js';
 import * as PlatComm from './lib/platcomm.js';
 import * as PlatCRM from './lib/platcrm.js';
 import * as ErrorPages from './lib/errorpages.js';
+import * as Briefing from './lib/briefing.js';
 import { gate as billingGate, features as planFeatures, settings as subscriptionSettings } from './routes/subscription.js';
 import { autoLogin } from './routes/signup.js';
 import { settings as brandSettings, logoRoute } from './routes/brand.js';
@@ -385,6 +386,7 @@ boot()
     every(12 * 3600e3, () => Privacy.tick(), 'privacidade', 5 * 60e3);
     every(Number(process.env.WAITLIST_TICK_MS) || 60e3, () => Waitlist.tick(), 'lista de espera');
     every(10 * 60e3, () => SessionAI.tick(), 'IA na sessão');
+    every(5 * 60e3, () => Tenancy.forEachTenant(() => Briefing.tick(), 'seu dia'), 'seu dia', 3 * 60e3); // resumo da manhã de cada profissional
     every(6 * 3600e3, () => Rental.config().then(() => Rental.tick()), 'locação', 15e3);
     every(Number(process.env.NFSE_TICK_MS) || 5 * 60e3, () => Nfse.tick(), 'NFS-e');
     every(Number(process.env.SCALES_TICK_MS) || 10 * 60e3, () => Scales.tick(), 'escalas');

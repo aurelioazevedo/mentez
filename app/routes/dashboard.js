@@ -9,6 +9,42 @@ import { lineChart, barChart, fmtMoney, fmtMoneyShort } from '../lib/charts.js';
 import { forUser as notesFor } from '../lib/notes.js';
 import * as W from '../lib/whatsapp.js';
 import * as Evolution from '../lib/evolution.js';
+import * as Briefing from '../lib/briefing.js';
+import { isClinician } from '../lib/perm.js';
+import { raw } from '../lib/html.js';
+
+// “Seu dia”: o que o(a) profissional precisa saber antes do primeiro atendimento (pacientes dele(a))
+async function seuDiaCard(u) {
+  const d = await Briefing.dayOf(u);
+  const c = Briefing.cfgOf(u);
+  const li = (a, extra = '') => html`<li><a href="/agenda/${a.id}">${d.hm(a.starts_at)} · ${d.nm(a)}</a>${extra ? html` <small class="muted">${extra}</small>` : ''}</li>`;
+  const pend = [
+    d.evo.length ? html`<li class="sd-warn"><a href="/agenda/${d.evo[0].id}">${d.evo.length > 20 ? 'Mais de 20' : d.evo.length} evolução(ões) de sessões anteriores ainda sem registro</a> <small class="muted">${d.evo.slice(0, 3).map((a) => `${d.nm(a)} (${String(a.starts_at).slice(8, 10)}/${String(a.starts_at).slice(5, 7)})`).join(', ')}${d.evo.length > 3 ? '…' : ''}</small></li>` : '',
+    d.noConsent.length ? html`<li class="sd-warn"><a href="/pacientes/${d.noConsent[0].patient_id}?aba=termos">${d.noConsent.length === 1 ? '1 paciente de hoje' : `${d.noConsent.length} pacientes de hoje`} sem termo de consentimento (LGPD) registrado</a> <small class="muted">${d.noConsent.slice(0, 4).map((a) => d.nm(a)).join(', ')}${d.noConsent.length > 4 ? '…' : ''}</small></li>` : '',
+    ...d.withDebt.map((a) => html`<li class="sd-warn"><a href="/pacientes/${a.patient_id}?aba=financeiro">${d.nm(a)}: ${d.payBy[a.patient_id].n} pagamento(s) em aberto</a> <small class="muted">${money(d.payBy[a.patient_id].v)}</small></li>`),
+    ...d.noLink.map((a) => html`<li class="sd-warn"><a href="/agenda/${a.id}">${d.nm(a)}: sessão on-line às ${d.hm(a.starts_at)} sem link da chamada</a></li>`),
+  ].filter(Boolean);
+  const human = [...d.birthdays.map((a) => html`<li>🎂 <a href="/pacientes/${a.patient_id}">${d.nm(a)}</a> faz aniversário hoje</li>`), ...d.firsts.map((a) => html`<li>✨ <a href="/pacientes/${a.patient_id}">${d.nm(a)}</a>: primeira sessão, às ${d.hm(a.starts_at)}</li>`)];
+  const chans = [c.push && 'notificação', c.email && 'e-mail', c.wa && 'WhatsApp'].filter(Boolean);
+  return html`<section class="card sd" aria-labelledby="sd-t">
+    <header class="sd-h"><div><p class="eyebrow">Seu dia</p><h2 id="sd-t">${d.appts.length ? `${d.appts.length} ${d.appts.length === 1 ? 'sessão' : 'sessões'} hoje` : 'Nenhuma sessão hoje'}${d.appts.length ? html` <small class="muted">· ${d.first}${d.appts.length > 1 ? ` às ${d.last}` : ''} · ${d.online} on-line · ${d.presencial} presencial</small>` : ''}</h2></div>
+      <a class="btn ghost btn-sm" href="/conta#seu-dia" title="Horário e canais do resumo">${c.on ? `Resumo às ${c.hour}${chans.length ? ` · ${chans.join(', ')}` : ''}` : 'Resumo desligado'}</a></header>
+    ${d.appts.length ? html`<div class="sd-grid">
+      <div class="sd-col"><h3>Confirmações</h3><ul class="plain sd-list">
+        <li><b>${d.confirmed.length}</b> confirmada(s) · <b>${d.noReply.length}</b> sem resposta · <b>${d.noReminder.length}</b> sem lembrete enviado</li>
+        ${d.reschedule.map((a) => li(a, 'pediu para remarcar'))}
+        ${d.noReply.map((a) => li(a, 'não respondeu ao lembrete'))}
+        ${d.noReminder.slice(0, 5).map((a) => li(a, 'lembrete ainda não enviado'))}
+      </ul></div>
+      <div class="sd-col"><h3>Horários vagos</h3><ul class="plain sd-list">
+        ${d.gaps.length ? d.gaps.map((g) => html`<li>${g.from}–${g.to} <small class="muted">(${g.min} min livres)</small></li>`) : html`<li class="muted">Sem intervalos longos entre as sessões.</li>`}
+        ${d.gaps.length && d.waitlist ? html`<li><a href="/agenda/lista-espera">${d.waitlist} pessoa(s) na lista de espera</a> <small class="muted">— ofereça o horário vago</small></li>` : ''}
+      </ul></div>
+      <div class="sd-col"><h3>Pendências</h3><ul class="plain sd-list">${pend.length ? pend : html`<li class="muted">Nada pendente. ✨</li>`}</ul>
+        ${human.length ? html`<h3>Lembretes</h3><ul class="plain sd-list">${human}</ul>` : ''}</div>
+    </div>` : d.evo.length ? html`<ul class="plain sd-list">${pend}</ul>` : html`<p class="muted">Aproveite o dia. ✨</p>`}
+  </section>`;
+}
 
 const r = router();
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -135,12 +171,15 @@ r.get('/', async (req, res) => {
     </div></section>`;
     else if (!wc) Evolution.provisionLater(Tenancy.current(), 'painel-clinica'); // clínica antiga sem instância: prepara agora
   }
+  const me = isClinician(u.role) ? await one('SELECT id, name, attends, brief_cfg FROM users WHERE id = ?', [u.id]) : null;
+  const seuDia = me?.attends ? await seuDiaCard(me).catch((e) => { console.error('seu dia:', e.message); return ''; }) : '';
   send(res, page(req, {
     title: 'Início', active: 'home',
     body: html`
     <header class="ph dash-h"><div><h1>Dashboard</h1><p class="muted">Bem-vind${u.title === 'Dr.' ? 'o' : 'a'} de volta, ${u.name.split(' ')[0]}! Veja o que acontece hoje.</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/agenda/nova">${icon('agenda')} Nova sessão</a>${can(u, 'cadastro') ? html`<a class="btn" href="/pacientes/novo">${icon('pacientes')} Cadastrar paciente</a>` : ''}</div></header>
 
+    ${seuDia}
     ${waCard}
     <div class="dash">
       <div class="dash-main">

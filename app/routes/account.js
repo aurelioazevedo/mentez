@@ -2,6 +2,7 @@ import * as Brand from '../lib/brand.js';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import QRCode from 'qrcode';
+import * as Briefing from '../lib/briefing.js';
 import { q, one, audit } from '../lib/db.js';
 import { page, html, raw, brDateTime, avatar, themeOf, logoTag, appLogo } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
@@ -26,6 +27,35 @@ const hasPix = (u) => u.role === 'admin' || u.role === 'psicologo';
 
 const r = router();
 
+// “Seu dia”: horário, dias e canais do resumo da manhã
+async function seuDiaCfg(req) {
+  const u = await one('SELECT id, email, phone, brief_cfg FROM users WHERE id = ?', [req.user.id]);
+  const c = Briefing.cfgOf(u);
+  const ck = (on) => (on ? raw('checked') : '');
+  return html`<form method="post" action="/conta/seu-dia" class="card form-grid" id="seu-dia">
+    <h2 class="span2">Seu dia (resumo da manhã)</h2>
+    <p class="span2 small muted">Antes do primeiro atendimento: sessões do dia, confirmações, horários vagos e pendências. No sistema, aparece no Início; fora dele, vão só números e o link — nenhum nome de paciente.</p>
+    <label class="check span2"><input type="checkbox" name="on" value="1" ${ck(c.on)}> Enviar o resumo do dia</label>
+    <label class="fld"><span>Horário</span><input type="time" name="hour" value="${c.hour}" step="300"></label>
+    <fieldset class="fld"><legend>Dias</legend><span class="sd-days">${Briefing.DAY_NAMES.map((n, i) => html`<label class="check"><input type="checkbox" name="d${i}" value="1" ${ck(c.days.includes(i))}> ${n}</label>`)}</span></fieldset>
+    <fieldset class="fld span2"><legend>Canais</legend>
+      <label class="check"><input type="checkbox" checked disabled> No sistema (Início)</label>
+      <label class="check"><input type="checkbox" name="push" value="1" ${ck(c.push)}> Notificação no celular <small class="muted">(ative as notificações neste aparelho logo abaixo)</small></label>
+      <label class="check"><input type="checkbox" name="email" value="1" ${ck(c.email)}> E-mail ${u.email ? html`<small class="muted">(${u.email})</small>` : html`<small class="muted">(cadastre seu e-mail em Dados)</small>`}</label>
+      <label class="check"><input type="checkbox" name="wa" value="1" ${ck(c.wa)}> WhatsApp ${u.phone ? html`<small class="muted">(${u.phone}, enviado pelo WhatsApp da clínica)</small>` : html`<small class="muted">(cadastre seu WhatsApp em Dados)</small>`}</label></fieldset>
+    <div class="span2 actions"><button class="btn">Salvar</button><button class="btn ghost" formaction="/conta/seu-dia/teste" formnovalidate>Enviar o resumo de hoje agora</button></div>
+  </form>`;
+}
+r.post('/seu-dia', async (req, res) => {
+  await Briefing.saveCfg(req.user.id, req.body); await audit(req, 'seu-dia-config');
+  res.flash('Resumo do dia salvo.').redirect('/conta#seu-dia');
+});
+r.post('/seu-dia/teste', async (req, res) => {
+  await Briefing.saveCfg(req.user.id, req.body);
+  const u = await one('SELECT id, name, email, phone, brief_cfg FROM users WHERE id = ?', [req.user.id]);
+  const out = await Briefing.deliver(u, Briefing.cfgOf(u), await Briefing.dayOf(u), { force: true });
+  res.flash(out.sent?.length ? `Resumo enviado por ${out.sent.join(', ')}.` : 'Nenhum canal externo enviou (confira se as notificações deste aparelho estão ativas, e o e-mail/WhatsApp da clínica configurados).', out.sent?.length ? 'ok' : 'warn').redirect('/conta#seu-dia');
+});
 r.get('/', async (req, res) => {
   const u = await one('SELECT * FROM users WHERE id = ?', [req.user.id]);
   let qr = '';
@@ -139,6 +169,7 @@ r.get('/', async (req, res) => {
       <div class="actions"><button type="button" class="btn" data-install hidden>${raw('<svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 19h14"/></svg>')} Instalar aplicativo</button></div>
       <p class="small muted" data-install-ok>Se o botão não aparecer, o aplicativo já está instalado neste aparelho (ou você já está nele).</p>
     </section>
+    ${isClinician(req.user.role) ? await seuDiaCfg(req) : ''}
     <section class="card" id="push" data-vapid="${vapid.publicKey}">
       <h2>Notificações push neste aparelho</h2>
       <p class="small">Receba avisos de novas sessões, confirmações e pedidos de remarcação pelo WhatsApp e exercícios respondidos — mesmo com o sistema fechado.</p>
