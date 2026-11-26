@@ -146,7 +146,7 @@ function roomPage(req, { role, title, who, when, sigUrl, ice, relay = false, bac
   const cfg = { role, sigUrl, ice, relay, patientLink, ai, timer, after };
   return bare(title, html`<main class="tele tele-${role}" data-tele data-role="${role}">
     <script type="application/json" id="tele-cfg">${raw(JSON.stringify(cfg).replace(/</g, '\\u003c'))}</script>
-    <header class="tele-top"><span class="tele-brand">${appLogo('tele-logo')}</span><div class="tele-who"><b>${who}</b><small>${role === 'pac' && pro ? `com ${pro} · ` : ''}${when}</small></div>${role === 'pac' && timer && !closed ? html`<div class="tele-pclock" data-pclock aria-live="polite"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" class="bg"/><circle cx="18" cy="18" r="15" class="fg" data-pclock-ring/></svg><span><b data-pclock-t></b><small data-pclock-s></small></span></div>` : ''}<span class="tele-recbadge" data-recbadge hidden><i></i>${role === 'pro' ? 'Transcrevendo' : 'Sessão sendo transcrita'}</span>${role === 'pro' && timer ? html`<div class="tele-clock" data-clock aria-label="Relógio e tempo de sessão"><span class="tc-now" data-clock-now title="Horário atual">--:--</span>
+    <header class="tele-top"><span class="tele-brand">${appLogo('tele-logo')}</span><div class="tele-who"><b>${who}</b><small>${role === 'pac' ? (pro ? `com ${pro}` : 'Teleconsulta') : when}</small></div><span class="tele-recbadge" data-recbadge hidden><i></i>${role === 'pro' ? 'Transcrevendo' : 'Sessão sendo transcrita'}</span>${role === 'pro' && timer ? html`<div class="tele-clock" data-clock aria-label="Relógio e tempo de sessão"><span class="tc-now" data-clock-now title="Horário atual">--:--</span>
       <span class="tc-timer"><button type="button" data-clock-timer title="Tempo de sessão — clique para pausar ou continuar" aria-label="Tempo de sessão">00:00</button><button type="button" class="tc-reset" data-clock-reset title="Zerar o cronômetro" aria-label="Zerar o cronômetro">↺</button></span>
       <span class="tc-left" data-clock-left title="Pelo horário marcado na agenda"></span></div>` : ''}<span class="tele-status" data-status>${closed || (role === 'pac' ? 'Teste sua câmera e entre na sala de espera' : 'Pronta para entrar')}</span>
       ${backHref ? html`<a class="tele-back" href="${backHref}">Sair da sala</a>` : ''}</header>
@@ -253,8 +253,8 @@ patient.get('/:tok', async (req, res) => {
     : now < w.opensAt ? `A sala abre ${c.openBefore} minutos antes da sessão (${whenOf(a)}). Volte um pouco antes do horário.` : null;
   const proU = await one('SELECT name, title FROM users WHERE id = ?', [a.owner_id]).catch(() => null);
   const pro = proU ? `${proU.title ? `${proU.title} ` : ''}${proU.name}`.trim() : (Brand.get().proName || '');
-  send(res, roomPage(req, { role: 'pac', title: 'Teleconsulta', who: `Olá, ${firstName(a)}!`, when: whenOf(a), sigUrl: `/tc/${req.params.tok}/sinal`, ice: closed ? [] : await T.iceServers(c), relay: T.relayReady(c), backHref: null, closed, pro,
-    timer: { appt: a.id, start: String(a.starts_at).slice(0, 19).replace(' ', 'T'), min: Number(a.duration_min) || 50 } }));
+  // paciente: sem horários da sessão nem cronômetro na tela (só o nome do profissional)
+  send(res, roomPage(req, { role: 'pac', title: 'Teleconsulta', who: `Olá, ${firstName(a)}!`, when: '', sigUrl: `/tc/${req.params.tok}/sinal`, ice: closed ? [] : await T.iceServers(c), relay: T.relayReady(c), backHref: null, closed, pro }));
 });
 async function patientOpen(req) {
   const a = await patientAppt(req);
