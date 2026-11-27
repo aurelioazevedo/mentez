@@ -172,7 +172,7 @@ r.get('/', async (req, res) => {
     else if (!wc) Evolution.provisionLater(Tenancy.current(), 'painel-clinica'); // clínica antiga sem instância: prepara agora
   }
   const me = isClinician(u.role) ? await one('SELECT id, name, attends, brief_cfg FROM users WHERE id = ?', [u.id]) : null;
-  const seuDia = me?.attends ? await seuDiaCard(me).catch((e) => { console.error('seu dia:', e.message); return ''; }) : '';
+  const seuDia = me?.attends && Briefing.cfgOf(me).home ? await seuDiaCard(me).catch((e) => { console.error('seu dia:', e.message); return ''; }) : '';
   send(res, page(req, {
     title: 'Início', active: 'home',
     body: html`

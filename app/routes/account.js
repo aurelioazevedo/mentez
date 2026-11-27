@@ -39,7 +39,7 @@ async function seuDiaCfg(req) {
     <label class="fld"><span>Horário</span><input type="time" name="hour" value="${c.hour}" step="300"></label>
     <fieldset class="fld"><legend>Dias</legend><span class="sd-days">${Briefing.DAY_NAMES.map((n, i) => html`<label class="check"><input type="checkbox" name="d${i}" value="1" ${ck(c.days.includes(i))}> ${n}</label>`)}</span></fieldset>
     <fieldset class="fld span2"><legend>Canais</legend>
-      <label class="check"><input type="checkbox" checked disabled> No sistema (Início)</label>
+      <label class="check"><input type="checkbox" name="home" value="1" ${ck(c.home)}> No sistema (cartão “Seu dia” no Início)</label>
       <label class="check"><input type="checkbox" name="push" value="1" ${ck(c.push)}> Notificação no celular <small class="muted">(ative as notificações neste aparelho logo abaixo)</small></label>
       <label class="check"><input type="checkbox" name="email" value="1" ${ck(c.email)}> E-mail ${u.email ? html`<small class="muted">(${u.email})</small>` : html`<small class="muted">(cadastre seu e-mail em Dados)</small>`}</label>
       <label class="check"><input type="checkbox" name="wa" value="1" ${ck(c.wa)}> WhatsApp ${u.phone ? html`<small class="muted">(${u.phone}, enviado pelo WhatsApp da clínica)</small>` : html`<small class="muted">(cadastre seu WhatsApp em Dados)</small>`}</label></fieldset>

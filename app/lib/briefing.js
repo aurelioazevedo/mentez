@@ -7,18 +7,18 @@ import { q, one } from './db.js';
 import * as Tenancy from './tenancy.js';
 import { todayLocal, addDays } from './time.js';
 
-export const DEFAULTS = { on: true, hour: '07:00', push: true, email: false, wa: false, days: [1, 2, 3, 4, 5, 6] };
+export const DEFAULTS = { on: true, home: true, hour: '07:00', push: true, email: false, wa: false, days: [1, 2, 3, 4, 5, 6] };
 export const DAY_NAMES = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 export function cfgOf(u) {
   let c = {}; try { c = JSON.parse(u?.brief_cfg || '{}') || {}; } catch { c = {}; }
   const hour = /^([01]\d|2[0-3]):[0-5]\d$/.test(c.hour || '') ? c.hour : DEFAULTS.hour;
   const days = Array.isArray(c.days) ? c.days.map(Number).filter((d) => d >= 0 && d <= 6) : DEFAULTS.days;
-  return { on: c.on ?? DEFAULTS.on, hour, push: c.push ?? DEFAULTS.push, email: !!(c.email ?? DEFAULTS.email), wa: !!(c.wa ?? DEFAULTS.wa), days };
+  return { on: c.on ?? DEFAULTS.on, home: c.home ?? DEFAULTS.home, hour, push: c.push ?? DEFAULTS.push, email: !!(c.email ?? DEFAULTS.email), wa: !!(c.wa ?? DEFAULTS.wa), days };
 }
 export async function saveCfg(userId, b) {
   const days = [0, 1, 2, 3, 4, 5, 6].filter((d) => b[`d${d}`]);
   const hour = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(b.hour || '')) ? b.hour : DEFAULTS.hour;
-  await q('UPDATE users SET brief_cfg = ? WHERE id = ?', [JSON.stringify({ on: !!b.on, hour, push: !!b.push, email: !!b.email, wa: !!b.wa, days }), userId]);
+  await q('UPDATE users SET brief_cfg = ? WHERE id = ?', [JSON.stringify({ on: !!b.on, home: !!b.home, hour, push: !!b.push, email: !!b.email, wa: !!b.wa, days }), userId]);
 }
 
 const hm = (d) => String(d).slice(11, 16);
