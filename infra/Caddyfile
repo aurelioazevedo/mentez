@@ -36,10 +36,21 @@ mentez.com.br {
 		}
 	}
 }
+# Bem-Estar Mental: diretório de psicólogos (servido pelo app); os sites das clínicas (*.bemestarmental.com.br) ficam no bloco https:// abaixo
 bemestarmental.com.br {
 	import seg
-	root * /srv/bem
-	file_server
+	reverse_proxy app:3000 {
+		lb_try_duration 60s
+		lb_try_interval 300ms
+	}
+	handle_errors 502 503 504 {
+		root * /srv/mentez
+		rewrite * /atualizando.html
+		header Cache-Control "no-store"
+		file_server {
+			status 503
+		}
+	}
 }
 # Painel da Mentez e todas as clínicas (slug.mentez.com.br e domínios próprios).
 # Ambiente de testes (dev.mentez.com.br e *.dev.mentez.com.br): outro app, com banco próprio e dados fictícios.

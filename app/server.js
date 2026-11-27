@@ -86,6 +86,9 @@ import { middleware as notes } from './lib/notes.js';
 import * as Live from './lib/live.js';
 import * as Fin from './lib/fin.js';
 import * as Sites from './lib/sites.js';
+import * as Dir from './lib/directory.js';
+import { router as bemRouter } from './routes/bem.js';
+import { admin as bemAdmin } from './routes/bemadmin.js';
 import * as SitePub from './routes/sitepub.js';
 import { admin as siteAdmin } from './routes/siteadmin.js';
 
@@ -118,7 +121,7 @@ app.use((req, res, next) => {
 });
 
 app.get('/robots.txt', async (req, res, next) => {
-  if (Tenancy.multi() && (await Sites.resolveHost(req.hostname).catch(() => undefined)) !== undefined) return next(); // site da clínica: robots próprio
+  if (Tenancy.multi() && (Dir.isHost(req.hostname) || (await Sites.resolveHost(req.hostname).catch(() => undefined)) !== undefined)) return next(); // site da clínica e Bem-Estar Mental: robots próprio
   res.type('text/plain').send('User-agent: *\nDisallow: /\n');
 });
 app.use('/static', express.static(path.join(__dirname, 'public'), { maxAge: '7d', index: false }));
@@ -133,7 +136,7 @@ app.get('/_mentez/tls', (req, res, next) => {
     return fetch(`${process.env.MENTEZ_DEV_INTERNAL || 'http://app-dev:3000'}/_mentez/tls?domain=${encodeURIComponent(dom)}`, { signal: AbortSignal.timeout(5000) })
       .then((r) => res.sendStatus(r.ok ? 200 : 404), () => res.sendStatus(404));
   }
-  Tenancy.allowCertificate(req.query.domain).then(async (ok) => res.sendStatus(ok || await Sites.allowCertificate(req.query.domain) ? 200 : 404), () => res.sendStatus(404));
+  Tenancy.allowCertificate(req.query.domain).then(async (ok) => res.sendStatus(ok || Dir.isHost(req.query.domain) || await Sites.allowCertificate(req.query.domain) ? 200 : 404), () => res.sendStatus(404));
 });
 app.get('/_mentez/saude', (_req, res) => res.json({ ok: true })); // verificação do contêiner
 // WhatsApp da Mentez (instância da plataforma): mensagens recebidas → conversas no Painel. Só pela rede interna.
@@ -153,6 +156,8 @@ app.use((req, res, next) => {
   req.mzSlug = m[1]; req.url = m[2];
   next();
 });
+// Bem-Estar Mental (bemestarmental.com.br): diretório de psicólogos
+app.use((req, res, next) => (Tenancy.multi() && Dir.isHost(req.hostname) ? bemRouter(req, res, next) : next()));
 // Sites das clínicas (Marketing → Site): <nome>.bemestarmental.com.br ou domínio próprio do site
 app.use(async (req, res, next) => {
   if (!Tenancy.multi()) return next();
@@ -332,6 +337,7 @@ app.use('/relatorios', requirePerm('financeiro', 'meufin'), reportsRoutes);
 app.use('/agenda/lista-espera', requirePerm('agenda'), waitlistRoutes);
 app.use('/agenda', requirePerm('agenda'), agendaRoutes);
 app.use('/marketing/site', requirePerm('usuarios'), siteAdmin); // site da clínica (Marketing → Site)
+app.use('/marketing/bem-estar', requirePerm('agenda'), bemAdmin); // perfil no Bem-Estar Mental
 app.use('/marketing', requirePerm('agenda'), cardsAdmin, marketingRoutes);
 app.use('/convenios', requirePerm('cadastro', 'agenda'), insPatients, insSheets);
 app.use('/escala', requirePerm('agenda'), escalaRoutes);
@@ -374,6 +380,7 @@ async function boot() {
     await Billing.migrate();
     await Domains.migrate();
     await Sites.migratePlatform();
+    await Dir.migrate();
     await Tenancy.forEachTenant(() => migrate(), 'migração'); // cada clínica no seu banco, sempre no esquema atual
   } else await migrate();
 }

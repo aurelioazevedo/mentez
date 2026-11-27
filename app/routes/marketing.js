@@ -15,7 +15,7 @@ const r = router();
 const nm = (p) => p.social_name || p.name;
 const weeksAgo = (d) => Math.max(0, Math.floor((Date.parse(todayLocal()) - Date.parse(String(d).slice(0, 10))) / (7 * 864e5)));
 const CH = { whatsapp: 'WhatsApp', email: 'E-mail' };
-const tabs = (on, req) => html`<nav class="tabs"><a href="/marketing" class="${on === 'reativacao' ? 'on' : ''}">Reativação de pacientes</a><a href="/marketing/aniversarios" class="${on === 'aniversarios' ? 'on' : ''}">Aniversários</a><a href="/marketing/cartao">Cartão digital</a><a href="/marketing/links">Link na bio</a>${can(req.user, 'usuarios') ? html`<a href="/marketing/site">Site</a>` : ''}${can(req.user, 'usuarios') ? html`<a href="/marketing/configurar" class="${on === 'config' ? 'on' : ''}">Configurar a reativação</a>` : ''}</nav>`;
+const tabs = (on, req) => html`<nav class="tabs"><a href="/marketing" class="${on === 'reativacao' ? 'on' : ''}">Reativação de pacientes</a><a href="/marketing/aniversarios" class="${on === 'aniversarios' ? 'on' : ''}">Aniversários</a><a href="/marketing/cartao">Cartão digital</a><a href="/marketing/links">Link na bio</a><a href="/marketing/bem-estar">Bem-Estar Mental</a>${can(req.user, 'usuarios') ? html`<a href="/marketing/site">Site</a>` : ''}${can(req.user, 'usuarios') ? html`<a href="/marketing/configurar" class="${on === 'config' ? 'on' : ''}">Configurar a reativação</a>` : ''}</nav>`;
 const sel = (a, b) => (String(a) === String(b) ? raw('selected') : '');
 // Gerar o texto com IA: o resultado aparece em cartões e “Usar esta” troca o texto da caixa
 const aiBox = (kind, target) => html`<div class="mkt-ai" data-mkt-ai="${kind}" data-target="${target}">

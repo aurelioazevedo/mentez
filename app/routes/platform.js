@@ -22,6 +22,7 @@ import * as Referral from '../lib/referral.js';
 import * as AISlot from '../lib/aislot.js';
 import { mount as mountSignup } from './signup.js';
 import { mount as mountTickets } from './platform-tickets.js';
+import { mount as mountBem } from './platform-bem.js';
 import { mount as mountCRM, clinicTabs, pinnedBox } from './platform-crm.js';
 import * as PlatCRM from '../lib/platcrm.js';
 import * as ErrorPages from '../lib/errorpages.js';
@@ -139,7 +140,7 @@ const ICON = {
   equipe: SV('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3.2 3-5 5.5-5s4.7 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.4.2 4.2 1.9 5 4.8"/>'),
 };
 const MENU = [
-  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec'], ['/chamados', 'Chamados', 'chamados', 'chamados'], ['/conversas', 'Conversas', 'conversas', 'conversas']]],
+  ['PRINCIPAL', [['/', 'Visão geral', 'geral'], ['/clinicas', 'Clínicas', 'clinicas', 'clinicas'], ['/faturas', 'Assinaturas e faturas', 'faturas'], ['/testes', 'Testes grátis', 'testes', 'testes'], ['/recursos', 'Recursos ativos', 'recursos', 'alertasRec'], ['/chamados', 'Chamados', 'chamados', 'chamados'], ['/conversas', 'Conversas', 'conversas', 'conversas'], ['/diretorio', 'Bem-Estar Mental', 'site']]],
   ['CONFIGURAÇÃO', [['/planos', 'Planos e preços', 'planos'], ['/cobranca', 'Cobrança', 'cobranca'], ['/assistente', 'Assistente de ajuda', 'ajuda'], ['/comunicacao', 'WhatsApp e e-mail', 'sino'], ['/indicacoes', 'Indicações', 'presente'], ['/google', 'Google', 'site'], ['/equipe', 'Equipe e usuários', 'equipe'], ['/historico', 'Histórico', 'historico']]],
 ];
 // Papéis da equipe e o que cada um acessa (o administrador acessa tudo)
@@ -223,6 +224,7 @@ const need = (req, res, next) => {
 };
 mountSignup(handle, layout);
 mountTickets(handle, { need, layout, log });
+mountBem(handle, { need, layout, log });
 mountCRM(handle, { need, layout, log, tenantOf: (req) => tenantOf(req) });
 // ---------- telas de entrada (moldura moderna em duas colunas, no estilo do site) ----------
 const AUTH_FONTS = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@1&display=swap';

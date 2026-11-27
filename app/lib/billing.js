@@ -18,6 +18,8 @@ export const FEATURES = {
   nfse: 'Nota fiscal de serviço (NFS-e)', convenios: 'Convênio integrado (TISS, lotes XML e webservice)', convenios_simples: 'Convênio simples (sem integração com as operadoras)', tv: 'Painel de chamadas (TV da recepção)', locacao: 'Locação de salas', portal: 'Portal do paciente',
   personalizacao: 'Personalização (logo, cores, favicon e domínio próprio)',
   site: 'Site profissional (Marketing → Site, com endereço próprio)',
+  bem_bronze: 'Destaque Bronze no Bem-Estar Mental',
+  bem_prata: 'Destaque Prata no Bem-Estar Mental',
 };
 // Partes do sistema que dependem de cada recurso (rotas e telas de configuração)
 export const FEATURE_PATHS = [
@@ -39,7 +41,7 @@ export const FEATURE_PATHS = [
 // Valores iniciais (editáveis no Painel → Planos). Preços a definir pela Mentez.
 const SEED = [
   ['essencial', 'Essencial', 79, 1, 0, ['portal'], 1],
-  ['profissional', 'Profissional', 129, 1, 0, ['portal', 'teleconsulta', 'ia_sessao', 'atendente', 'nfse', 'convenios', 'personalizacao', 'site'], 2],
+  ['profissional', 'Profissional', 129, 1, 0, ['portal', 'teleconsulta', 'ia_sessao', 'atendente', 'nfse', 'convenios', 'personalizacao', 'site', 'bem_bronze'], 2],
   ['clinica', 'Clínica', 249, 5, 39, Object.keys(FEATURES), 3],
   ['piloto', 'Piloto (cortesia)', 0, 10, 0, Object.keys(FEATURES), 9],
 ];
@@ -92,6 +94,15 @@ export async function migrate() {
       if (!f.includes('site')) await T.pq('UPDATE plans SET features = ? WHERE plan_key = ?', [JSON.stringify([...f, 'site']), r.plan_key]);
     }
     await T.pq("INSERT INTO platform_settings (k, v) VALUES ('feat_site_v1', '1')");
+    clearPlans();
+  }
+  // uma vez: destaque no Bem-Estar Mental incluído (Profissional → Bronze; Clínica e Piloto → Prata)
+  if (!(await T.pone("SELECT 1 x FROM platform_settings WHERE k = 'feat_bem_v1'"))) {
+    for (const r of await T.pq("SELECT plan_key, features FROM plans WHERE plan_key IN ('profissional','clinica','piloto')")) {
+      const f = JSON.parse(r.features || '[]'); const add = r.plan_key === 'profissional' ? 'bem_bronze' : 'bem_prata';
+      if (!f.includes(add)) await T.pq('UPDATE plans SET features = ? WHERE plan_key = ?', [JSON.stringify([...f, add]), r.plan_key]);
+    }
+    await T.pq("INSERT INTO platform_settings (k, v) VALUES ('feat_bem_v1', '1')");
     clearPlans();
   }
 }

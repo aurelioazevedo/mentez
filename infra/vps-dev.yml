@@ -17,6 +17,7 @@ services:
       PORT: "3000"
       MENTEZ_INTERNAL_URL: http://app-dev:3000
       MENTEZ_FILES_DIR: /data/files
+      MENTEZ_BEM_HOSTS: bem.dev.mentez.com.br # Bem-Estar Mental no ambiente de testes
     volumes:
       - /opt/mentez-dev/files:/data/files:ro
     networks: [default, prod]
