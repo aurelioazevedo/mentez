@@ -13,7 +13,9 @@
   });
   let last = 0;
   const send = (extra = {}) => {
-    const h = Math.ceil(document.documentElement.scrollHeight);
+    // altura do conteúdo (o scrollHeight do documento nunca fica menor que a janela, e a seção não encolheria)
+    const m = document.querySelector('main');
+    const h = Math.ceil(m ? m.getBoundingClientRect().bottom + window.scrollY + 8 : document.body.scrollHeight);
     if (h === last && !extra.nav) return;
     last = h;
     try { window.parent.postMessage({ type: 'lm-agendar', h, step: document.body.dataset.step || '', ...extra }, '*'); } catch (e) { /* sem site em volta */ }

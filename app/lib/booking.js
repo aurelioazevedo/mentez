@@ -13,9 +13,15 @@ import * as Live from './live.js';
 import { notify } from './push.js';
 import { proName } from './perm.js';
 import * as Agent from './agent.js';
+import * as Brand from './brand.js';
+import * as Tenancy from './tenancy.js';
 
 const DEFAULTS = { enabled: false, pros: [], allowNew: true, modalities: ['online', 'presencial'], duration: null, step: null, minLeadHours: 12, horizonDays: 21, fewSlots: false, fewCount: 3,
-  intro: 'Escolha o melhor dia e horário para a sua sessão. Para confirmar, enviamos um código para o seu WhatsApp.' };
+  intro: 'Escolha o melhor dia e horário para a sua sessão. Para confirmar, enviamos um código para o seu WhatsApp.',
+  // No site da clínica (script /agendar/site.js): botão flutuante de WhatsApp e seção de agendamento
+  siteWa: 'agente', siteWaAgent: '', siteWaMsg: 'Olá! Gostaria de agendar uma consulta.', siteTitle: 'Agende sua consulta on-line',
+  siteText: 'Escolha o dia e o horário que cabem na sua rotina. Leva menos de um minuto e a confirmação chega no seu WhatsApp.' };
+export const SITE_WA = { agente: 'Atendente virtual', clinica: 'WhatsApp da clínica', off: 'Sem botão' };
 export async function config() {
   let c = {};
   try { c = JSON.parse((await getSetting('booking_cfg')) || '{}'); } catch { /* padrão */ }
@@ -33,7 +39,30 @@ export async function saveConfig(b) {
     minLeadHours: Math.max(1, Math.min(168, Number(b.minLeadHours) || 12)), horizonDays: Math.max(3, Math.min(90, Number(b.horizonDays) || 21)),
     intro: String(b.intro || '').trim().slice(0, 500) || DEFAULTS.intro,
     fewSlots: !!b.fewSlots, fewCount: Math.max(2, Math.min(4, Number(b.fewCount) || 3)),
+    siteWa: SITE_WA[b.siteWa] ? b.siteWa : DEFAULTS.siteWa, siteWaAgent: String(b.siteWaAgent || '').replace(/\D/g, '').slice(0, 15),
+    siteWaMsg: String(b.siteWaMsg || '').trim().slice(0, 300) || DEFAULTS.siteWaMsg,
+    siteTitle: String(b.siteTitle || '').trim().slice(0, 120) || DEFAULTS.siteTitle, siteText: String(b.siteText || '').trim().slice(0, 400) || DEFAULTS.siteText,
   }));
+}
+
+// Número do WhatsApp conectado à clínica (o mesmo em que o atendente virtual responde); guardado por 10 min
+const ownNum = new Map();
+export async function connectedNumber() {
+  const key = Tenancy.current()?.slug || '-'; const hit = ownNum.get(key);
+  if (hit && hit.at > Date.now() - 600e3) return hit.n;
+  let n = '';
+  try {
+    const c = await WA.config();
+    if (WA.ready(c)) n = (await WA.listInstances(c)).find((i) => i.name === c.instance && /open/i.test(i.status))?.number || '';
+  } catch { /* sem WhatsApp conectado */ }
+  ownNum.set(key, { at: Date.now(), n });
+  return n;
+}
+// Para onde o botão do site leva: atendente virtual (número informado ou o conectado), WhatsApp da clínica ou nenhum
+export async function siteWhatsApp(c) {
+  if (c.siteWa === 'off') return { wa: '', who: 'off' };
+  if (c.siteWa === 'agente') { const n = c.siteWaAgent || await connectedNumber(); if (n) return { wa: Brand.waNumber(n), who: 'agente' }; }
+  return { wa: Brand.get().wa, who: 'clinica' };
 }
 
 // Profissionais que aparecem na página (com escala configurada)

@@ -2774,3 +2774,14 @@ body.tele-body { background: var(--tv-d, #0b0f17); color: #eef2f7; }
 .sd-list .sd-warn { padding-left: 10px; border-left: 3px solid var(--warn, #b07a1f); }
 .sd-days { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 @media (max-width: 900px) { .sd-grid { grid-template-columns: 1fr; } }
+
+/* Agendamento online → No seu site / Instalar no site */
+.bk-site-cfg { border-top: 1px solid var(--line, rgba(0,0,0,.08)); padding-top: 14px; }
+.bk-install h3 { margin: 10px 0 2px; font-size: 16px; }
+.bk-install ol { margin: 0; padding-left: 20px; line-height: 1.7; }
+.bk-install code { font-size: 12.5px; }
+.bk-warn { padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, #E0A100 14%, transparent); border: 1px solid color-mix(in srgb, #E0A100 40%, transparent); }
+.bk-radio { display: grid; gap: 8px; margin: 6px 0 12px; }
+.bk-radio-t { font-weight: 600; font-size: 14px; }
+.bk-radio label { display: flex; align-items: flex-start; gap: 10px; text-align: left; justify-content: flex-start; cursor: pointer; line-height: 1.45; }
+.bk-radio input { margin-top: 3px; flex: 0 0 auto; width: auto; }

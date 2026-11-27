@@ -9,11 +9,24 @@ import { router, send, int, str } from '../lib/router.js';
 import { proName } from '../lib/perm.js';
 import { addDays, todayLocal, longDate } from '../lib/time.js';
 import * as BK from '../lib/booking.js';
+import { readFileSync } from 'node:fs';
+import AdmZip from 'adm-zip';
+
+const WIDGET = readFileSync(new URL('../public/site-widget.js', import.meta.url), 'utf8');
+// Script para o site da clínica (WordPress ou outro): botão de WhatsApp + seção de agendamento, configurados aqui
+export async function siteScript(req, res) {
+  const c = await BK.config(); const b = Brand.get();
+  const base = String(Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  const { wa } = await BK.siteWhatsApp(c);
+  const cfg = { base, origin: new URL(base).origin, enabled: !!c.enabled, wa, msg: c.siteWaMsg, label: 'Agendar pelo WhatsApp', title: c.siteTitle, text: c.siteText, name: b.who || b.name || '', color: b.color || '' };
+  const json = JSON.stringify(cfg).replace(/</g, '\\u003c').replace(/\u2028|\u2029/g, '');
+  res.set({ 'Cache-Control': 'public, max-age=300', 'Cross-Origin-Resource-Policy': 'cross-origin' }).type('application/javascript').send(`${WIDGET.trim()}(${json});\n`);
+}
 
 const CONTACT = html`<p class="muted small bk-contact">${Brand.get().phone ? `Dúvidas: WhatsApp ${Brand.get().phone} · ` : ''}<a href="/privacidade">Política de Privacidade</a></p>`;
 // embed=1: exibida dentro do site (sem logo/rodapé; o site ajusta a altura pelo tamanho que a página informa)
 const shell = (req, title, body) => (req.embed
-  ? bare(title, html`<main class="bkp bkp-embed">${body}<p class="bkp-embed-f">Dúvidas? <a href="https://wa.me/${Brand.get().wa}" target="_blank" rel="noopener">Fale no WhatsApp</a> · seus dados são protegidos (LGPD)</p></main><script src="/static/embed.js?v=${VERSION}"></script>`, 'bare bkp-page bkp-embed-page', req)
+  ? bare(title, html`<main class="bkp bkp-embed">${body}<p class="bkp-embed-f">Dúvidas? <a href="https://wa.me/${req.waNum || Brand.get().wa}" target="_blank" rel="noopener">Fale no WhatsApp</a> · seus dados são protegidos (LGPD)</p></main><script src="/static/embed.js?v=${VERSION}"></script>`, 'bare bkp-page bkp-embed-page', req)
   : bare(title, html`<main class="legal bkp">
   <a href="/agendar">${logoTag('legal-logo-img', 150)}</a>
   ${body}${CONTACT}</main>`, 'bare legal-page bkp-page', req));
@@ -21,7 +34,9 @@ const qs = (o) => Object.entries(o).filter(([, v]) => v !== undefined && v !== n
 
 export const publicBooking = router();
 // Mantém o modo “dentro do site” em links, formulários (embed.js) e redirecionamentos
-publicBooking.use((req, res, next) => {
+publicBooking.use(async (req, res, next) => {
+  // WhatsApp das páginas de agendamento: o mesmo do botão do site (atendente virtual ou o da clínica)
+  try { req.waNum = (await BK.siteWhatsApp(await BK.config())).wa; } catch { req.waNum = ''; }
   req.embed = req.query.embed === '1' || req.body?.embed === '1';
   if (req.embed) {
     const orig = res.redirect.bind(res);
@@ -29,6 +44,7 @@ publicBooking.use((req, res, next) => {
   }
   next();
 });
+publicBooking.get('/site.js', (req, res, next) => siteScript(req, res).catch(next));
 publicBooking.get('/', async (req, res) => {
   const c = await BK.config();
   res.set('Cache-Control', 'no-store');
@@ -42,7 +58,7 @@ publicBooking.get('/', async (req, res) => {
   const page = Math.max(0, Math.min(10, int(req.query.mais) || 0));
   const few = prof && mod && c.fewSlots ? await BK.fewSlots(c, prof.id, page) : null;
   const days = prof && mod && !few ? await BK.slots(c, prof.id, from, 14) : [];
-  const wa = Brand.get().wa;
+  const wa = req.waNum || Brand.get().wa;
   const g = prof ? await BK.gridFor(c, prof.id) : null;
   const nextFrom = addDays(from && from > todayLocal() ? from : todayLocal(), 14);
   send(res, shell(req, 'Agendar sessão', html`<h1>Agendar sessão</h1><p class="muted">${c.intro}</p>
@@ -161,6 +177,12 @@ settings.get('/', async (req, res) => {
   const link = `${base}/agendar`;
   const qr = await QRCode.toDataURL(link, { width: 260, margin: 1 });
   const recent = await q("SELECT a.id, a.starts_at, a.created_at, p.name, p.social_name FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.created_via = 'online' ORDER BY a.id DESC LIMIT 8");
+  const detected = await BK.connectedNumber();
+  const siteWa = await BK.siteWhatsApp(c);
+  const b = Brand.get();
+  const siteHost = String(b.site || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const snippet = `<script src="${base.replace(/\/+$/, '')}/agendar/site.js" data-trocar="sim" async></script>`;
+  const fmt = (n) => { const x = String(n || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''); return x.length === 11 ? `(${x.slice(0, 2)}) ${x.slice(2, 7)}-${x.slice(7)}` : x.length === 10 ? `(${x.slice(0, 2)}) ${x.slice(2, 6)}-${x.slice(6)}` : x; };
   send(res, page(req, { title: 'Agendamento online', active: 'config', body: html`<header class="ph"><div><p class="eyebrow">Configurações</p><h1>Agendamento online</h1>
       <p class="muted">Página onde o paciente escolhe um horário livre e confirma pelo WhatsApp, sem precisar conversar.</p></div>
       <div class="ph-actions"><a class="btn ghost" href="/agendar" target="_blank" rel="noopener">Abrir a página</a></div></header>
@@ -186,12 +208,44 @@ settings.get('/', async (req, res) => {
         <label class="fld"><span>Intervalo entre horários (min) <small class="muted">(vazio = ${c.stepEff})</small></span><input type="number" name="step" min="10" max="240" value="${c.step || ''}"></label>
       </div>
       <label class="fld"><span>Texto de abertura</span><textarea name="intro" rows="2" maxlength="500">${c.intro}</textarea></label>
+      <fieldset class="fld bk-site-cfg" id="no-site"><legend>No seu site</legend>
+        <p class="muted small">Botão flutuante de WhatsApp e seção “Agendamento on-line” no site da clínica (veja abaixo como instalar). O que mudar aqui vale no site em até 5 minutos, sem mexer nele.</p>
+        <div class="bk-radio"><span class="bk-radio-t">O botão de WhatsApp do site abre</span>
+          ${Object.entries(BK.SITE_WA).map(([k, l]) => html`<label><input type="radio" name="siteWa" value="${k}" ${c.siteWa === k ? raw('checked') : ''}><span><b>${l}</b>${k === 'agente' ? html` — o número em que o atendente virtual responde e já agenda sozinho${detected ? html` (conectado: ${fmt(detected)})` : ''}` : k === 'clinica' ? html` — ${b.wa ? fmt(b.wa) : 'cadastre em Identidade visual'}` : ' — só a seção de agendamento'}</span></label>`)}</div>
+        <div class="form-grid">
+          <label class="fld"><span>Número do atendente virtual <small class="muted">(vazio = o WhatsApp conectado)</small></span><input name="siteWaAgent" inputmode="tel" placeholder="${detected ? fmt(detected) : '(62) 90000-0000'}" value="${c.siteWaAgent ? fmt(c.siteWaAgent) : ''}"></label>
+          <label class="fld"><span>Mensagem que já vem escrita</span><input name="siteWaMsg" maxlength="300" value="${c.siteWaMsg}"></label>
+        </div>
+        <label class="fld"><span>Título da seção</span><input name="siteTitle" maxlength="120" value="${c.siteTitle}"></label>
+        <label class="fld"><span>Texto da seção</span><textarea name="siteText" rows="2" maxlength="400">${c.siteText}</textarea></label>
+        <p class="muted small">Agora o botão leva a: <b>${siteWa.wa ? `${fmt(siteWa.wa)} (${siteWa.who === 'agente' ? 'atendente virtual' : 'WhatsApp da clínica'})` : 'nenhum número (botão escondido)'}</b>.</p>
+      </fieldset>
       <p class="muted small">Os horários seguem a escala de cada profissional (Agenda → Escala e bloqueios), as sessões já marcadas e os compromissos da Google Agenda. O paciente confirma com um código enviado ao WhatsApp; a sessão entra na agenda e todos recebem os avisos de sempre.</p>
       <div class="actions"><button class="btn">Salvar</button></div>
     </form>
+    <section class="card stack bk-install"><h2>Instalar no site</h2>
+      ${siteHost ? html`<p class="muted small">Site cadastrado: <b>${siteHost}</b> — a seção de agendamento pode aparecer dentro dele.</p>` : html`<p class="bk-warn small"><b>Cadastre o endereço do site</b> em <a href="/configuracoes/identidade">Configurações → Identidade visual</a> (campo Site). Sem ele, o navegador bloqueia a seção de agendamento dentro do site.</p>`}
+      <h3>WordPress</h3>
+      <ol class="small"><li><a class="btn sm" href="/configuracoes/agendamento-online/plugin.zip">Baixar o plugin da Mentez</a> (já vem com o endereço da clínica).</li>
+        <li>No painel do WordPress: <b>Plugins → Adicionar novo → Enviar plugin</b>, escolha o arquivo e clique em <b>Ativar</b>.</li>
+        <li>Pronto: o botão de WhatsApp aparece em todas as páginas, a seção entra no fim da página inicial e é criada a página <b>/agendamento-online</b>. Em <b>Configurações → Mentez</b> dá para mudar a posição do botão e onde a seção aparece; em qualquer página, use o bloco “Código curto” com <code>[mentez_agendamento]</code>.</li>
+        <li>Se o site já tinha outro plugin de botão de WhatsApp, desative-o para não aparecerem dois.</li></ol>
+      <h3>Outros sites</h3>
+      <p class="small">Cole antes do <code>&lt;/body&gt;</code>: <input class="bk-url" value="${snippet}" readonly aria-label="Código para o site"> <button class="chip" type="button" data-copy="${snippet}">Copiar</button></p>
+      <p class="small">E onde a seção deve aparecer: <code>&lt;div data-mentez-agendar&gt;&lt;/div&gt;</code>. Links com <code>#whatsapp</code> abrem o WhatsApp escolhido acima.</p>
+    </section>
     <section class="card"><h2>Últimos agendamentos online</h2>
       ${recent.length ? html`<ul class="list">${recent.map((a) => html`<li><a href="/agenda/${a.id}"><span>${a.social_name || a.name}</span><small class="muted">${weekday(String(a.starts_at).slice(0, 10))} ${brDate(a.starts_at)} às ${String(a.starts_at).slice(11, 16)} · feito em ${brDate(a.created_at)}</small></a></li>`)}</ul>` : html`<p class="muted">Nenhum ainda.</p>`}
     </section>` }));
+});
+// Plugin do WordPress com o endereço da clínica já preenchido
+const PLUGIN = readFileSync(new URL('../wp-plugin/mentez-agendamento/mentez-agendamento.php', import.meta.url), 'utf8');
+settings.get('/plugin.zip', async (req, res) => {
+  const base = String(Tenancy.env('PUBLIC_URL') || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '').replace(/'/g, '');
+  const z = new AdmZip();
+  z.addFile('mentez-agendamento/mentez-agendamento.php', Buffer.from(PLUGIN.replace('__MENTEZ_URL__', base), 'utf8'));
+  await audit(req, 'agendamento-online-plugin');
+  res.set({ 'Content-Disposition': 'attachment; filename="mentez-agendamento.zip"' }).type('application/zip').send(z.toBuffer());
 });
 settings.post('/', async (req, res) => {
   await BK.saveConfig(req.body);
