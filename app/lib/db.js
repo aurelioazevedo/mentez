@@ -1246,6 +1246,25 @@ const SCHEMA = [
     data MEDIUMBLOB NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Versões publicadas do site e das landing pages (as 15 últimas de cada uma)
+  `CREATE TABLE IF NOT EXISTS site_versions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    path VARCHAR(80) NOT NULL DEFAULT '',
+    data MEDIUMTEXT NOT NULL,
+    user_id INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX (path, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Resultados do site sem cookies e sem guardar IP: contagem por dia, página, origem e tipo
+  // (view = visita, wa = clique no WhatsApp, book = agendamento concluído, form = formulário enviado)
+  `CREATE TABLE IF NOT EXISTS site_stats (
+    day DATE NOT NULL,
+    path VARCHAR(80) NOT NULL DEFAULT '',
+    source VARCHAR(40) NOT NULL DEFAULT 'direto',
+    kind VARCHAR(8) NOT NULL,
+    n INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, path, source, kind)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS site_media_var (
     media_id INT NOT NULL,
     aspect VARCHAR(6) NOT NULL,
@@ -1473,6 +1492,8 @@ export async function migrate() {
   }
   const tvl = await one("SELECT COLUMN_TYPE t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tv_screens' AND COLUMN_NAME = 'layout'");
   if (tvl && !tvl.t.includes("'midia'")) await q("ALTER TABLE tv_screens MODIFY layout ENUM('mensagens','chamadas','midia') NOT NULL DEFAULT 'mensagens'");
+  const cs = await one("SELECT COLUMN_TYPE t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crm_cards' AND COLUMN_NAME = 'source'");
+  if (cs && !cs.t.includes("'site'")) await q("ALTER TABLE crm_cards MODIFY source ENUM('whatsapp','manual','site') NOT NULL DEFAULT 'whatsapp'");
   const cv = await one("SELECT COLUMN_TYPE t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'appointments' AND COLUMN_NAME = 'created_via'");
   if (cv && !cv.t.includes("'online'")) await q("ALTER TABLE appointments MODIFY created_via ENUM('sistema','agente','lista_espera','online') NOT NULL DEFAULT 'sistema'");
   // Motivos antigos gravados com o erro técnico da API

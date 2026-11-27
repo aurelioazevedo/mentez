@@ -7,31 +7,39 @@ import * as Sites from '../lib/sites.js';
 import * as R from '../lib/siterender.js';
 import { context, siteHeaders, sendMedia, clinicBase } from './sitepub.js';
 import { audit } from '../lib/db.js';
+import * as Lead from '../lib/sitelead.js';
 import { page, html, raw, brDateTime, VERSION } from '../lib/html.js';
 import { router, send, str } from '../lib/router.js';
 
 export const admin = router();
+const ed = router(); // páginas que existem no site e em cada landing page (conteúdo, aparência, Google, versões, prévia)
 const B = '/marketing/site';
 const ck = (v) => (v ? raw('checked') : '');
 const arr = (v) => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.keys(v).sort((a, b) => a - b).map((k) => v[k]) : []);
+// página em edição: o site (req.sp = '') ou uma landing page (/lp/<endereço>)
+admin.use((req, res, next) => { req.sp = ''; req.sb = B; next(); });
 const kb = (n) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-const TABS = [['', 'Conteúdo'], ['aparencia', 'Aparência'], ['imagens', 'Imagens'], ['endereco', 'Endereço'], ['seo', 'Google e privacidade']];
+const TABS = [['', 'Conteúdo'], ['aparencia', 'Aparência'], ['imagens', 'Imagens'], ['landing', 'Landing pages'], ['resultados', 'Resultados'], ['endereco', 'Endereço'], ['seo', 'Google e privacidade'], ['versoes', 'Versões']];
+const LP_TABS = [['', 'Conteúdo'], ['aparencia', 'Aparência'], ['seo', 'Google e endereço'], ['versoes', 'Versões']];
 async function shell(req, tab, title, body) {
-  const st = await Sites.state();
-  const url = await Sites.siteUrl();
+  const sp = req.sp || ''; const sb = req.sb || B;
+  const st = await Sites.state(sp);
+  const base = await Sites.siteUrl();
+  const url = base ? `${base}${sp ? `/${sp}` : ''}` : '';
+  const name = sp ? ((await Sites.draft(sp))?.name || sp) : '';
   const status = !st.published ? html`<span class="badge b-agendada">Ainda não publicado</span>` : st.pending ? html`<span class="badge b-confirmada">No ar · há alterações não publicadas</span>` : html`<span class="badge b-realizada">No ar</span>`;
-  return page(req, { title: `Site · ${title}`, active: 'marketing', body: html`
-    <header class="ph"><div><p class="eyebrow">Marketing</p><h1>Site</h1>
-      <p class="muted">Monte o site do consultório por seções prontas: escolha o visual, ajuste os textos e publique. ${status}</p></div>
-      <div class="ph-actions"><a class="btn ghost" href="${B}/previa" target="_blank" rel="noopener">Ver prévia</a>
-        <form method="post" action="${B}/publicar" class="inline"><button class="btn">${st.published ? 'Publicar alterações' : 'Publicar o site'}</button></form></div></header>
+  return page(req, { title: `${sp ? 'Landing page' : 'Site'} · ${title}`, active: 'marketing', body: html`
+    <header class="ph"><div><p class="eyebrow">${sp ? html`<a href="${B}/landing">Marketing · Site · Landing pages</a>` : 'Marketing'}</p><h1>${sp ? name : 'Site'}</h1>
+      <p class="muted">${sp ? 'Landing page: uma página com um objetivo só (captar contatos, inscrições ou interessados).' : 'Monte o site do consultório por seções prontas: escolha o visual, ajuste os textos e publique.'} ${status}</p></div>
+      <div class="ph-actions"><a class="btn ghost" href="${sb}/previa" target="_blank" rel="noopener">Ver prévia</a>
+        <form method="post" action="${sb}/publicar" class="inline"><button class="btn">${st.published ? 'Publicar alterações' : sp ? 'Publicar a página' : 'Publicar o site'}</button></form></div></header>
     <section class="card site-status">
-      <div><p class="muted small">Endereço do site</p>${url ? html`<p class="site-url"><a href="${url}" target="_blank" rel="noopener">${url.replace(/^https:\/\//, '')}</a> <button class="chip" type="button" data-copy-text="${url}">Copiar</button></p>` : html`<p>—</p>`}</div>
+      <div><p class="muted small">Endereço ${sp ? 'da página' : 'do site'}</p>${url ? html`<p class="site-url"><a href="${url}" target="_blank" rel="noopener">${url.replace(/^https:\/\//, '')}</a> <button class="chip" type="button" data-copy-text="${url}">Copiar</button></p>` : html`<p>—</p>`}</div>
       <div><p class="muted small">Situação</p><p>${st.published ? html`Publicado em ${brDateTime(st.at)}` : 'Rascunho: ninguém vê ainda'}</p></div>
-      ${st.published ? html`<form method="post" action="${B}/despublicar" data-confirm="Tirar o site do ar? Quem abrir o endereço verá “Site em construção”."><button class="btn ghost btn-sm">Tirar do ar</button></form>` : ''}
+      ${st.published ? html`<form method="post" action="${sb}/despublicar" data-confirm="Tirar do ar? Quem abrir o endereço verá “página não encontrada” (o site) ou “Site em construção”."><button class="btn ghost btn-sm">Tirar do ar</button></form>` : ''}
     </section>
-    <nav class="tabs">${TABS.map(([k, l]) => html`<a href="${B}${k ? `/${k}` : ''}" class="${tab === k ? 'on' : ''}">${l}</a>`)}</nav>
+    <nav class="tabs">${(sp ? LP_TABS : TABS).map(([k, l]) => html`<a href="${sb}${k ? `/${k}` : ''}" class="${tab === k ? 'on' : ''}">${l}</a>`)}</nav>
     ${body}
     <script src="/static/site-admin.js?v=${VERSION}" defer></script>` });
 }
@@ -58,13 +66,13 @@ function field(i, s, [k, label, kind], media) {
   }
   return '';
 }
-admin.get('/', async (req, res) => {
-  const site = await Sites.draft();
+ed.get('/', async (req, res) => {
+  const site = await Sites.draft(req.sp);
   const media = await Sites.mediaList();
   const bk = await (await import('../lib/booking.js')).config().catch(() => ({ enabled: false }));
   send(res, await shell(req, '', 'Conteúdo', html`
-    <form method="post" action="${B}/conteudo" class="stack site-form">
-      <p class="muted small">Marque as seções que aparecem no site e use as setas para mudar a ordem. Os textos começam com sugestões a partir dos dados da clínica: revise e escreva com a sua voz. Imagens: envie na aba <a href="${B}/imagens">Imagens</a> e escolha aqui.</p>
+    <form method="post" action="${req.sb}/conteudo" class="stack site-form">
+      <p class="muted small">Marque as seções que aparecem no site e use as setas para mudar a ordem. Os textos começam com sugestões a partir dos dados da clínica: revise e escreva com a sua voz. Imagens: envie na aba <a href="${B}/imagens">Imagens</a> do site e escolha aqui.</p>
       ${site.sections.map((s, i) => { const def = Sites.SECTIONS[s.type]; return html`<section class="card site-sec ${s.on ? '' : 'is-off'}">
         <input type="hidden" name="s[${i}][type]" value="${s.type}">
         <div class="site-sec__head"><label class="check"><input type="checkbox" name="s[${i}][on]" value="1" ${ck(s.on)} data-sec-on> <b>${def.label}</b></label>
@@ -72,11 +80,11 @@ admin.get('/', async (req, res) => {
           <span class="site-sec__moves"><button class="chip" name="move" value="${i}:up" ${i === 0 ? raw('disabled') : ''} aria-label="Subir ${def.label}">↑</button><button class="chip" name="move" value="${i}:down" ${i === site.sections.length - 1 ? raw('disabled') : ''} aria-label="Descer ${def.label}">↓</button></span></div>
         <details ${s.type === 'inicio' ? raw('open') : ''}><summary>Editar</summary><div class="stack site-sec__body">${def.fields.map((f) => field(i, s, f, media))}</div></details>
       </section>`; })}
-      <div class="actions site-save"><button class="btn">Salvar rascunho</button><a class="btn ghost" href="${B}/previa" target="_blank" rel="noopener">Ver prévia</a></div>
+      <div class="actions site-save"><button class="btn">Salvar rascunho</button><a class="btn ghost" href="${req.sb}/previa" target="_blank" rel="noopener">Ver prévia</a></div>
     </form>`));
 });
-admin.post('/conteudo', async (req, res) => {
-  const site = await Sites.draft();
+ed.post('/conteudo', async (req, res) => {
+  const site = await Sites.draft(req.sp);
   const incoming = arr(req.body.s);
   const next = [];
   for (const raw0 of incoming) {
@@ -94,20 +102,23 @@ admin.post('/conteudo', async (req, res) => {
   }
   const [iS, dir] = String(req.body.move || '').split(':'); const i = Number(iS);
   if (dir && Number.isInteger(i)) { const j = dir === 'up' ? i - 1 : i + 1; if (next[i] && next[j]) [next[i], next[j]] = [next[j], next[i]]; }
-  await Sites.saveDraft({ ...site, sections: next.length ? next : site.sections });
+  await Sites.saveDraft({ ...site, sections: next.length ? next : site.sections }, req.sp);
   await audit(req, 'site-conteudo');
-  res.flash(dir ? 'Ordem alterada.' : 'Rascunho salvo. Veja a prévia e publique quando estiver pronto.').redirect(B);
+  res.flash(dir ? 'Ordem alterada.' : 'Rascunho salvo. Veja a prévia e publique quando estiver pronto.').redirect(req.sb);
 });
 
 // ---------- Aparência ----------
-admin.get('/aparencia', async (req, res) => {
-  const site = await Sites.draft(); const b = Brand.get();
+ed.get('/aparencia', async (req, res) => {
+  const site = await Sites.draft(req.sp); const b = Brand.get();
   send(res, await shell(req, 'aparencia', 'Aparência', html`
-    <form method="post" action="${B}/aparencia" class="stack">
+    <form method="post" action="${req.sb}/aparencia" class="stack">
       <section class="card"><h2>Layout</h2><p class="muted small">A estrutura do site: como a abertura e as seções são apresentadas.</p>
         <div class="site-layouts">${Object.entries(Sites.LAYOUTS).map(([k, l]) => html`<label class="site-layout"><input type="radio" name="layout" value="${k}" ${ck(site.layout === k)} data-motion="${l.motion ? 1 : 0}">
           <span class="site-mock site-mock--${k}" aria-hidden="true"><i class="m-top"></i><i class="m-hero"></i><i class="m-img"></i><i class="m-row"></i><i class="m-row m-row2"></i></span>
           <b>${l.name}${l.motion ? html` <span class="badge b-confirmada">Animado</span>` : ''}</b><small class="muted">${l.desc}</small></label>`)}</div></section>
+      <section class="card"><h2>Menu do site</h2><p class="muted small">O menu do topo. “Vidro” flutua sobre a página com efeito de vidro fosco, e um destaque de vidro desliza até o item ao passar o mouse e acompanha a seção que está na tela.</p>
+        <div class="site-motions">${Object.entries(Sites.NAVS).map(([k, l]) => html`<label class="site-style site-motion"><input type="radio" name="nav" value="${k}" ${ck(site.nav === k)}>
+          <span class="site-nv site-nv--${k}" aria-hidden="true"><i class="nv-bar"></i><i class="nv-pill"></i><i class="nv-a"></i><i class="nv-b"></i></span><b>${l}</b></label>`)}</div></section>
       <section class="card"><h2>Animações</h2><p class="muted small">Vale para qualquer layout; os marcados como “Animado” têm efeitos próprios (aurora, respiração, fotos flutuando, faixa de temas). Quem configurou o aparelho para “reduzir movimento” sempre vê o site parado.</p>
         <div class="site-motions">${Object.entries(Sites.MOTION).map(([k, m]) => html`<label class="site-style site-motion"><input type="radio" name="motion" value="${k}" ${ck(site.motion === k)}>
           <span class="site-mo site-mo--${k}" aria-hidden="true"><i></i><i></i><i></i></span><b>${m.name}</b><small class="muted">${m.desc}</small></label>`)}</div></section>
@@ -115,14 +126,14 @@ admin.get('/aparencia', async (req, res) => {
         <div class="site-styles">${Object.entries(Sites.STYLES).map(([k, st]) => { const p = Sites.palette({ style: k, layout: 'editorial' }, b); return html`<label class="site-style"><input type="radio" name="style" value="${k}" ${ck(site.style === k)}>
           <span class="site-sw" style="background:${p.bg};color:${p.ink}"><span class="site-sw__aa" style="font-family:'${p.serif}',Georgia,serif">Aa</span><span class="site-sw__dot" style="background:${p.accent}"></span></span>
           <b>${st.name}</b><small class="muted">${p.serif}${p.serif !== p.sans ? ` + ${p.sans}` : ''}</small></label>`; })}</div></section>
-      <div class="actions"><button class="btn">Salvar aparência</button><a class="btn ghost" href="${B}/previa" target="_blank" rel="noopener">Ver prévia</a></div>
+      <div class="actions"><button class="btn">Salvar aparência</button><a class="btn ghost" href="${req.sb}/previa" target="_blank" rel="noopener">Ver prévia</a></div>
     </form>`));
 });
-admin.post('/aparencia', async (req, res) => {
-  const site = await Sites.draft();
-  await Sites.saveDraft({ ...site, layout: str(req.body.layout, 20), style: str(req.body.style, 20), motion: str(req.body.motion, 10) || site.motion });
+ed.post('/aparencia', async (req, res) => {
+  const site = await Sites.draft(req.sp);
+  await Sites.saveDraft({ ...site, layout: str(req.body.layout, 20), style: str(req.body.style, 20), motion: str(req.body.motion, 10) || site.motion, nav: str(req.body.nav, 10) || site.nav }, req.sp);
   await audit(req, 'site-aparencia');
-  res.flash('Aparência salva no rascunho.').redirect(`${B}/aparencia`);
+  res.flash('Aparência salva no rascunho.').redirect(`${req.sb}/aparencia`);
 });
 
 // ---------- Imagens ----------
@@ -161,10 +172,12 @@ admin.post('/imagens/:id', async (req, res) => {
 });
 admin.post('/imagens/:id/apagar', async (req, res) => {
   const id = Number(req.params.id);
-  const site = await Sites.draft();
-  for (const s of site.sections) { if (s.image === id) s.image = null; for (const p of s.people || []) if (p.image === id) p.image = null; }
-  if (site.seo.image === id) site.seo.image = null;
-  await Sites.saveDraft(site);
+  for (const path of ['', ...(await Sites.landings()).map((x) => x.path)]) {
+    const site = await Sites.draft(path); if (!site) continue;
+    for (const s of site.sections) { if (s.image === id) s.image = null; for (const p of s.people || []) if (p.image === id) p.image = null; }
+    if (site.seo.image === id) site.seo.image = null;
+    await Sites.saveDraft(site, path);
+  }
   await Sites.mediaDelete(id);
   await audit(req, 'site-imagem-apagar', String(id));
   res.flash('Imagem apagada. Se o site publicado usava esta imagem, publique de novo.').redirect(`${B}/imagens`);
@@ -214,10 +227,14 @@ admin.post('/endereco/remover', async (req, res) => {
 });
 
 // ---------- Google e privacidade ----------
-admin.get('/seo', async (req, res) => {
-  const site = await Sites.draft(); const media = await Sites.mediaList(); const url = await Sites.siteUrl();
+ed.get('/seo', async (req, res) => {
+  const site = await Sites.draft(req.sp); const media = await Sites.mediaList(); const url = (await Sites.siteUrl()) + (req.sp ? `/${req.sp}` : '');
   send(res, await shell(req, 'seo', 'Google e privacidade', html`
-    <form method="post" action="${B}/seo" class="stack">
+    ${req.sp ? html`<form method="post" action="${req.sb}/endereco" class="card site-slug"><label class="fld"><span>Nome interno da página</span><input name="name" value="${site.name}" maxlength="120" required></label>
+      <label class="fld"><span>Endereço</span><span class="site-slug__in"><span class="muted">${url.replace(/^https:\/\//, '').replace(/\/[^/]*$/, '')}/</span><input name="path" value="${req.sp}" maxlength="60" pattern="[a-z0-9][a-z0-9-]{0,58}[a-z0-9]?" required></span></label>
+      <button class="btn ghost">Salvar</button>
+      <button class="btn ghost danger-text" formaction="${req.sb}/apagar" data-confirm-btn="Apagar esta landing page? Ela sai do ar e não dá para desfazer.">Apagar a página</button></form>` : ''}
+    <form method="post" action="${req.sb}/seo" class="stack">
       <section class="card stack"><h2>Como o site aparece no Google e ao compartilhar</h2>
         <label class="fld"><span>Título <small class="muted">(até 70 letras: nome, profissão e cidade)</small></span><input name="title" value="${site.seo.title}" maxlength="70" data-count></label>
         <label class="fld"><span>Descrição <small class="muted">(até 160 letras)</small></span><textarea name="description" rows="2" maxlength="170" data-count>${site.seo.description}</textarea></label>
@@ -226,36 +243,127 @@ admin.get('/seo', async (req, res) => {
         <label class="fld"><span>Código de verificação do Google Search Console <small class="muted">(opcional: só o código da meta tag)</small></span><input name="google" value="${site.seo.google}" maxlength="100" placeholder="ex.: AbC123..."></label>
         <p class="muted small">O site já sai com sitemap (<code>/sitemap.xml</code>), dados estruturados para o Google e endereço canônico. Depois de publicar, cadastre o site no Search Console e no Perfil da Empresa no Google.</p>
       </section>
-      <section class="card stack"><h2>Política de privacidade</h2>
-        <p class="muted small">Gerada automaticamente com os dados da clínica (LGPD) e ligada no rodapé do site. <a href="${B}/previa/privacidade" target="_blank" rel="noopener">Ver a política</a>.</p>
+      ${req.sp ? '' : html`<section class="card stack"><h2>Política de privacidade</h2>
+        <p class="muted small">Gerada automaticamente com os dados da clínica (LGPD) e ligada no rodapé do site. <a href="${req.sb}/previa/privacidade" target="_blank" rel="noopener">Ver a política</a>.</p>
         <label class="fld"><span>Informações adicionais (opcional)</span><textarea name="extra" rows="4" maxlength="4000" placeholder="Ex.: prazo de guarda de mensagens, contato do encarregado de dados…">${site.privacy.extra}</textarea></label>
-      </section>
+      </section>`}
       <div class="actions"><button class="btn">Salvar</button></div>
     </form>`));
 });
-admin.post('/seo', async (req, res) => {
-  const site = await Sites.draft();
-  await Sites.saveDraft({ ...site, seo: { title: req.body.title, description: req.body.description, image: req.body.image, google: req.body.google }, privacy: { extra: req.body.extra } });
+ed.post('/seo', async (req, res) => {
+  const site = await Sites.draft(req.sp);
+  await Sites.saveDraft({ ...site, seo: { title: req.body.title, description: req.body.description, image: req.body.image, google: req.body.google }, privacy: { extra: req.body.extra } }, req.sp);
   await audit(req, 'site-seo');
-  res.flash('Salvo no rascunho.').redirect(`${B}/seo`);
+  res.flash('Salvo no rascunho.').redirect(`${req.sb}/seo`);
+});
+ed.post('/endereco', async (req, res) => {
+  if (!req.sp) return res.redirect(B);
+  try {
+    const site = await Sites.draft(req.sp); await Sites.saveDraft({ ...site, name: str(req.body.name, 120) || site.name }, req.sp);
+    const np = await Sites.renameLanding(req.sp, str(req.body.path, 60) || req.sp);
+    await audit(req, 'site-landing-endereco', np); res.flash('Página salva.').redirect(`${B}/lp/${np}/seo`);
+  } catch (e) { res.flash(e.message, 'err').redirect(`${req.sb}/seo`); }
+});
+ed.post('/apagar', async (req, res) => {
+  if (!req.sp) return res.redirect(B);
+  await Sites.deleteLanding(req.sp); await audit(req, 'site-landing-apagar', req.sp);
+  res.flash('Landing page apagada.').redirect(`${B}/landing`);
+});
+
+// ---------- Versões publicadas ----------
+ed.get('/versoes', async (req, res) => {
+  const list = await Sites.versions(req.sp);
+  send(res, await shell(req, 'versoes', 'Versões', html`<section class="card"><h2>Versões publicadas</h2>
+    <p class="muted small">Cada vez que você publica, a versão fica guardada (as 15 últimas). Dá para ver como estava e trazer de volta para o rascunho; depois é só publicar de novo.</p>
+    ${list.length ? html`<ul class="list">${list.map((v, i) => html`<li class="site-dom"><span><b>${brDateTime(v.created_at)}</b>${i === 0 ? html` <span class="badge b-realizada">atual</span>` : ''}<br><small class="muted">${v.user_name ? `por ${v.user_name}` : ''}</small></span>
+      <span class="actions"><a class="btn ghost btn-sm" href="${req.sb}/versoes/${v.id}" target="_blank" rel="noopener">Ver</a>
+      <form method="post" action="${req.sb}/versoes/${v.id}/restaurar" data-confirm="Trazer esta versão para o rascunho? O rascunho atual é substituído (o que está no ar não muda até você publicar)."><button class="btn ghost btn-sm">Restaurar no rascunho</button></form></span></li>`)}</ul>` : html`<p class="muted">Nenhuma versão ainda: elas aparecem aqui depois da primeira publicação.</p>`}</section>`));
+});
+ed.get('/versoes/:id', async (req, res) => {
+  const site = await Sites.version(Number(req.params.id), req.sp); if (!site) return res.status(404).send('Versão não encontrada.');
+  siteHeaders(res, clinicBase());
+  res.type('html').send(R.render(site, await context(site, { preview: true, mediaBase: `${B}/m`, path: req.sp })));
+});
+ed.post('/versoes/:id/restaurar', async (req, res) => {
+  const site = await Sites.version(Number(req.params.id), req.sp); if (!site) return res.redirect(`${req.sb}/versoes`);
+  await Sites.saveDraft(site, req.sp); await audit(req, 'site-versao-restaurar', String(req.params.id));
+  res.flash('Versão trazida para o rascunho. Veja a prévia e publique quando quiser.').redirect(`${req.sb}/versoes`);
 });
 
 // ---------- prévia e publicação ----------
-admin.get('/previa', async (req, res) => {
-  const site = await Sites.draft();
+ed.get('/previa', async (req, res) => {
+  const site = await Sites.draft(req.sp);
   siteHeaders(res, clinicBase());
   res.set('Content-Security-Policy', String(res.get('Content-Security-Policy')).replace("frame-ancestors 'none'", "frame-ancestors 'self'")).removeHeader('X-Frame-Options');
-  res.type('html').send(R.render(site, await context(site, { preview: true, mediaBase: `${B}/m` })));
+  res.type('html').send(R.render(site, await context(site, { preview: true, mediaBase: `${B}/m`, path: req.sp })));
 });
-admin.get('/previa/privacidade', async (req, res) => {
-  const site = await Sites.draft();
+ed.get('/previa/privacidade', async (req, res) => {
+  const site = await Sites.draft(req.sp);
   siteHeaders(res, clinicBase());
   res.type('html').send(R.privacy(site, await context(site, { preview: true, mediaBase: `${B}/m` })));
 });
-admin.post('/publicar', async (req, res) => {
-  await Sites.publish(); await audit(req, 'site-publicar');
-  const url = await Sites.siteUrl();
-  let back = B; try { const r = new URL(String(req.get('referer') || '')); if (r.pathname.startsWith(B) && !r.pathname.includes('/previa')) back = r.pathname; } catch { /* sem referer */ }
-  res.flash(`Site publicado${url ? `: ${url.replace(/^https:\/\//, '')}` : ''}.`).redirect(back);
+ed.post('/publicar', async (req, res) => {
+  await Sites.publish(req.sp, req.user?.id || null); await audit(req, req.sp ? 'site-landing-publicar' : 'site-publicar', req.sp || null);
+  const url = (await Sites.siteUrl()) + (req.sp ? `/${req.sp}` : '');
+  let back = req.sb; try { const r = new URL(String(req.get('referer') || '')); if (r.pathname.startsWith(req.sb) && !r.pathname.includes('/previa')) back = r.pathname; } catch { /* sem referer */ }
+  res.flash(`${req.sp ? 'Página publicada' : 'Site publicado'}${url ? `: ${url.replace(/^https:\/\//, '')}` : ''}.`).redirect(back);
 });
-admin.post('/despublicar', async (req, res) => { await Sites.unpublish(); await audit(req, 'site-despublicar'); res.flash('Site fora do ar.').redirect(B); });
+ed.post('/despublicar', async (req, res) => { await Sites.unpublish(req.sp); await audit(req, 'site-despublicar', req.sp || null); res.flash(req.sp ? 'Página fora do ar.' : 'Site fora do ar.').redirect(req.sb); });
+
+// ---------- Landing pages ----------
+admin.get('/landing', async (req, res) => {
+  const list = await Sites.landings(); const base = await Sites.siteUrl();
+  send(res, await shell(req, 'landing', 'Landing pages', html`
+    <section class="card"><h2>Suas landing pages</h2>
+      <p class="muted small">Páginas com um objetivo só, para anúncios, Instagram ou eventos. Usam as imagens do site e o mesmo endereço (ex.: <code>${base.replace(/^https:\/\//, '')}/workshop-ansiedade</code>). Os contatos do formulário entram no CRM com a origem da visita.</p>
+      ${list.length ? html`<ul class="list">${list.map((x) => html`<li class="site-dom"><span><a href="${B}/lp/${x.path}"><b>${x.name}</b></a> ${x.live ? html`<span class="badge b-realizada">No ar</span>` : html`<span class="badge b-agendada">Rascunho</span>`}<br><small class="muted">/${x.path}</small></span>
+        <span class="actions">${x.live ? html`<a class="btn ghost btn-sm" href="${base}/${x.path}" target="_blank" rel="noopener">Abrir</a>` : ''}<a class="btn btn-sm" href="${B}/lp/${x.path}">Editar</a></span></li>`)}</ul>` : html`<p class="muted">Nenhuma ainda.</p>`}
+    </section>
+    <form method="post" action="${B}/landing" class="card stack"><h2>Criar landing page</h2>
+      <label class="fld"><span>Nome (também vira o endereço)</span><input name="name" required maxlength="120" placeholder="Ex.: Workshop de ansiedade"></label>
+      <div class="site-motions">${Object.entries(Sites.TEMPLATES).map(([k, t], i) => html`<label class="site-style site-motion"><input type="radio" name="tpl" value="${k}" ${i === 0 ? raw('checked') : ''}><b>${t.name}</b><small class="muted">${t.desc}</small></label>`)}</div>
+      <p class="muted small">A página começa com o visual do site e textos de exemplo para você ajustar. Ela só vai ao ar quando você publicar.</p>
+      <div class="actions"><button class="btn">Criar</button></div></form>`));
+});
+admin.post('/landing', async (req, res) => {
+  try { const path = await Sites.createLanding(str(req.body.tpl, 20), str(req.body.name, 120) || 'Nova página'); await audit(req, 'site-landing-criar', path); res.flash('Landing page criada. Ajuste os textos e publique.').redirect(`${B}/lp/${path}`); } catch (e) { res.flash(e.message, 'err').redirect(`${B}/landing`); }
+});
+
+// ---------- Resultados ----------
+admin.get('/resultados', async (req, res) => {
+  const days = [7, 30, 90].includes(Number(req.query.dias)) ? Number(req.query.dias) : 30;
+  const r = await Lead.report(days);
+  const names = Object.fromEntries((await Sites.landings()).map((x) => [x.path, x.name]));
+  const contacts = r.tot.wa + r.tot.book + r.tot.form;
+  const conv = r.tot.view ? `${((contacts / r.tot.view) * 100).toFixed(1).replace('.', ',')}%` : '—';
+  const series = []; for (let i = days - 1; i >= 0; i--) { const d = new Date(Date.now() - 3 * 3600e3 - i * 86400e3).toISOString().slice(0, 10); series.push([d, r.byDay[d] || { view: 0, act: 0 }]); }
+  const max = Math.max(1, ...series.map(([, v]) => v.view));
+  const rank = (o) => Object.entries(o).sort((a, b) => b[1].view + b[1].act * 10 - (a[1].view + a[1].act * 10)).slice(0, 12);
+  const SRC = { direto: 'Direto (digitou ou link salvo)', google: 'Google', instagram: 'Instagram', facebook: 'Facebook', whatsapp: 'WhatsApp', bing: 'Bing', linkedin: 'LinkedIn', tiktok: 'TikTok', youtube: 'YouTube', doctoralia: 'Doctoralia' };
+  send(res, await shell(req, 'resultados', 'Resultados', html`
+    <nav class="chips site-period">${[7, 30, 90].map((d) => html`<a class="chip ${d === days ? 'on' : ''}" href="${B}/resultados?dias=${d}">${d} dias</a>`)}</nav>
+    <section class="kpis site-kpis">
+      <div class="kpi"><small>Visitas</small><b>${r.tot.view}</b></div>
+      <div class="kpi"><small>Cliques no WhatsApp</small><b>${r.tot.wa}</b></div>
+      <div class="kpi"><small>Agendamentos on-line</small><b>${r.tot.book}</b></div>
+      <div class="kpi"><small>Formulários enviados</small><b>${r.tot.form}</b></div>
+      <div class="kpi"><small>Conversão (contatos ÷ visitas)</small><b>${conv}</b></div>
+    </section>
+    <section class="card"><h2>Visitas por dia</h2>
+      <div class="site-bars" role="img" aria-label="Visitas por dia nos últimos ${days} dias">${series.map(([d, v]) => html`<span title="${d.slice(8, 10)}/${d.slice(5, 7)}: ${v.view} visita(s), ${v.act} contato(s)"><i style="height:${Math.round((v.view / max) * 100)}%"></i>${v.act ? html`<b style="height:${Math.min(100, Math.round((v.act / max) * 100) + 6)}%"></b>` : ''}</span>`)}</div>
+      <p class="muted small"><i class="site-lg site-lg--v"></i> visitas · <i class="site-lg site-lg--a"></i> contatos (WhatsApp, agendamento e formulário)</p></section>
+    <div class="grid2">
+      <section class="card"><h2>De onde vêm</h2>${Object.keys(r.bySrc).length ? html`<table class="tbl"><thead><tr><th>Origem</th><th>Visitas</th><th>Contatos</th></tr></thead><tbody>${rank(r.bySrc).map(([k, v]) => html`<tr><td>${SRC[k] || k}</td><td>${v.view}</td><td>${v.act}</td></tr>`)}</tbody></table>` : html`<p class="muted">Sem dados ainda.</p>`}
+        <p class="muted small">Para saber qual anúncio ou post trouxe a pessoa, use links com <code>?utm_source=instagram&amp;utm_campaign=nome</code>.</p></section>
+      <section class="card"><h2>Páginas</h2>${Object.keys(r.byPath).length ? html`<table class="tbl"><thead><tr><th>Página</th><th>Visitas</th><th>Contatos</th></tr></thead><tbody>${rank(r.byPath).map(([k, v]) => html`<tr><td>${k ? names[k] || `/${k}` : 'Página inicial'}</td><td>${v.view}</td><td>${v.act}</td></tr>`)}</tbody></table>` : html`<p class="muted">Sem dados ainda.</p>`}</section>
+    </div>
+    <p class="muted small">Contagem sem cookies e sem guardar dados de quem visita (LGPD). Robôs de busca não entram na conta. Os contatos do formulário ficam no <a href="/crm">CRM</a>.</p>`));
+});
+
+// landing page em edição: as mesmas telas do site, em /marketing/site/lp/<endereço>/…
+admin.use('/lp/:path', async (req, res, next) => {
+  const p = String(req.params.path || '');
+  if (!Sites.pathOk(p) || !(await Sites.state(p)).exists) return res.status(404).redirect(`${B}/landing`);
+  req.sp = p; req.sb = `${B}/lp/${p}`; next();
+}, ed);
+admin.use(ed);

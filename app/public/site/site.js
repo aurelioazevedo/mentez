@@ -5,6 +5,27 @@
   var motion = body.classList.contains('M-off') ? 'off' : body.classList.contains('M-viva') ? 'viva' : 'suave';
   var viva = motion === 'viva' && !reduce;
   var header = d.querySelector('[data-header]');
+
+  // resultados do site (sem cookies): visita, origem e cliques. A origem vem do utm_source ou do site anterior
+  // e fica só nesta aba (sessionStorage) para atribuir o formulário/clique à mesma origem.
+  var statPath = body.getAttribute('data-stats');
+  var src = 'direto'; var cmp = '';
+  try {
+    var qs = new URLSearchParams(location.search);
+    var ref = d.referrer && d.referrer.indexOf(location.host) < 0 ? d.referrer : '';
+    var fresh = qs.get('utm_source') || (ref ? ref.replace(/^https?:\/\//, '').split('/')[0] : '');
+    src = fresh || sessionStorage.getItem('mz_src') || 'direto';
+    cmp = qs.get('utm_campaign') || sessionStorage.getItem('mz_cmp') || '';
+    sessionStorage.setItem('mz_src', src); if (cmp) sessionStorage.setItem('mz_cmp', cmp);
+  } catch (e) { /* navegação privada */ }
+  var beacon = function (k) {
+    if (statPath === null) return;
+    var data = JSON.stringify({ p: statPath, s: src, k: k });
+    try { if (navigator.sendBeacon) navigator.sendBeacon('/v', data); else fetch('/v', { method: 'POST', body: data, keepalive: true }); } catch (e) { /* sem rede */ }
+  };
+  if (statPath !== null && !/[?&](enviado|erro)=/.test(location.search)) beacon('view');
+  d.addEventListener('click', function (e) { var a = e.target.closest('a[href*="wa.me/"]'); if (a) beacon('wa'); });
+  d.querySelectorAll('[data-lead]').forEach(function (f) { var a = f.querySelector('[name=src]'); var b2 = f.querySelector('[name=cmp]'); if (a) a.value = src; if (b2) b2.value = cmp; });
   var menuOpen = false; var lastY = window.scrollY;
 
   // título da abertura palavra por palavra (Expressivas)
@@ -50,6 +71,29 @@
     d.addEventListener('keydown', function (e) { if (e.key === 'Escape') set(false); });
   }
 
+  // menu de vidro: a pílula acompanha o mouse e, ao rolar, a seção que está na tela
+  var navUl = d.querySelector('[data-navpill]'); var pill = navUl && navUl.querySelector('.nav__pill');
+  if (pill) {
+    var links = [].slice.call(navUl.querySelectorAll('a')); var current = null;
+    var place = function (a, instant) {
+      if (!a || !a.offsetParent) { pill.style.opacity = '0'; return; }
+      if (instant || reduce) pill.style.transition = 'none';
+      pill.style.width = a.offsetWidth + 'px'; pill.style.height = a.offsetHeight + 'px';
+      pill.style.transform = 'translate(' + a.offsetLeft + 'px,' + a.offsetTop + 'px)'; pill.style.opacity = '1';
+      if (instant || reduce) { void pill.offsetWidth; pill.style.transition = ''; }
+    };
+    var setCurrent = function (a) { current = a; links.forEach(function (x) { x.classList.toggle('is-on', x === a); }); place(a); };
+    navUl.addEventListener('mouseover', function (e) { var a = e.target.closest('a'); if (a) place(a); });
+    navUl.addEventListener('mouseleave', function () { place(current); });
+    window.addEventListener('resize', function () { place(current, true); });
+    if ('IntersectionObserver' in window) {
+      var byId = {}; links.forEach(function (a) { var id = (a.getAttribute('href') || '').slice(1); var el = id && d.getElementById(id); if (el) byId[id] = a; });
+      var spy = new IntersectionObserver(function (es) { es.forEach(function (x) { if (x.isIntersecting) setCurrent(byId[x.target.id]); }); }, { rootMargin: '-45% 0px -50% 0px' });
+      Object.keys(byId).forEach(function (id) { spy.observe(d.getElementById(id)); });
+      var top = d.getElementById('inicio'); if (top) new IntersectionObserver(function (es) { if (es[0].isIntersecting) { current = null; links.forEach(function (x) { x.classList.remove('is-on'); }); pill.style.opacity = '0'; } }, { rootMargin: '-45% 0px -50% 0px' }).observe(top);
+    }
+  }
+
   // seções surgem ao rolar (Suaves e Expressivas)
   if (motion !== 'off' && !reduce && 'IntersectionObserver' in window) {
     var els = d.querySelectorAll('.sec__head, .split__text, .split__media, .card, .step, .mode, .person, .faq, .contacts, .book__intro, .final__in');
@@ -67,6 +111,7 @@
     window.addEventListener('message', function (e) {
       if (e.origin !== origin || e.source !== fr.contentWindow || !e.data || e.data.type !== 'lm-agendar') return;
       if (e.data.h) fr.style.height = Math.max(320, Math.min(4000, Number(e.data.h) + 4)) + 'px';
+      if (e.data.nav && /^\/agendar\/pronto\//.test(e.data.path || '')) beacon('book');
       card.classList.add('is-ready');
       if (e.data.nav) { if (first) first = false; else { var r = card.getBoundingClientRect(); if (r.top < 0 || r.top > window.innerHeight * 0.6) card.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }); } }
     });

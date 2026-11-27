@@ -29,7 +29,18 @@ export const LAYOUTS = {
   horizonte: { name: 'Horizonte', desc: 'Abertura em texto grande, faixa de temas em movimento e etapas com linha de progresso.', hero: 'text', motion: true, marquee: true },
   mosaico: { name: 'Mosaico', desc: 'Várias fotos que flutuam suavemente na abertura e cartões que se destacam ao passar o mouse.', hero: 'mosaic', motion: true },
   noturno: { name: 'Noturno', desc: 'Fundo escuro com brilhos que se movem devagar e destaques luminosos. Sofisticado e moderno.', hero: 'aurora', motion: true, dark: true, marquee: true },
+  // Layouts por público e por proposta
+  ludico: { name: 'Lúdico', desc: 'Para atendimento infantil e de adolescentes: cores alegres, formas arredondadas e ondas entre as seções.', hero: 'round' },
+  lacos: { name: 'Laços', desc: 'Para casais e famílias: tons quentes, cartões acolhedores e fotos lado a lado.', hero: 'split' },
+  neuro: { name: 'Neuro', desc: 'Para neuropsicologia e avaliações: visual técnico e organizado, linhas finas e números em destaque.', hero: 'text' },
+  hipnose: { name: 'Hipnose', desc: 'Para hipnoterapia: fundo profundo com uma espiral suave e o título em foco.', hero: 'aurora', dark: true, motion: true, spiral: true },
+  online: { name: 'On-line', desc: 'Para quem atende pelo Brasil todo: foto em moldura de videochamada e o on-line em destaque.', hero: 'video' },
+  retrato: { name: 'Retrato', desc: 'A foto ocupa metade da tela na abertura, de ponta a ponta. Pessoal e marcante.', hero: 'portrait' },
+  leitura: { name: 'Leitura', desc: 'Uma coluna só, como um texto bem diagramado. Para quem gosta de explicar com calma.', hero: 'text' },
+  multi: { name: 'Multiprofissional', desc: 'Para clínicas com várias especialidades: serviços em blocos coloridos e equipe em destaque.', hero: 'cover' },
 };
+// Menu do topo do site
+export const NAVS = { classico: 'Clássico', vidro: 'Vidro (flutuante)' };
 // Animações do site: desligadas, suaves (seções aparecem ao rolar) ou expressivas (efeitos de cada layout)
 export const MOTION = {
   off: { name: 'Desligadas', desc: 'Tudo aparece parado, sem movimento. Mais simples e leve.' },
@@ -97,8 +108,11 @@ export const SECTIONS = {
   duvidas: { label: 'Dúvidas frequentes', nav: 'Dúvidas', fields: [['title', 'Título', 'text'], ['items', 'Perguntas e respostas', 'items']] },
   contato: { label: 'Contato', nav: 'Contato', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['map', 'Mostrar o link “Ver no mapa”', 'check']] },
   final: { label: 'Chamada final', nav: '', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['cta', 'Texto do botão', 'text']] },
+  beneficios: { label: 'Benefícios (lista com marcadores)', nav: '', fields: [['title', 'Título', 'text'], ['list', 'Itens (um por linha)', 'lines']] },
+  evento: { label: 'Evento (data, horário, local e valor)', nav: 'Informações', fields: [['title', 'Título', 'text'], ['date', 'Data', 'text'], ['time', 'Horário', 'text'], ['place', 'Local (ou “On-line”)', 'text'], ['price', 'Valor', 'text'], ['vagas', 'Vagas', 'text'], ['text', 'Observações', 'area']] },
+  form: { label: 'Formulário de contato (vira oportunidade no CRM)', nav: 'Contato', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['button', 'Texto do botão', 'text'], ['success', 'Mensagem depois de enviar', 'text'], ['email', 'Pedir e-mail', 'check'], ['message', 'Campo de mensagem', 'check']] },
 };
-export const ORDER = ['inicio', 'sobre', 'ajuda', 'abordagem', 'processo', 'modalidades', 'equipe', 'agendamento', 'valores', 'duvidas', 'contato', 'final'];
+export const ORDER = ['inicio', 'sobre', 'ajuda', 'abordagem', 'processo', 'modalidades', 'equipe', 'agendamento', 'valores', 'duvidas', 'contato', 'beneficios', 'evento', 'form', 'final'];
 const it = (t, d) => ({ t, d });
 
 // Conteúdo inicial, já com os dados da clínica (nome, CRP, cidade, modalidades, profissionais)
@@ -152,21 +166,93 @@ export async function ensure() {
   return one("SELECT * FROM sites WHERE path = ''");
 }
 export const parse = (txt) => { try { return JSON.parse(txt || 'null'); } catch { return null; } };
-export async function draft() { const r = await ensure(); return normalize(parse(r.draft) || await defaults()); }
-export async function published() { const r = await one("SELECT published, published_at FROM sites WHERE path = ''"); const s = parse(r?.published); return s ? { ...normalize(s), at: r.published_at } : null; }
-export async function saveDraft(site) { await ensure(); await q("UPDATE sites SET draft = ? WHERE path = ''", [JSON.stringify(normalize(site))]); }
-export async function publish() { const r = await ensure(); await q("UPDATE sites SET published = draft, published_at = NOW() WHERE path = ''"); cache.clear(); return r; }
-export async function unpublish() { await q("UPDATE sites SET published = NULL, published_at = NULL WHERE path = ''"); cache.clear(); }
-export async function state() {
-  const r = await one("SELECT draft, published, published_at, updated_at FROM sites WHERE path = ''");
+// path '' = site principal; outro = landing page (Marketing → Site → Landing pages)
+const row = async (path) => (path ? one('SELECT * FROM sites WHERE path = ?', [path]) : ensure());
+export async function draft(path = '') { const r = await row(path); if (!r) return null; return normalize(parse(r.draft) || (path ? {} : await defaults())); }
+export async function published(path = '') { const r = await one('SELECT published, published_at FROM sites WHERE path = ?', [path]); const s = parse(r?.published); return s ? { ...normalize(s), at: r.published_at } : null; }
+export async function saveDraft(site, path = '') { if (!path) await ensure(); await q('UPDATE sites SET draft = ? WHERE path = ?', [JSON.stringify(normalize(site)), path]); }
+export async function publish(path = '', userId = null) {
+  const r = await row(path); if (!r) return null;
+  await q('UPDATE sites SET published = draft, published_at = NOW() WHERE path = ?', [path]);
+  // guarda a versão publicada (as 15 últimas de cada página)
+  await q('INSERT INTO site_versions (path, data, user_id) SELECT path, draft, ? FROM sites WHERE path = ?', [userId, path]);
+  const old = await q('SELECT id FROM site_versions WHERE path = ? ORDER BY id DESC LIMIT 100 OFFSET 15', [path]);
+  if (old.length) await q('DELETE FROM site_versions WHERE id IN (?)', [old.map((x) => x.id)]);
+  cache.clear(); return r;
+}
+export async function unpublish(path = '') { await q('UPDATE sites SET published = NULL, published_at = NULL WHERE path = ?', [path]); cache.clear(); }
+export async function state(path = '') {
+  const r = await one('SELECT draft, published, published_at, updated_at FROM sites WHERE path = ?', [path]);
   if (!r) return { exists: false };
   return { exists: true, published: !!r.published, at: r.published_at, pending: !!r.published && r.draft !== r.published, updated: r.updated_at };
+}
+export const versions = (path = '') => q('SELECT v.id, v.created_at, v.user_id, u.name user_name FROM site_versions v LEFT JOIN users u ON u.id = v.user_id WHERE v.path = ? ORDER BY v.id DESC LIMIT 15', [path]);
+export async function version(id, path = '') { const v = await one('SELECT data FROM site_versions WHERE id = ? AND path = ?', [id, path]); return v ? normalize(parse(v.data) || {}) : null; }
+
+// ---------- landing pages ----------
+export const RESERVED_PATHS = new Set(['m', 'marca', 'politica-de-privacidade', 'sitemap.xml', 'robots.txt', 'f', 'v', 'static', 'agendar', 'login', 'admin', '_mentez', 'index.html']);
+export const MAX_LANDINGS = 20;
+export const pathOk = (p) => /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(p) && !RESERVED_PATHS.has(p);
+export const slugify = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'pagina';
+export const TEMPLATES = {
+  captacao: { name: 'Captação de pacientes', desc: 'Uma página com uma única ação: falar com você ou agendar. Ótima para anúncios.' },
+  evento: { name: 'Workshop ou evento', desc: 'Data, local, valor e inscrição pelo formulário.' },
+  material: { name: 'Material gratuito', desc: 'Ofereça um e-book, guia ou teste em troca do contato.' },
+  grupo: { name: 'Grupo terapêutico', desc: 'Apresente o grupo, os encontros e receba os interessados.' },
+};
+export async function landings() {
+  const rows = await q("SELECT id, path, draft, published IS NOT NULL live, published_at, updated_at FROM sites WHERE path <> '' ORDER BY id DESC");
+  return rows.map((r) => ({ ...r, name: parse(r.draft)?.name || r.path }));
+}
+export async function createLanding(tpl, name) {
+  if (((await one("SELECT COUNT(*) n FROM sites WHERE path <> ''"))?.n || 0) >= MAX_LANDINGS) throw new Error(`Limite de ${MAX_LANDINGS} landing pages. Apague uma para criar outra.`);
+  let path = slugify(name); if (!pathOk(path)) path = `p-${path}`.slice(0, 60);
+  for (let i = 2; await one('SELECT id FROM sites WHERE path = ?', [path]); i++) path = `${slugify(name).slice(0, 55)}-${i}`;
+  const main = await draft();
+  const d = await landingDefaults(TEMPLATES[tpl] ? tpl : 'captacao', name, main);
+  await q("INSERT INTO sites (path, kind, draft) VALUES (?, 'landing', ?)", [path, JSON.stringify(normalize(d))]);
+  return path;
+}
+export async function renameLanding(path, newPath) {
+  const np = slugify(newPath);
+  if (!pathOk(np)) throw new Error('Endereço inválido: use letras minúsculas, números e hífen.');
+  if (np !== path && await one('SELECT id FROM sites WHERE path = ?', [np])) throw new Error('Já existe uma página com este endereço.');
+  await q('UPDATE sites SET path = ? WHERE path = ?', [np, path]); await q('UPDATE site_versions SET path = ? WHERE path = ?', [np, path]);
+  cache.clear(); return np;
+}
+export async function deleteLanding(path) { if (!path) return; await q('DELETE FROM sites WHERE path = ?', [path]); await q('DELETE FROM site_versions WHERE path = ?', [path]); cache.clear(); }
+async function landingDefaults(tpl, name, main) {
+  const b = Brand.get(); const who = b.who || b.name || '';
+  const img = main.sections.find((x) => x.type === 'inicio')?.image || null;
+  const sobre = main.sections.find((x) => x.type === 'sobre');
+  const S = (type, on, v) => ({ type, on, ...v });
+  const base = { name, layout: main.layout, style: main.style, motion: main.motion, nav: main.nav, landing: true, seo: { title: name.slice(0, 70), description: '', image: null, google: '' }, privacy: { extra: '' } };
+  const sobreSec = S('sobre', true, { title: `Quem conduz: ${who}`, text: sobre?.text || '', highlights: sobre?.highlights || [], image: sobre?.image || null });
+  const T = {
+    captacao: [S('inicio', true, { eyebrow: b.signLine || '', title: 'Você não precisa passar por isso sozinho(a).', text: 'Psicoterapia com escuta acolhedora e um plano pensado para você. Deixe seu contato e eu retorno pelo WhatsApp.', cta: 'Quero ser atendido(a)', image: img }),
+      S('beneficios', true, { title: 'Como a terapia pode ajudar', list: ['Entender o que você sente e por quê', 'Aprender formas práticas de lidar com a ansiedade', 'Ter um espaço seguro e sem julgamentos', 'Atendimento presencial ou on-line'] }),
+      sobreSec, S('form', true, { title: 'Fale comigo', text: 'Preencha e eu entro em contato pelo WhatsApp em até 1 dia útil.', button: 'Quero conversar', success: 'Recebemos seu contato! Em breve falamos pelo WhatsApp.', email: false, message: true }),
+      S('duvidas', true, { title: 'Dúvidas frequentes', items: main.sections.find((x) => x.type === 'duvidas')?.items || [] })],
+    evento: [S('inicio', true, { eyebrow: 'Workshop', title: name, text: 'Um encontro prático para entender e cuidar melhor das suas emoções.', cta: 'Quero me inscrever', image: img }),
+      S('evento', true, { title: 'Informações', date: 'Sábado, 00/00', time: '9h às 12h', place: b.city ? `${b.address || 'Endereço a definir'} · ${b.city}` : 'On-line, ao vivo', price: 'R$ 0,00', vagas: 'Vagas limitadas', text: '' }),
+      S('beneficios', true, { title: 'O que você vai levar', list: ['Conteúdo prático e acessível', 'Exercícios para usar no dia a dia', 'Material de apoio', 'Espaço para tirar dúvidas'] }),
+      sobreSec, S('form', true, { title: 'Faça sua inscrição', text: 'Preencha para garantir sua vaga. Enviamos a confirmação pelo WhatsApp.', button: 'Garantir minha vaga', success: 'Inscrição recebida! Enviaremos a confirmação pelo WhatsApp.', email: true, message: false })],
+    material: [S('inicio', true, { eyebrow: 'Material gratuito', title: name, text: 'Um guia prático, com linguagem simples, para você começar hoje.', cta: 'Quero receber', image: img }),
+      S('beneficios', true, { title: 'O que você vai encontrar', list: ['Explicação clara do tema', 'Sinais de alerta para observar', 'Exercícios simples para praticar', 'Quando procurar ajuda profissional'] }),
+      S('form', true, { title: 'Receba o material', text: 'Informe seu WhatsApp e enviamos o material para você.', button: 'Quero receber', success: 'Pronto! Em breve você recebe o material pelo WhatsApp.', email: true, message: false }), sobreSec],
+    grupo: [S('inicio', true, { eyebrow: 'Grupo terapêutico', title: name, text: 'Um espaço de troca e cuidado, conduzido por profissional, com pessoas que vivem desafios parecidos.', cta: 'Quero participar', image: img }),
+      S('abordagem', true, { title: 'Como funciona o grupo', text: 'Encontros semanais, em grupo pequeno, com temas guiados e espaço para cada participante. Tudo com sigilo e respeito.', image: null }),
+      S('evento', true, { title: 'Encontros', date: 'Toda quarta-feira', time: '19h às 20h30', place: 'On-line', price: 'Consulte', vagas: 'Até 10 participantes', text: '' }),
+      S('beneficios', true, { title: 'Para quem é', list: ['Quem quer se sentir menos sozinho(a)', 'Quem busca aprender com outras experiências', 'Quem prefere um formato mais acessível'] }),
+      sobreSec, S('form', true, { title: 'Quero participar', text: 'Deixe seu contato e explicamos tudo pelo WhatsApp.', button: 'Quero participar', success: 'Recebemos! Em breve entramos em contato pelo WhatsApp.', email: false, message: true })],
+  }[tpl];
+  return { ...base, sections: T };
 }
 
 // garante a forma do site (seções conhecidas, todas presentes, campos limitados)
 const str = (v, n) => String(v ?? '').replace(/\r/g, '').slice(0, n);
 export function normalize(s) {
-  const out = { layout: LAYOUTS[s?.layout] ? s.layout : 'editorial', style: STYLES[s?.style] ? s.style : 'areia', motion: MOTION[s?.motion] ? s.motion : 'suave', sections: [], seo: {}, privacy: {} };
+  const out = { layout: LAYOUTS[s?.layout] ? s.layout : 'editorial', style: STYLES[s?.style] ? s.style : 'areia', motion: MOTION[s?.motion] ? s.motion : 'suave', nav: NAVS[s?.nav] ? s.nav : 'classico', name: str(s?.name, 120), landing: !!s?.landing, sections: [], seo: {}, privacy: {} };
   const seen = new Set();
   for (const x of Array.isArray(s?.sections) ? s.sections : []) {
     if (!SECTIONS[x?.type] || seen.has(x.type)) continue; seen.add(x.type);

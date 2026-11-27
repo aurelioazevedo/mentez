@@ -2995,3 +2995,21 @@ body.mv-glass .glass-tip.on { opacity: 1; transform: none; }
 }
 @keyframes mp-slide { to { transform: translateY(44px); } }
 @keyframes mp-slide-x { to { transform: translateX(260%); } }
+.site-nv { position: relative; display: block; height: 64px; margin-bottom: 6px; border-radius: 10px; overflow: hidden; background: linear-gradient(120deg, #6E6458, #B9A68A); }
+.site-nv i { position: absolute; display: block; }
+.site-nv--classico .nv-bar { left: 0; right: 0; top: 0; height: 18px; background: #F4F2EE; }
+.site-nv--classico .nv-pill { display: none; }
+.site-nv--vidro .nv-bar { left: 8px; right: 8px; top: 7px; height: 18px; border-radius: 9px; background: linear-gradient(165deg, rgba(255,255,255,.6), rgba(255,255,255,.25)); border: 1px solid rgba(255,255,255,.7); }
+.site-nv--vidro .nv-pill { left: 30%; top: 11px; width: 16%; height: 10px; border-radius: 6px; background: rgba(255,255,255,.9); }
+.site-nv .nv-a { left: 12px; top: 30px; width: 50%; height: 9px; border-radius: 4px; background: rgba(255,255,255,.85); }
+.site-nv .nv-b { left: 12px; top: 44px; width: 32%; height: 7px; border-radius: 4px; background: rgba(255,255,255,.6); }
+@media (prefers-reduced-motion: no-preference) { .site-motion:hover .site-nv--vidro .nv-pill { animation: mp-slide-x 1.5s ease-in-out infinite alternate; } }
+.site-period { display: flex; gap: 6px; margin-bottom: 12px; }
+.site-period .chip.on { background: var(--terracota); border-color: var(--terracota); color: #fff; }
+.site-kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.site-bars { display: flex; align-items: flex-end; gap: 3px; height: 160px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.site-bars span { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.site-bars i { display: block; width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--terracota) 55%, transparent); }
+.site-bars b { position: absolute; left: 25%; right: 25%; bottom: 0; border-radius: 3px 3px 0 0; background: var(--musgo, #5B47C9); }
+.site-lg { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: middle; }
+.site-lg--v { background: color-mix(in srgb, var(--terracota) 55%, transparent); } .site-lg--a { background: var(--musgo, #5B47C9); }

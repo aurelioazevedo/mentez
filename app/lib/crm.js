@@ -92,7 +92,7 @@ async function topPosition(stageId) {
 }
 
 // Card do contato (cria se não existir).
-export async function cardFor({ phone, name, patientId = null }) {
+export async function cardFor({ phone, name, patientId = null, via = 'whatsapp' }) {
   const key = phoneKey(phone);
   if (!key) return null;
   let card = await one('SELECT * FROM crm_cards WHERE phone_key = ?', [key]);
@@ -117,7 +117,7 @@ export async function cardFor({ phone, name, patientId = null }) {
     const ins = await q('INSERT IGNORE INTO crm_cards (phone_key, phone, name, patient_id, stage_id, position) VALUES (?,?,?,?,?,?)',
       [key, String(phone).slice(0, 30), (pname?.social_name || pname?.name || name || `Contato ${String(phone).slice(-4)}`).slice(0, 160), patientId, stage.id, await topPosition(stage.id)]);
     card = await one('SELECT * FROM crm_cards WHERE phone_key = ?', [key]);
-    if (ins.affectedRows) await logEvent(card.id, 'criado', 'Card criado a partir do WhatsApp');
+    if (ins.affectedRows) await logEvent(card.id, 'criado', via === 'site' ? 'Card criado pelo formulário do site' : 'Card criado a partir do WhatsApp');
   } else if (patientId && !card.patient_id) {
     const pname = await one('SELECT name, social_name FROM patients WHERE id = ?', [patientId]);
     await q('UPDATE crm_cards SET patient_id = ?, name = ? WHERE id = ?', [patientId, (pname.social_name || pname.name).slice(0, 160), card.id]);

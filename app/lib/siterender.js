@@ -26,8 +26,9 @@ export function render(site, ctx) {
   const sec = (type) => on.find((s) => s.type === type);
   const book = sec('agendamento');
   const waUrl = ctx.wa ? `https://wa.me/${ctx.wa}?text=${encodeURIComponent('Olá! Vim pelo site e gostaria de agendar uma consulta.')}` : '';
-  const ctaHref = book ? '#agendamento' : (waUrl || '#contato');
-  const ctaAttrs = book ? '' : raw(' target="_blank" rel="noopener"');
+  const formOn = !!sec('form');
+  const ctaHref = site.landing && formOn ? '#form' : book ? '#agendamento' : formOn ? '#form' : (waUrl || '#contato');
+  const ctaAttrs = /^#/.test(ctaHref) ? '' : raw(' target="_blank" rel="noopener"');
   const img = (id, aspect, sizes, cls = '', { eager = false, alt = null, pos = false } = {}) => {
     const m = id && ctx.mediaMap.get(Number(id));
     if (!m) return '';
@@ -54,18 +55,22 @@ export function render(site, ctx) {
 
   const S = {
     inicio: (s) => {
-      const media = { split: ['4x5', '(min-width: 960px) 42vw, 92vw'], round: ['1x1', '(min-width: 960px) 30vw, 70vw'], text: ['4x5', '(min-width: 960px) 28vw, 60vw'], cover: ['o', '100vw'], aurora: ['1x1', '(min-width: 960px) 30vw, 70vw'], breath: ['1x1', '(min-width: 960px) 30vw, 66vw'], mosaic: ['4x5', '(min-width: 960px) 30vw, 70vw'] }[L.hero];
+      const media = { split: ['4x5', '(min-width: 960px) 42vw, 92vw'], round: ['1x1', '(min-width: 960px) 30vw, 70vw'], text: ['4x5', '(min-width: 960px) 28vw, 60vw'], cover: ['o', '100vw'], aurora: ['1x1', '(min-width: 960px) 30vw, 70vw'], breath: ['1x1', '(min-width: 960px) 30vw, 66vw'], mosaic: ['4x5', '(min-width: 960px) 30vw, 70vw'], video: ['3x2', '(min-width: 960px) 44vw, 92vw'], portrait: ['4x5', '(min-width: 960px) 50vw, 100vw'] }[L.hero];
       const pic = img(s.image, media[0], media[1], 'hero__img', { eager: true, pos: L.hero === 'cover' });
       // Mosaico: até duas fotos a mais (das outras seções) flutuando em volta da principal
       const extras = L.hero === 'mosaic' ? [...new Set(site.sections.flatMap((x) => [x.image, ...(x.people || []).map((p) => p.image)]).filter((id) => id && id !== s.image && ctx.mediaMap.get(Number(id))?.kind === 'img'))].slice(0, 2) : [];
       const mediaHtml = !pic ? '' : L.hero === 'breath'
         ? html`<figure class="hero__media breath"><span class="breath__ring" aria-hidden="true"></span><span class="breath__ring breath__ring--2" aria-hidden="true"></span>${pic}<figcaption class="breath__cap" aria-hidden="true"><span class="breath__in">Inspire…</span><span class="breath__out">Solte o ar…</span></figcaption></figure>`
+        : L.hero === 'video'
+          ? html`<figure class="hero__media vcall">${pic}<span class="vcall__live" aria-hidden="true"><i></i>Sessão on-line</span><span class="vcall__bar" aria-hidden="true"><i class="vcall__b"></i><i class="vcall__b"></i><i class="vcall__b vcall__b--end"></i></span></figure>`
+        : L.hero === 'portrait'
+          ? html`<figure class="hero__media portrait" data-parallax>${pic}</figure>`
         : L.hero === 'mosaic'
           ? html`<figure class="hero__media mosaic">${pic}${extras.map((id, i) => html`<span class="mosaic__x mosaic__x--${i + 1}">${img(id, '1x1', '(min-width: 960px) 14vw, 32vw', '')}</span>`)}</figure>`
           : L.hero !== 'cover' ? html`<figure class="hero__media"${L.hero === 'split' || L.hero === 'text' ? raw(' data-parallax') : ''}>${pic}</figure>` : '';
       return html`<section class="hero hero--${L.hero}${pic ? '' : ' hero--noimg'}" id="inicio">
         ${L.hero === 'cover' && pic ? html`<div class="hero__bg" data-parallax>${pic}</div>` : ''}
-        ${L.hero === 'aurora' ? raw('<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>') : ''}
+        ${L.hero === 'aurora' ? raw(`<div class="aurora" aria-hidden="true"><i></i><i></i><i></i>${L.spiral ? '<b class="spiral"></b>' : ''}</div>`) : ''}
         <div class="wrap hero__grid">
           <div class="hero__text">
             ${s.eyebrow ? html`<p class="hero__eyebrow">${s.eyebrow}</p>` : ''}
@@ -120,13 +125,35 @@ export function render(site, ctx) {
           ${b.address ? html`<li>${map ? html`<a href="${map}" target="_blank" rel="noopener">${ico('pin')}<span><small>Endereço · ver no mapa</small>${[b.address, b.place].filter(Boolean).join(' · ')}</span></a>` : html`<span class="contacts__row">${ico('pin')}<span><small>Endereço</small>${[b.address, b.place].filter(Boolean).join(' · ')}</span></span>`}</li>` : ''}
         </ul></div></section>`;
     },
+    beneficios: (s) => html`<section class="sec sec--benef" id="beneficios"><div class="wrap narrow">${eyebrow(SL.beneficios)}<h2 class="h2">${s.title}</h2>
+        <ul class="ticks ticks--big">${s.list.map((x, i) => html`<li style="--i:${i}">${x}</li>`)}</ul></div></section>`,
+    evento: (s) => html`<section class="sec sec--evento alt" id="evento"><div class="wrap">${eyebrow(SL.evento)}<h2 class="h2">${s.title}</h2>
+        <dl class="evt">${[['Data', s.date], ['Horário', s.time], ['Local', s.place], ['Valor', s.price], ['Vagas', s.vagas]].filter(([, v]) => v).map(([k, v], i) => html`<div class="evt__i" style="--i:${i}"><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>
+        ${s.text ? html`<div class="prose">${paras(s.text)}</div>` : ''}${on.some((x) => x.type === 'form') ? html`<p class="sec__cta">${btn(sec('inicio')?.cta || 'Quero participar', '#form')}</p>` : ''}</div></section>`,
+    form: (s) => { const st = ctx.form || {}; return html`<section class="sec sec--form" id="form"><div class="wrap form-wrap">
+        <div class="form-wrap__intro">${eyebrow(SL.form)}<h2 class="h2">${s.title}</h2>${s.text ? html`<div class="prose">${paras(s.text)}</div>` : ''}
+          ${waUrl ? html`<p class="book__alt">Prefere chamar agora? <a href="${waUrl}" target="_blank" rel="noopener">Fale pelo WhatsApp</a>.</p>` : ''}</div>
+        <div class="form-card">${st.sent ? html`<div class="lead-ok" role="status"><b>✓</b><p>${s.success || 'Recebemos seu contato! Em breve falamos com você.'}</p></div>` : html`
+          ${st.error ? html`<p class="lead-err" role="alert">${st.error}</p>` : ''}
+          <form method="post" action="/f" class="lead" data-lead>
+            <input type="hidden" name="p" value="${ctx.path || ''}"><input type="hidden" name="src" value=""><input type="hidden" name="cmp" value="">
+            <label class="lead-hp" aria-hidden="true">Não preencha<input name="website" tabindex="-1" autocomplete="off"></label>
+            <label><span>Nome</span><input name="nome" required maxlength="120" autocomplete="name"></label>
+            <label><span>WhatsApp (com DDD)</span><input name="whatsapp" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
+            ${s.email ? html`<label><span>E-mail</span><input type="email" name="email" maxlength="160" autocomplete="email"></label>` : ''}
+            ${s.message ? html`<label><span>Mensagem <small>(opcional)</small></span><textarea name="mensagem" rows="3" maxlength="1000" placeholder="Conte brevemente o que você procura"></textarea></label>` : ''}
+            <label class="lead-ck"><input type="checkbox" name="lgpd" value="1" required><span>Li e concordo com a <a href="/politica-de-privacidade" target="_blank">Política de privacidade</a> e autorizo o contato pelo WhatsApp.</span></label>
+            <button class="btn">${s.button || 'Enviar'}${ico('arrow', 'i btn__i')}</button>
+            <p class="lead-note">Não é preciso contar detalhes de saúde aqui: conversamos com sigilo depois.</p>
+          </form>`}</div>
+      </div></section>`; },
     final: (s) => html`<section class="final" id="final"><div class="wrap final__in"><h2 class="h2">${s.title}</h2>${s.text ? html`<div class="final__lead">${paras(s.text)}</div>` : ''}<div class="hero__actions">${btn(s.cta || 'Agendar consulta', ctaHref, 'btn--light')}${book ? waBtn('Falar no WhatsApp', 'btn--ghost-light') : ''}</div></div></section>`,
   };
   const SL = Object.fromEntries(Object.entries(Sites.SECTIONS).map(([k, v]) => [k, v.label]));
-  SL.modalidades = 'Atendimento';
+  SL.modalidades = 'Atendimento'; SL.beneficios = 'Benefícios'; SL.evento = 'Informações'; SL.form = 'Contato';
 
   const body = on.map((s) => S[s.type]?.(s) || '');
-  const nav = on.filter((s) => Sites.SECTIONS[s.type].nav && s.type !== 'inicio' && s.type !== 'agendamento').slice(0, 6);
+  const nav = site.landing ? [] : on.filter((s) => Sites.SECTIONS[s.type].nav && s.type !== 'inicio' && s.type !== 'agendamento' && s.type !== 'form' && s.type !== 'evento').slice(0, 6);
   // logo e favicon da Identidade visual (servidos pelo próprio endereço do site)
   const logo = b.logo ? b.logoUrl : '';
   const logoDark = b.logoDark ? b.logoDarkUrl : logo;
@@ -158,8 +185,8 @@ export function render(site, ctx) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(title)}</title>
 ${desc ? `<meta name="description" content="${esc(desc)}">` : ''}
-${ctx.preview ? '<meta name="robots" content="noindex, nofollow">' : `<link rel="canonical" href="${esc(ctx.siteUrl)}/">`}
-<meta property="og:type" content="website"><meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ''}${ctx.siteUrl ? `<meta property="og:url" content="${esc(ctx.siteUrl)}/">` : ''}${share ? `<meta property="og:image" content="${esc(share)}"><meta name="twitter:card" content="summary_large_image">` : ''}
+${ctx.preview ? '<meta name="robots" content="noindex, nofollow">' : `<link rel="canonical" href="${esc(ctx.siteUrl)}/${esc(ctx.path || '')}">`}
+<meta property="og:type" content="website"><meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ''}${ctx.siteUrl ? `<meta property="og:url" content="${esc(ctx.siteUrl)}/${esc(ctx.path || '')}">` : ''}${share ? `<meta property="og:image" content="${esc(share)}"><meta name="twitter:card" content="summary_large_image">` : ''}
 ${site.seo.google && !ctx.preview ? `<meta name="google-site-verification" content="${esc(site.seo.google)}">` : ''}
 <meta name="theme-color" content="${esc(pal.bg)}">
 ${b.faviconUrl ? `<link rel="icon" href="${esc(b.faviconUrl)}">` : ''}
@@ -169,15 +196,15 @@ ${b.faviconUrl ? `<link rel="icon" href="${esc(b.faviconUrl)}">` : ''}
 <style>${cssVars}</style>
 <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>
 </head>
-<body class="L-${site.layout} S-${site.style} M-${site.motion || 'suave'}${L.dark ? ' is-dark' : ''}${L.motion ? ' is-motion' : ''}${ctx.preview ? ' has-preview' : ''}">
+<body class="L-${site.layout} S-${site.style} M-${site.motion || 'suave'}${L.dark ? ' is-dark' : ''}${L.motion ? ' is-motion' : ''}${site.nav === 'vidro' ? ' nav-glass' : ''}${site.landing ? ' is-landing' : ''}${ctx.preview ? ' has-preview' : ''}"${ctx.preview ? '' : ` data-stats="${esc(ctx.path || '')}"`}>
 ${ctx.preview ? '<div class="preview-bar">Prévia do rascunho: só você vê esta versão. Publique em Marketing → Site para colocar no ar.</div>' : ''}
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 ${site.layout === 'clinica' ? String(html`<div class="topbar"><div class="wrap topbar__in">${b.address ? html`<span>${ico('pin')}${[b.address, b.place].filter(Boolean).join(' · ')}</span>` : ''}${waUrl ? html`<a href="${waUrl}" target="_blank" rel="noopener">${ico('wa')}${fmtPhone(b.whatsapp || b.phone || ctx.wa)}</a>` : ''}</div></div>`) : ''}
-<header class="header${darkHeader ? ' header--ondark' : ''}" data-header>
+<header class="header${darkHeader ? ' header--ondark' : ''}${site.nav === 'vidro' ? ' header--glass' : ''}" data-header>
   <div class="wrap header__in">
-    <a class="brand" href="#inicio">${String(brandMark(darkHeader))}</a>
-    <nav class="nav" aria-label="Principal"><ul>${nav.map((s) => `<li><a href="#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}</ul></nav>
-    <a class="btn btn--sm header__cta" href="${esc(ctaHref)}"${book ? '' : ' target="_blank" rel="noopener"'}>${book ? 'Agendar' : 'Fale comigo'}</a>
+    <a class="brand" href="${site.landing ? '/' : '#inicio'}">${String(brandMark(darkHeader))}</a>
+    <nav class="nav" aria-label="Principal"><ul data-navpill>${site.nav === 'vidro' ? '<li class="nav__pill" aria-hidden="true"></li>' : ''}${nav.map((s) => `<li><a href="#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}</ul></nav>
+    <a class="btn btn--sm header__cta" href="${esc(ctaHref)}"${/^#/.test(ctaHref) ? '' : ' target="_blank" rel="noopener"'}>${ctaHref === '#agendamento' ? 'Agendar' : ctaHref === '#form' ? (site.landing ? 'Quero participar' : 'Fale comigo') : 'Fale comigo'}</a>
     <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu" data-menu>${ico('menu')}<span class="sr">Abrir menu</span></button>
   </div>
   <div class="menu" id="menu" hidden data-menu-panel><ul>${nav.map((s) => `<li><a href="#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}${book ? '<li><a href="#agendamento">Agendar on-line</a></li>' : ''}</ul></div>
@@ -231,6 +258,9 @@ ${site.privacy?.extra ? `<h2 class="h3">Informações adicionais</h2>${paras(sit
 }
 
 function hasContent(s, ctx) {
+  if (s.type === 'beneficios') return !!s.list?.length;
+  if (s.type === 'evento') return !!(s.date || s.place || s.price);
+  if (s.type === 'form') return true;
   if (s.type === 'agendamento') return !!ctx.bookingOn;
   if (s.type === 'equipe') return !!s.people?.length;
   if (s.type === 'ajuda' || s.type === 'processo' || s.type === 'duvidas') return !!s.items?.length;
