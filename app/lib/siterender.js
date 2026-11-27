@@ -1,0 +1,233 @@
+// Gera o HTML do site da clínica (publicado ou prévia). Uma estrutura de seções comum a todos os layouts;
+// o layout muda a abertura, a composição e o acabamento (site.css), o estilo muda cores e fontes.
+import { html, raw, esc, VERSION } from './html.js';
+import * as Sites from './sites.js';
+
+const paras = (t) => String(t || '').split(/\n{2,}|\n/).map((x) => x.trim()).filter(Boolean).map((x) => html`<p>${x}</p>`);
+const ICON = {
+  wa: '<path fill="currentColor" d="M16 3a13 13 0 0 0-11.2 19.6L3 29l6.6-1.7A13 13 0 1 0 16 3zm0 23.7c-2 0-4-.6-5.7-1.6l-.4-.2-3.9 1 1-3.8-.3-.4A10.7 10.7 0 1 1 16 26.7zm5.9-8c-.3-.2-1.9-1-2.2-1-.3-.1-.5-.2-.7.1l-1 1.3c-.2.2-.4.2-.7.1-.3-.2-1.4-.5-2.6-1.6-1-.9-1.6-1.9-1.8-2.2-.2-.3 0-.5.1-.7l.5-.6.3-.5c.1-.2 0-.4 0-.6l-1-2.4c-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.8s1.2 3.2 1.4 3.5c.2.2 2.4 3.6 5.7 5 2.8 1.1 3.4.9 4 .8.6-.1 1.9-.8 2.2-1.5.3-.8.3-1.4.2-1.5l-.5-.4z"/>',
+  arrow: '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 16h20M18 8l8 8-8 8"/>',
+  pin: '<path fill="none" stroke="currentColor" stroke-width="2" d="M16 29s9-8.4 9-15a9 9 0 1 0-18 0c0 6.6 9 15 9 15z"/><circle cx="16" cy="14" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/>',
+  mail: '<path fill="none" stroke="currentColor" stroke-width="2" d="M4 8h24v16H4zM4 9l12 9 12-9"/>',
+  ig: '<rect x="5" y="5" width="22" height="22" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="22.5" cy="9.5" r="1.4" fill="currentColor"/>',
+  video: '<rect x="3" y="8" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M21 14l8-4v12l-8-4z"/>',
+  home: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 15L16 5l12 10M8 12v14h16V12"/>',
+  menu: '<path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 10h22M5 16h22M5 22h22"/>',
+};
+const ico = (k, cls = 'i') => raw(`<svg class="${cls}" viewBox="0 0 32 32" aria-hidden="true">${ICON[k]}</svg>`);
+const ASPECT_WH = { '16x9': [1600, 900], '3x2': [1500, 1000], '4x5': [1200, 1500], '1x1': [1200, 1200] };
+
+// ctx: { b (marca), base (endereço do sistema da clínica), wa, media(id, v, aspect, w), mediaMap, siteUrl, preview, t }
+export function render(site, ctx) {
+  const { b } = ctx;
+  const L = Sites.LAYOUTS[site.layout] || Sites.LAYOUTS.editorial;
+  const pal = Sites.palette(site, b);
+  const on = site.sections.filter((s) => s.on && hasContent(s, ctx));
+  const sec = (type) => on.find((s) => s.type === type);
+  const book = sec('agendamento');
+  const waUrl = ctx.wa ? `https://wa.me/${ctx.wa}?text=${encodeURIComponent('Olá! Vim pelo site e gostaria de agendar uma consulta.')}` : '';
+  const ctaHref = book ? '#agendamento' : (waUrl || '#contato');
+  const ctaAttrs = book ? '' : raw(' target="_blank" rel="noopener"');
+  const img = (id, aspect, sizes, cls = '', { eager = false, alt = null, pos = false } = {}) => {
+    const m = id && ctx.mediaMap.get(Number(id));
+    if (!m) return '';
+    const a = alt ?? m.alt ?? '';
+    if (m.kind === 'svg') return html`<img class="${cls}" src="${ctx.media(m.id, m.v, 'o', 480)}" alt="${a}" ${raw(eager ? '' : 'loading="lazy" ')}decoding="async">`;
+    const [w, h] = aspect === 'o' ? [m.w, m.h] : ASPECT_WH[aspect];
+    const widths = Sites.WIDTHS.filter((x) => x <= Math.max(480, m.w));
+    // pos: foto de fundo (corta conforme a tela) → centraliza no ponto de foco
+    const style = pos ? raw(` style="object-position:${Math.round(Number(m.fx) * 100)}% ${Math.round(Number(m.fy) * 100)}%"`) : '';
+    return html`<img class="${cls}" src="${ctx.media(m.id, m.v, aspect, 1080)}" srcset="${widths.map((x) => `${ctx.media(m.id, m.v, aspect, x)} ${x}w`).join(', ')}" sizes="${sizes}" width="${w}" height="${h}" alt="${a}"${style} ${raw(eager ? 'fetchpriority="high"' : 'loading="lazy"')} decoding="async">`;
+  };
+  let n = 0;
+  const num = () => String(++n).padStart(2, '0');
+  const eyebrow = (label) => html`<p class="eyebrow"><span class="eyebrow__n">${num()}</span>${label}</p>`;
+  const head = (s, label) => html`<header class="sec__head">${eyebrow(label)}<h2 class="h2">${s.title || label}</h2>${s.text && s.type !== 'sobre' && s.type !== 'abordagem' && s.type !== 'contato' && s.type !== 'agendamento' ? html`<div class="sec__lead">${paras(s.text)}</div>` : ''}</header>`;
+  const btn = (label, href = ctaHref, cls = '') => html`<a class="btn ${cls}" href="${href}"${href === ctaHref ? ctaAttrs : (/^https?:/.test(href) ? raw(' target="_blank" rel="noopener"') : '')}>${label}${ico('arrow', 'i btn__i')}</a>`;
+  const waBtn = (label = 'Falar no WhatsApp', cls = 'btn--ghost') => (waUrl ? html`<a class="btn ${cls}" href="${waUrl}" target="_blank" rel="noopener">${ico('wa', 'i btn__i')}${label}</a>` : '');
+
+  const S = {
+    inicio: (s) => {
+      const media = { split: ['4x5', '(min-width: 960px) 42vw, 92vw'], round: ['1x1', '(min-width: 960px) 30vw, 70vw'], text: ['4x5', '(min-width: 960px) 28vw, 60vw'], cover: ['o', '100vw'] }[L.hero];
+      const pic = img(s.image, media[0], media[1], 'hero__img', { eager: true, pos: L.hero === 'cover' });
+      return html`<section class="hero hero--${L.hero}${pic ? '' : ' hero--noimg'}" id="inicio">
+        ${L.hero === 'cover' && pic ? html`<div class="hero__bg">${pic}</div>` : ''}
+        <div class="wrap hero__grid">
+          <div class="hero__text">
+            ${s.eyebrow ? html`<p class="hero__eyebrow">${s.eyebrow}</p>` : ''}
+            <h1 class="h1">${s.title || b.who}</h1>
+            ${s.text ? html`<div class="hero__lead">${paras(s.text)}</div>` : ''}
+            <div class="hero__actions">${btn(s.cta || 'Agendar consulta')}${book ? waBtn() : ''}</div>
+          </div>
+          ${L.hero !== 'cover' && pic ? html`<figure class="hero__media">${pic}</figure>` : ''}
+        </div>
+      </section>`;
+    },
+    sobre: (s) => html`<section class="sec sec--sobre" id="sobre"><div class="wrap split">
+        ${s.image ? html`<figure class="split__media">${img(s.image, '4x5', '(min-width: 960px) 38vw, 92vw', 'rounded')}</figure>` : ''}
+        <div class="split__text">${eyebrow(SL.sobre)}<h2 class="h2">${s.title}</h2><div class="prose">${paras(s.text)}</div>
+          ${s.highlights?.length ? html`<ul class="ticks">${s.highlights.map((h) => html`<li>${h}</li>`)}</ul>` : ''}</div>
+      </div></section>`,
+    ajuda: (s) => html`<section class="sec sec--ajuda" id="ajuda"><div class="wrap">${head(s, SL.ajuda)}
+        <div class="cards">${s.items.map((x) => html`<article class="card"><h3 class="h3">${x.t}</h3>${x.d ? html`<p>${x.d}</p>` : ''}</article>`)}</div></div></section>`,
+    abordagem: (s) => html`<section class="sec sec--abordagem alt" id="abordagem"><div class="wrap ${s.image ? 'split split--rev' : 'narrow'}">
+        <div class="split__text">${eyebrow(SL.abordagem)}<h2 class="h2">${s.title}</h2><div class="prose">${paras(s.text)}</div></div>
+        ${s.image ? html`<figure class="split__media">${img(s.image, '3x2', '(min-width: 960px) 44vw, 92vw', 'rounded')}</figure>` : ''}
+      </div></section>`,
+    processo: (s) => html`<section class="sec sec--processo" id="processo"><div class="wrap">${head(s, SL.processo)}
+        <ol class="steps">${s.items.map((x, i) => html`<li class="step"><span class="step__n">${String(i + 1).padStart(2, '0')}</span><h3 class="h3">${x.t}</h3>${x.d ? html`<p>${x.d}</p>` : ''}</li>`)}</ol></div></section>`,
+    modalidades: (s) => html`<section class="sec sec--modos alt" id="atendimento"><div class="wrap">${head(s, SL.modalidades)}
+        <div class="modes">
+          ${s.presencial ? html`<article class="mode">${ico('home', 'i mode__i')}<h3 class="h3">Presencial</h3>${paras(s.presencial)}</article>` : ''}
+          ${s.online ? html`<article class="mode">${ico('video', 'i mode__i')}<h3 class="h3">On-line</h3>${paras(s.online)}</article>` : ''}
+        </div>${book ? html`<p class="sec__cta">${btn('Ver horários disponíveis', '#agendamento')}</p>` : ''}</div></section>`,
+    equipe: (s) => html`<section class="sec sec--equipe" id="equipe"><div class="wrap">${head(s, SL.equipe)}
+        <div class="team">${s.people.map((p) => html`<article class="person">${p.image ? img(p.image, '1x1', '(min-width: 960px) 22vw, 45vw', 'person__img') : html`<span class="person__ph" aria-hidden="true">${initials(p.name)}</span>`}
+          <h3 class="h3">${p.name}</h3>${p.role ? html`<p class="person__role">${p.role}</p>` : ''}${p.text ? html`<p class="person__text">${p.text}</p>` : ''}</article>`)}</div></div></section>`,
+    agendamento: (s) => html`<section class="sec sec--book" id="agendamento"><div class="wrap book">
+        <div class="book__intro">${eyebrow(SL.agendamento)}<h2 class="h2">${s.title}</h2>${s.text ? html`<div class="prose">${paras(s.text)}</div>` : ''}
+          <ol class="book__steps"><li><span>1</span>Escolha presencial ou on-line, o dia e o horário</li><li><span>2</span>Informe seu nome e WhatsApp</li><li><span>3</span>Confirme com o código enviado ao WhatsApp</li></ol>
+          ${waUrl ? html`<p class="book__alt">Prefere conversar antes? <a href="${waUrl}" target="_blank" rel="noopener">Fale pelo WhatsApp</a>.</p>` : ''}</div>
+        <div class="book__panel"><div class="book__card"><iframe title="Agendamento on-line" data-src="${ctx.base}/agendar?embed=1" data-origin="${originOf(ctx.base)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+          <p class="book__load">Carregando os horários livres…</p></div>
+          <p class="book__open"><a href="${ctx.base}/agendar" target="_blank" rel="noopener">Abrir o agendamento em tela cheia ↗</a></p></div>
+      </div></section>`,
+    valores: (s) => html`<section class="sec sec--valores alt" id="valores"><div class="wrap narrow">${eyebrow(SL.valores)}<h2 class="h2">${s.title}</h2><div class="prose">${paras(s.text)}</div></div></section>`,
+    duvidas: (s) => html`<section class="sec sec--faq" id="duvidas"><div class="wrap narrow">${head(s, SL.duvidas)}
+        <div class="faq">${s.items.map((x) => html`<details class="faq__item"><summary>${x.t}</summary>${paras(x.d)}</details>`)}</div></div></section>`,
+    contato: (s) => {
+      const map = s.map && b.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([b.address, b.city, b.uf].filter(Boolean).join(', '))}` : '';
+      return html`<section class="sec sec--contato alt" id="contato"><div class="wrap split">
+        <div class="split__text">${eyebrow(SL.contato)}<h2 class="h2">${s.title}</h2>${s.text ? html`<div class="prose">${paras(s.text)}</div>` : ''}</div>
+        <ul class="contacts">
+          ${waUrl ? html`<li><a href="${waUrl}" target="_blank" rel="noopener">${ico('wa')}<span><small>WhatsApp</small>${fmtPhone(b.whatsapp || b.phone || ctx.wa)}</span></a></li>` : ''}
+          ${b.email ? html`<li><a href="mailto:${b.email}">${ico('mail')}<span><small>E-mail</small>${b.email}</span></a></li>` : ''}
+          ${b.instagram ? html`<li><a href="https://instagram.com/${String(b.instagram).replace(/^@/, '')}" target="_blank" rel="noopener">${ico('ig')}<span><small>Instagram</small>@${String(b.instagram).replace(/^@/, '')}</span></a></li>` : ''}
+          ${b.address ? html`<li>${map ? html`<a href="${map}" target="_blank" rel="noopener">${ico('pin')}<span><small>Endereço · ver no mapa</small>${[b.address, b.place].filter(Boolean).join(' · ')}</span></a>` : html`<span class="contacts__row">${ico('pin')}<span><small>Endereço</small>${[b.address, b.place].filter(Boolean).join(' · ')}</span></span>`}</li>` : ''}
+        </ul></div></section>`;
+    },
+    final: (s) => html`<section class="final" id="final"><div class="wrap final__in"><h2 class="h2">${s.title}</h2>${s.text ? html`<div class="final__lead">${paras(s.text)}</div>` : ''}<div class="hero__actions">${btn(s.cta || 'Agendar consulta', ctaHref, 'btn--light')}${book ? waBtn('Falar no WhatsApp', 'btn--ghost-light') : ''}</div></div></section>`,
+  };
+  const SL = Object.fromEntries(Object.entries(Sites.SECTIONS).map(([k, v]) => [k, v.label]));
+  SL.modalidades = 'Atendimento';
+
+  const body = on.map((s) => S[s.type]?.(s) || '');
+  const nav = on.filter((s) => Sites.SECTIONS[s.type].nav && s.type !== 'inicio' && s.type !== 'agendamento').slice(0, 6);
+  // logo e favicon da Identidade visual (servidos pelo próprio endereço do site)
+  const logo = b.logo ? b.logoUrl : '';
+  const logoDark = b.logoDark ? b.logoDarkUrl : logo;
+  const darkHeader = L.dark || (L.hero === 'cover' && sec('inicio')?.image);
+  // com abertura escura, mostra a logo para fundo escuro enquanto o topo está sobre a foto e a normal depois de rolar
+  const brandMark = (dark) => {
+    if (!logo && !logoDark) return html`<span class="brand__name">${b.who || b.name}</span>`;
+    if (L.dark) return html`<img src="${logoDark || logo}" alt="${b.who || b.name}" class="brand__logo">`;
+    if (dark && logoDark && logoDark !== logo) return html`<img src="${logo}" alt="${b.who || b.name}" class="brand__logo brand__logo--l"><img src="${logoDark}" alt="" aria-hidden="true" class="brand__logo brand__logo--d">`;
+    return html`<img src="${logo || logoDark}" alt="${b.who || b.name}" class="brand__logo">`;
+  };
+  const heroImg = sec('inicio')?.image;
+  const shareId = site.seo.image || heroImg || sec('sobre')?.image;
+  const share = shareId && ctx.mediaMap.get(Number(shareId))?.kind === 'img' ? `${ctx.siteUrl}${ctx.media(shareId, ctx.mediaMap.get(Number(shareId)).v, '16x9', 1600)}` : '';
+  const title = site.seo.title || b.who || b.name;
+  const desc = site.seo.description || '';
+  const cssVars = `:root{--bg:${pal.bg};--surface:${pal.surface};--ink:${pal.ink};--muted:${pal.muted};--accent:${pal.accent};--accent-text:${pal.accentText};--on-accent:${pal.onAccent};--soft:${pal.soft};--line:${pal.line};--serif:"${pal.serif}",Georgia,serif;--sans:"${pal.sans}",system-ui,-apple-system,"Segoe UI",sans-serif}`;
+  const ld = {
+    '@context': 'https://schema.org', '@type': ['MedicalBusiness', 'ProfessionalService'], name: b.name || b.who, url: ctx.siteUrl || undefined, description: desc || undefined,
+    telephone: b.phone ? `+55 ${b.phone}` : undefined, email: b.email || undefined, image: share || undefined,
+    address: b.address || b.city ? { '@type': 'PostalAddress', streetAddress: b.address || undefined, addressLocality: b.city || undefined, addressRegion: b.uf || undefined, addressCountry: 'BR' } : undefined,
+    sameAs: b.instagram ? [`https://instagram.com/${String(b.instagram).replace(/^@/, '')}`] : undefined,
+  };
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>${esc(title)}</title>
+${desc ? `<meta name="description" content="${esc(desc)}">` : ''}
+${ctx.preview ? '<meta name="robots" content="noindex, nofollow">' : `<link rel="canonical" href="${esc(ctx.siteUrl)}/">`}
+<meta property="og:type" content="website"><meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ''}${ctx.siteUrl ? `<meta property="og:url" content="${esc(ctx.siteUrl)}/">` : ''}${share ? `<meta property="og:image" content="${esc(share)}"><meta name="twitter:card" content="summary_large_image">` : ''}
+${site.seo.google && !ctx.preview ? `<meta name="google-site-verification" content="${esc(site.seo.google)}">` : ''}
+<meta name="theme-color" content="${esc(pal.bg)}">
+${b.faviconUrl ? `<link rel="icon" href="${esc(b.faviconUrl)}">` : ''}
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="${esc(Sites.fontsUrl(pal))}">
+<link rel="stylesheet" href="/static/site/site.css?v=${VERSION}">
+<style>${cssVars}</style>
+<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>
+</head>
+<body class="L-${site.layout} S-${site.style}${L.dark ? ' is-dark' : ''}${ctx.preview ? ' has-preview' : ''}">
+${ctx.preview ? '<div class="preview-bar">Prévia do rascunho: só você vê esta versão. Publique em Marketing → Site para colocar no ar.</div>' : ''}
+<a class="skip" href="#conteudo">Pular para o conteúdo</a>
+${site.layout === 'clinica' ? String(html`<div class="topbar"><div class="wrap topbar__in">${b.address ? html`<span>${ico('pin')}${[b.address, b.place].filter(Boolean).join(' · ')}</span>` : ''}${waUrl ? html`<a href="${waUrl}" target="_blank" rel="noopener">${ico('wa')}${fmtPhone(b.whatsapp || b.phone || ctx.wa)}</a>` : ''}</div></div>`) : ''}
+<header class="header${darkHeader ? ' header--ondark' : ''}" data-header>
+  <div class="wrap header__in">
+    <a class="brand" href="#inicio">${String(brandMark(darkHeader))}</a>
+    <nav class="nav" aria-label="Principal"><ul>${nav.map((s) => `<li><a href="#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}</ul></nav>
+    <a class="btn btn--sm header__cta" href="${esc(ctaHref)}"${book ? '' : ' target="_blank" rel="noopener"'}>${book ? 'Agendar' : 'Fale comigo'}</a>
+    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu" data-menu>${ico('menu')}<span class="sr">Abrir menu</span></button>
+  </div>
+  <div class="menu" id="menu" hidden data-menu-panel><ul>${nav.map((s) => `<li><a href="#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}${book ? '<li><a href="#agendamento">Agendar on-line</a></li>' : ''}</ul></div>
+</header>
+<main id="conteudo">
+${body.map(String).join('\n')}
+</main>
+<footer class="footer">
+  <div class="wrap footer__in">
+    <div><p class="footer__name">${esc(b.name || b.who)}</p>${b.signLine ? `<p>${esc(b.signLine)}</p>` : ''}${b.address ? `<p>${esc([b.address, b.place].filter(Boolean).join(' · '))}</p>` : ''}</div>
+    <div class="footer__links"><a href="/politica-de-privacidade">Política de privacidade</a>${book ? '<a href="#agendamento">Agendar on-line</a>' : ''}${waUrl ? `<a href="${esc(waUrl)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</div>
+  </div>
+  <div class="wrap footer__small"><span>© ${new Date().getFullYear()} ${esc(b.name || b.who)}</span><span>Em caso de crise ou emergência, ligue 188 (CVV) ou 192 (SAMU).</span><a href="https://mentez.com.br" target="_blank" rel="noopener">Site feito com Mentez</a></div>
+</footer>
+${waUrl ? `<a class="wa-float" href="${esc(waUrl)}" target="_blank" rel="noopener" aria-label="Conversar pelo WhatsApp">${String(ico('wa'))}<span>WhatsApp</span></a>` : ''}
+<script src="/static/site/site.js?v=${VERSION}" defer></script>
+</body>
+</html>`;
+}
+
+// Política de privacidade gerada com os dados da clínica (LGPD)
+export function privacy(site, ctx) {
+  const { b } = ctx;
+  const pal = Sites.palette(site, b);
+  const nm = b.name || b.who || 'Este consultório';
+  const contato = [b.email ? `e-mail ${b.email}` : '', b.phone ? `telefone/WhatsApp ${fmtPhone(b.phone)}` : ''].filter(Boolean).join(' ou ');
+  const book = site.sections.some((s) => s.type === 'agendamento' && s.on);
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de privacidade · ${esc(nm)}</title>${ctx.preview ? '<meta name="robots" content="noindex">' : ''}
+<link rel="stylesheet" href="${esc(Sites.fontsUrl(pal))}"><link rel="stylesheet" href="/static/site/site.css?v=${VERSION}">
+<style>:root{--bg:${pal.bg};--surface:${pal.surface};--ink:${pal.ink};--muted:${pal.muted};--accent:${pal.accent};--accent-text:${pal.accentText};--on-accent:${pal.onAccent};--soft:${pal.soft};--line:${pal.line};--serif:"${pal.serif}",Georgia,serif;--sans:"${pal.sans}",system-ui,sans-serif}</style></head>
+<body class="L-${site.layout} S-${site.style}${Sites.LAYOUTS[site.layout]?.dark ? ' is-dark' : ''} legal-page"><main class="wrap legal">
+<p><a href="/">← Voltar ao site</a></p>
+<h1 class="h2">Política de privacidade</h1>
+<p><strong>${esc(nm)}</strong>${b.signLine ? ` (${esc(b.signLine)})` : ''} respeita a sua privacidade e segue a Lei Geral de Proteção de Dados (Lei 13.709/2018, LGPD). Este texto explica quais dados este site trata e para quê.</p>
+<h2 class="h3">Quais dados tratamos</h2>
+<ul>
+${book ? '<li><strong>Agendamento on-line:</strong> nome, WhatsApp e, se você informar, e-mail e data de nascimento, usados apenas para marcar a consulta, confirmar pelo código e enviar lembretes.</li>' : ''}
+<li><strong>Contato pelo WhatsApp ou e-mail:</strong> as informações que você enviar, usadas para responder e organizar o atendimento.</li>
+<li><strong>Navegação:</strong> este site não usa cookies de rastreamento nem publicidade. O servidor registra dados técnicos mínimos (como endereço IP e data do acesso) por segurança, por prazo limitado.</li>
+</ul>
+<h2 class="h3">Com quem compartilhamos</h2>
+<p>O site e o agendamento funcionam na plataforma Mentez, que trata os dados em nome do consultório (operadora), com proteção técnica e sigilo. As mensagens de confirmação usam o WhatsApp. Não vendemos nem cedemos seus dados para publicidade.</p>
+<h2 class="h3">Sigilo profissional</h2>
+<p>As informações de atendimento são protegidas pelo sigilo profissional previsto no Código de Ética do Psicólogo e guardadas pelo prazo exigido pelas normas do Conselho Federal de Psicologia.</p>
+<h2 class="h3">Seus direitos</h2>
+<p>Você pode pedir a confirmação, o acesso, a correção, a exclusão (quando a lei permitir) ou a portabilidade dos seus dados, e revogar consentimentos${contato ? `, pelo ${esc(contato)}` : ''}. Também pode recorrer à Autoridade Nacional de Proteção de Dados (ANPD).</p>
+${site.privacy?.extra ? `<h2 class="h3">Informações adicionais</h2>${paras(site.privacy.extra).map(String).join('')}` : ''}
+<p class="legal__small">Atualizada em ${new Date().toLocaleDateString('pt-BR')}.</p>
+</main></body></html>`;
+}
+
+function hasContent(s, ctx) {
+  if (s.type === 'agendamento') return !!ctx.bookingOn;
+  if (s.type === 'equipe') return !!s.people?.length;
+  if (s.type === 'ajuda' || s.type === 'processo' || s.type === 'duvidas') return !!s.items?.length;
+  if (s.type === 'modalidades') return !!(s.online || s.presencial);
+  if (s.type === 'contato') return true;
+  return !!(s.title || s.text || s.image);
+}
+const anchor = (t) => ({ modalidades: 'atendimento' }[t] || t);
+const originOf = (u) => { try { return new URL(u).origin; } catch { return ''; } };
+const initials = (n) => String(n || '').replace(/^(dra?\.?|psic\.?)\s+/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+function fmtPhone(p) {
+  const d = String(p || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+  return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : String(p || '');
+}

@@ -180,7 +180,7 @@ pub.get('/links/ir/:i', async (req, res) => {
 // ---------- telas de edição (Marketing) ----------
 export const admin = router();
 const ck = (v) => (v ? raw('checked') : '');
-const tabsOf = (on) => html`<nav class="tabs"><a href="/marketing">Reativação de pacientes</a><a href="/marketing/aniversarios">Aniversários</a><a href="/marketing/cartao" class="${on === 'cartao' ? 'on' : ''}">Cartão digital</a><a href="/marketing/links" class="${on === 'links' ? 'on' : ''}">Link na bio</a></nav>`;
+const tabsOf = (on) => html`<nav class="tabs"><a href="/marketing">Reativação de pacientes</a><a href="/marketing/aniversarios">Aniversários</a><a href="/marketing/cartao" class="${on === 'cartao' ? 'on' : ''}">Cartão digital</a><a href="/marketing/links" class="${on === 'links' ? 'on' : ''}">Link na bio</a><a href="/marketing/site">Site</a></nav>`;
 const photoCard = (b) => html`<section class="card brand-logos"><h2>Foto</h2><p class="muted small">Aparece no cartão digital, no link na bio e no contato salvo no celular. Ao escolher, você ajusta o enquadramento: arraste, aproxime e gire (JPG, PNG ou WebP até 10 MB). O tamanho em que ela aparece em cada página é ajustado mais abaixo.</p>
   <div class="photo-card mk-photo-card">
     <div class="photo-prev">${b.photoUrl ? html`<img src="${b.photoUrl}" alt="Foto atual" class="mk-photo">` : html`<span class="muted small">Sem foto: aparecem as iniciais</span>`}</div>

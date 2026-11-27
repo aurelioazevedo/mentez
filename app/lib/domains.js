@@ -15,7 +15,8 @@ export const MAX_PER_CLINIC = 3;
 const PENDING_DAYS = 15;
 
 export async function migrate() {
-  for (const [col, def] of [['checked_at', 'DATETIME NULL'], ['https_at', 'DATETIME NULL'], ['last_check', 'VARCHAR(600) NULL']]) {
+  // purpose: 'app' = abre o sistema da clínica; 'site' = abre o site da clínica (Marketing → Site)
+  for (const [col, def] of [['checked_at', 'DATETIME NULL'], ['https_at', 'DATETIME NULL'], ['last_check', 'VARCHAR(600) NULL'], ['purpose', "VARCHAR(8) NOT NULL DEFAULT 'app'"]]) {
     try { await T.pq(`ALTER TABLE tenant_domains ADD COLUMN ${col} ${def}`); } catch (e) { if (!/Duplicate column/i.test(e.message)) throw e; }
   }
 }
@@ -57,6 +58,8 @@ export function normalize(input) {
   const base = T.baseDomain();
   if (d === base || d.endsWith(`.${base}`)) throw new Error(`Endereços ${base} já funcionam sem cadastro.`);
   if (T.platformHosts().has(d)) throw new Error('Este endereço é da Mentez.');
+  const sites = String(process.env.MENTEZ_SITES_DOMAIN ?? 'bemestarmental.com.br').toLowerCase();
+  if (sites && (d === sites || d.endsWith(`.${sites}`))) throw new Error(`Endereços ${sites} são os da Mentez para sites: já funcionam sem cadastro.`);
   return d;
 }
 
@@ -100,12 +103,12 @@ export const isCloudflare = (ip) => (ip.includes(':') ? /^(2606:4700|2803:f800|2
 
 // Confere o DNS de um domínio. Vale registro A (IP do servidor) ou CNAME para <clinica>.mentez.com.br.
 // Retorna { ok, a, aaaa, cname, problems[], zone, host, provider, providerName, expected, via, proxied }
-export async function inspect(domain, slug = '') {
+export async function inspect(domain, slug = '', targetHost = '') {
   const [ips, z, a, aaaa, cname] = await Promise.all([serverIps(), zoneOf(domain), safe(q('A', domain)), safe(q('AAAA', domain)), safe(q('CNAME', domain))]);
   const problems = [];
   const v4 = ips.v4[0] || '';
   const base = T.baseDomain();
-  const target = slug ? `${slug}.${base}` : `app.${base}`;
+  const target = targetHost || (slug ? `${slug}.${base}` : `app.${base}`);
   const cn = String(cname[0] || '').replace(/\.$/, '').toLowerCase();
   const cnameOurs = cn && (cn === base || cn.endsWith(`.${base}`));
   const proxied = (a.length && a.every(isCloudflare)) || (aaaa.length && aaaa.every(isCloudflare));
@@ -150,8 +153,9 @@ export function _setHttpsProbe(fn) { httpsProbe = fn; }
 export async function check(domain, tenantId = null) {
   const row = await T.pone(`SELECT * FROM tenant_domains WHERE domain = ?${tenantId ? ' AND tenant_id = ?' : ''}`, tenantId ? [domain, tenantId] : [domain]);
   if (!row) throw new Error('Domínio não encontrado.');
-  const t = await T.pone('SELECT slug FROM tenants WHERE id = ?', [row.tenant_id]);
-  const r = await inspect(domain, t?.slug || '');
+  const t = await T.pone('SELECT slug, site_slug FROM tenants WHERE id = ?', [row.tenant_id]).catch(() => T.pone('SELECT slug FROM tenants WHERE id = ?', [row.tenant_id]));
+  const sites = String(process.env.MENTEZ_SITES_DOMAIN ?? 'bemestarmental.com.br').toLowerCase();
+  const r = await inspect(domain, t?.slug || '', row.purpose === 'site' && sites ? `${t?.site_slug || t?.slug}.${sites}` : '');
   let note = r.ok ? '' : r.problems.join(' ');
   if (r.ok && !row.verified_at) { await T.pq('UPDATE tenant_domains SET verified_at = NOW() WHERE domain = ?', [domain]); T.clearCache(); }
   let https = !!row.https_at;
@@ -171,25 +175,25 @@ export function stateOf(row) {
   return { key: 'pendente', label: 'Aguardando DNS', badge: 'agendada' };
 }
 
-export const list = (tenantId) => T.pq('SELECT * FROM tenant_domains WHERE tenant_id = ? ORDER BY is_primary DESC, created_at', [tenantId]);
+export const list = (tenantId, purpose = 'app') => T.pq('SELECT * FROM tenant_domains WHERE tenant_id = ? AND purpose = ? ORDER BY is_primary DESC, created_at', [tenantId, purpose]);
 
-export async function add(tenantId, input, actor = 'clinica') {
+export async function add(tenantId, input, actor = 'clinica', purpose = 'app') {
   const d = normalize(input);
   const other = await T.pone('SELECT tenant_id FROM tenant_domains WHERE domain = ?', [d]);
   if (other && other.tenant_id !== tenantId) throw new Error('Este endereço já está cadastrado em outra clínica. Se ele é seu, fale com o suporte da Mentez.');
-  if (other) return d;
-  const n = (await T.pone('SELECT COUNT(*) n FROM tenant_domains WHERE tenant_id = ?', [tenantId])).n;
+  if (other) { await T.pq('UPDATE tenant_domains SET purpose = ? WHERE domain = ?', [purpose, d]); T.clearCache(); return d; }
+  const n = (await T.pone('SELECT COUNT(*) n FROM tenant_domains WHERE tenant_id = ? AND purpose = ?', [tenantId, purpose])).n;
   if (n >= MAX_PER_CLINIC) throw new Error(`Cada clínica pode ter até ${MAX_PER_CLINIC} domínios próprios. Remova um para cadastrar outro.`);
-  await T.pq('INSERT INTO tenant_domains (domain, tenant_id) VALUES (?,?)', [d, tenantId]);
-  await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', [actor, 'dominio-adicionar', tenantId, d]);
+  await T.pq('INSERT INTO tenant_domains (domain, tenant_id, purpose) VALUES (?,?,?)', [d, tenantId, purpose]);
+  await T.pq('INSERT INTO platform_audit (actor, action, tenant_id, detail) VALUES (?,?,?,?)', [actor, purpose === 'site' ? 'dominio-site-adicionar' : 'dominio-adicionar', tenantId, d]);
   T.clearCache();
   try { await check(d, tenantId); } catch { /* o DNS pode ainda não existir */ }
   return d;
 }
 export async function setPrimary(tenantId, domain, actor = 'clinica') {
-  await T.pq('UPDATE tenant_domains SET is_primary = 0 WHERE tenant_id = ?', [tenantId]);
+  await T.pq("UPDATE tenant_domains SET is_primary = 0 WHERE tenant_id = ? AND purpose = 'app'", [tenantId]);
   if (domain) {
-    const row = await T.pone('SELECT * FROM tenant_domains WHERE tenant_id = ? AND domain = ?', [tenantId, domain]);
+    const row = await T.pone("SELECT * FROM tenant_domains WHERE tenant_id = ? AND domain = ? AND purpose = 'app'", [tenantId, domain]);
     if (!row?.verified_at || !row?.https_at) throw new Error('Só dá para usar como principal um domínio já ativo (DNS e HTTPS funcionando).');
     await T.pq('UPDATE tenant_domains SET is_primary = 1 WHERE tenant_id = ? AND domain = ?', [tenantId, domain]);
   }

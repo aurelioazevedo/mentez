@@ -72,7 +72,7 @@ export function redirectUri(req) {
 // Todos os endereços desta clínica (endereço da Mentez e domínios próprios ativos): cada um precisa estar cadastrado no Google
 export async function redirectUris() {
   const t = Tenancy.current(); if (!t || !Tenancy.multi()) return [];
-  const rows = await Tenancy.pq('SELECT domain FROM tenant_domains WHERE tenant_id = ? AND verified_at IS NOT NULL ORDER BY is_primary DESC, domain', [t.id]).catch(() => []);
+  const rows = await Tenancy.pq("SELECT domain FROM tenant_domains WHERE tenant_id = ? AND verified_at IS NOT NULL AND purpose = 'app' ORDER BY is_primary DESC, domain", [t.id]).catch(() => []);
   return [...new Set([...rows.map((r) => `https://${r.domain}/conta/google/retorno`), `https://${t.slug}.${Tenancy.baseDomain()}/conta/google/retorno`])];
 }
 

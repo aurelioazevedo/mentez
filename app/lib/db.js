@@ -1216,6 +1216,43 @@ const SCHEMA = [
     attempted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX (ip, attempted_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Site da clínica (Marketing → Site): rascunho e versão publicada (JSON com layout, estilo e seções)
+  `CREATE TABLE IF NOT EXISTS sites (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    path VARCHAR(80) NOT NULL DEFAULT '',
+    kind VARCHAR(12) NOT NULL DEFAULT 'site',
+    draft MEDIUMTEXT NULL,
+    published MEDIUMTEXT NULL,
+    published_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY (path)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Imagens do site: o original vira WebP (até 2400 px, sem dados escondidos como GPS); os recortes nos tamanhos
+  // de cada espaço da página são gerados no primeiro uso e guardados em site_media_var
+  `CREATE TABLE IF NOT EXISTS site_media (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    kind VARCHAR(8) NOT NULL DEFAULT 'img',
+    name VARCHAR(160) NULL,
+    alt VARCHAR(300) NULL,
+    mime VARCHAR(40) NOT NULL,
+    w INT NOT NULL DEFAULT 0,
+    h INT NOT NULL DEFAULT 0,
+    fx DECIMAL(4,3) NOT NULL DEFAULT 0.5,
+    fy DECIMAL(4,3) NOT NULL DEFAULT 0.5,
+    v INT NOT NULL DEFAULT 1,
+    bytes INT NOT NULL DEFAULT 0,
+    orig_bytes INT NOT NULL DEFAULT 0,
+    data MEDIUMBLOB NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS site_media_var (
+    media_id INT NOT NULL,
+    aspect VARCHAR(6) NOT NULL,
+    width SMALLINT NOT NULL,
+    data MEDIUMBLOB NOT NULL,
+    PRIMARY KEY (media_id, aspect, width)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 ];
 
 // Colunas adicionadas depois da primeira versão (migração segura no banco em produção).

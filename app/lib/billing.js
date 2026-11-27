@@ -17,10 +17,12 @@ export const FEATURES = {
   teleconsulta: 'Teleconsulta própria', ia_sessao: 'IA na sessão (transcrição e rascunho)', atendente: 'Atendente virtual no WhatsApp',
   nfse: 'Nota fiscal de serviço (NFS-e)', convenios: 'Convênio integrado (TISS, lotes XML e webservice)', convenios_simples: 'Convênio simples (sem integração com as operadoras)', tv: 'Painel de chamadas (TV da recepção)', locacao: 'Locação de salas', portal: 'Portal do paciente',
   personalizacao: 'Personalização (logo, cores, favicon e domínio próprio)',
+  site: 'Site profissional (Marketing → Site, com endereço próprio)',
 };
 // Partes do sistema que dependem de cada recurso (rotas e telas de configuração)
 export const FEATURE_PATHS = [
   [/^\/configuracoes\/dominio(\/|$)/, 'personalizacao'],
+  [/^\/marketing\/site(\/|$)/, 'site'],
   [/^\/(teleconsulta|conta\/teleconsulta|configuracoes\/teleconsulta)(\/|$)/, 'teleconsulta'],
   [/^\/(sessao-ia|configuracoes\/sessao-ia)(\/|$)/, 'ia_sessao'],
   [/^\/(atendimento|configuracoes\/agente)(\/|$)/, 'atendente'],
@@ -37,7 +39,7 @@ export const FEATURE_PATHS = [
 // Valores iniciais (editáveis no Painel → Planos). Preços a definir pela Mentez.
 const SEED = [
   ['essencial', 'Essencial', 79, 1, 0, ['portal'], 1],
-  ['profissional', 'Profissional', 129, 1, 0, ['portal', 'teleconsulta', 'ia_sessao', 'atendente', 'nfse', 'convenios', 'personalizacao'], 2],
+  ['profissional', 'Profissional', 129, 1, 0, ['portal', 'teleconsulta', 'ia_sessao', 'atendente', 'nfse', 'convenios', 'personalizacao', 'site'], 2],
   ['clinica', 'Clínica', 249, 5, 39, Object.keys(FEATURES), 3],
   ['piloto', 'Piloto (cortesia)', 0, 10, 0, Object.keys(FEATURES), 9],
 ];
@@ -81,6 +83,15 @@ export async function migrate() {
       if (r.plan_key !== 'essencial' && !f.includes('personalizacao')) await T.pq('UPDATE plans SET features = ? WHERE plan_key = ?', [JSON.stringify([...f, 'personalizacao']), r.plan_key]);
     }
     await T.pq("INSERT INTO platform_settings (k, v) VALUES ('feat_personalizacao_v1', '1')");
+    clearPlans();
+  }
+  // uma vez: “site profissional” entra nos planos Profissional, Clínica e Piloto já cadastrados
+  if (!(await T.pone("SELECT 1 x FROM platform_settings WHERE k = 'feat_site_v1'"))) {
+    for (const r of await T.pq("SELECT plan_key, features FROM plans WHERE plan_key IN ('profissional','clinica','piloto')")) {
+      const f = JSON.parse(r.features || '[]');
+      if (!f.includes('site')) await T.pq('UPDATE plans SET features = ? WHERE plan_key = ?', [JSON.stringify([...f, 'site']), r.plan_key]);
+    }
+    await T.pq("INSERT INTO platform_settings (k, v) VALUES ('feat_site_v1', '1')");
     clearPlans();
   }
 }

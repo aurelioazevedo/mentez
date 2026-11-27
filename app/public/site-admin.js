@@ -1,0 +1,50 @@
+// Marketing → Site: envio de imagens, ponto de foco, miniatura das imagens escolhidas e prévia do Google.
+(function () {
+  var d = document;
+  // envio de imagens (uma por vez, com o andamento)
+  var up = d.querySelector('[data-site-upload]');
+  if (up) {
+    var input = up.querySelector('[data-site-file]'); var log = up.querySelector('[data-site-log]'); var drop = up.querySelector('.site-drop');
+    var send = async function (files) {
+      var ok = 0;
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i]; var line = d.createElement('p'); line.textContent = 'Enviando ' + f.name + '…'; log.appendChild(line);
+        try {
+          var r = await fetch(up.dataset.siteUpload, { method: 'POST', headers: { 'Content-Type': f.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(f.name) }, body: f, credentials: 'same-origin' });
+          var j = await r.json().catch(function () { return { ok: false, error: 'Resposta inválida do servidor.' }; });
+          if (j.ok) { ok++; line.textContent = '✓ ' + f.name + ' convertida' + (j.kind === 'svg' ? ' (SVG)' : ' para WebP') + '.' + (j.warn ? ' ' + j.warn : ''); line.className = j.warn ? 'warn' : 'ok'; }
+          else { line.textContent = '✗ ' + f.name + ': ' + (j.error || 'não foi possível enviar.'); line.className = 'err'; }
+        } catch (e) { line.textContent = '✗ ' + f.name + ': falha de conexão.'; line.className = 'err'; }
+      }
+      if (ok) { var p = d.createElement('p'); p.textContent = 'Atualizando a biblioteca…'; log.appendChild(p); setTimeout(function () { location.reload(); }, 1200); }
+    };
+    input.addEventListener('change', function () { if (input.files.length) send(input.files); });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('is-over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('is-over'); }); });
+    drop.addEventListener('drop', function (e) { if (e.dataTransfer.files.length) send(e.dataTransfer.files); });
+  }
+  // ponto de foco: clique na foto, salva sozinho
+  d.querySelectorAll('[data-focal]').forEach(function (box) {
+    var img = box.querySelector('img'); var dot = box.querySelector('.site-focal__dot'); if (!dot) return;
+    box.addEventListener('click', function (e) {
+      var r = img.getBoundingClientRect();
+      var fx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); var fy = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+      dot.style.left = (fx * 100) + '%'; dot.style.top = (fy * 100) + '%';
+      var f = box.closest('form'); f.querySelector('[name=fx]').value = fx.toFixed(3); f.querySelector('[name=fy]').value = fy.toFixed(3);
+      f.requestSubmit ? f.requestSubmit() : f.submit();
+    });
+  });
+  // miniatura da imagem escolhida
+  d.querySelectorAll('[data-imgsel]').forEach(function (sel) {
+    var th = sel.parentNode.querySelector('.site-imgsel__th');
+    var upd = function () { var o = sel.selectedOptions[0]; if (o && o.dataset.thumb) { th.src = o.dataset.thumb; th.hidden = false; } else th.hidden = true; };
+    sel.addEventListener('change', upd); upd();
+  });
+  // seção ligada/desligada
+  d.querySelectorAll('[data-sec-on]').forEach(function (c) { c.addEventListener('change', function () { c.closest('.site-sec').classList.toggle('is-off', !c.checked); }); });
+  // prévia do Google ao digitar
+  var t = d.querySelector('input[name=title][data-count]'); var ds = d.querySelector('textarea[name=description][data-count]');
+  var st = d.querySelector('[data-serp-title]'); var sd = d.querySelector('[data-serp-desc]');
+  if (t && st) t.addEventListener('input', function () { st.textContent = t.value; });
+  if (ds && sd) ds.addEventListener('input', function () { sd.textContent = ds.value; });
+})();

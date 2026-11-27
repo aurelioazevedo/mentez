@@ -154,7 +154,7 @@ export async function byHost(host) {
   let row = null;
   const slug = slugOfHost(h);
   if (slug) row = await pone(`${SELECT} WHERE t.slug = ?`, [slug]);
-  else row = await pone(`${SELECT} JOIN tenant_domains x ON x.tenant_id = t.id WHERE x.domain = ? AND x.verified_at IS NOT NULL`, [h]); // domínio próprio só depois de o DNS apontar para a Mentez
+  else row = await pone(`${SELECT} JOIN tenant_domains x ON x.tenant_id = t.id WHERE x.domain = ? AND x.verified_at IS NOT NULL AND x.purpose = 'app'`, [h]); // domínio próprio só depois de o DNS apontar para a Mentez
   const t = shape(row);
   cache.set(h, { t, at: Date.now() });
   return t;
@@ -180,7 +180,7 @@ export async function allowCertificate(domain) {
   if (!t && slugOfHost(d) && (await slugAlias(slugOfHost(d)).catch(() => null))) return true; // endereço antigo: certificado para redirecionar
   if (!t || t.status === 'cancelada') return false;
   if (slugOfHost(d)) return true;
-  return !!(await pone('SELECT 1 x FROM tenant_domains WHERE domain = ? AND tenant_id = ? AND verified_at IS NOT NULL', [d, t.id]));
+  return !!(await pone("SELECT 1 x FROM tenant_domains WHERE domain = ? AND tenant_id = ? AND verified_at IS NOT NULL AND purpose = 'app'", [d, t.id]));
 }
 
 // ---------- trocar o endereço da clínica (ex.: aurelio → aurelioazevedo.mentez.com.br) ----------
@@ -259,7 +259,7 @@ export async function addDomain(tenantId, domain, { primary = false, verified = 
   const d = String(domain || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (!/^(?=.{4,190}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(d)) throw new Error('Domínio inválido.');
   if (d.endsWith(`.${baseDomain()}`) || d === baseDomain()) throw new Error(`Subdomínios de ${baseDomain()} já funcionam sem cadastro.`);
-  if (primary) await pq('UPDATE tenant_domains SET is_primary = 0 WHERE tenant_id = ?', [tenantId]);
+  if (primary) await pq('UPDATE tenant_domains SET is_primary = 0 WHERE tenant_id = ? AND purpose = \'app\'', [tenantId]);
   await pq('INSERT INTO tenant_domains (domain, tenant_id, is_primary, verified_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE is_primary = VALUES(is_primary), verified_at = COALESCE(VALUES(verified_at), verified_at)',
     [d, tenantId, primary ? 1 : 0, verified ? new Date() : null]);
   clearCache();
