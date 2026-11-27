@@ -337,7 +337,8 @@ admin.get('/landing', async (req, res) => {
     <section class="card"><h2>Suas landing pages</h2>
       <p class="muted small">Páginas com um objetivo só, para anúncios, Instagram ou eventos. Usam as imagens do site e o mesmo endereço (ex.: <code>${base.replace(/^https:\/\//, '')}/workshop-ansiedade</code>). Os contatos do formulário entram no CRM com a origem da visita.</p>
       ${list.length ? html`<ul class="list">${list.map((x) => html`<li class="site-dom"><span><a href="${B}/lp/${x.path}"><b>${x.name}</b></a> ${x.live ? html`<span class="badge b-realizada">No ar</span>` : html`<span class="badge b-agendada">Rascunho</span>`}<br><small class="muted">/${x.path}</small></span>
-        <span class="actions">${x.live ? html`<a class="btn ghost btn-sm" href="${base}/${x.path}" target="_blank" rel="noopener">Abrir</a>` : ''}<a class="btn btn-sm" href="${B}/lp/${x.path}">Editar</a></span></li>`)}</ul>` : html`<p class="muted">Nenhuma ainda.</p>`}
+        <span class="actions">${x.live ? html`<a class="btn ghost btn-sm" href="${base}/${x.path}" target="_blank" rel="noopener">Abrir</a>` : ''}<a class="btn btn-sm" href="${B}/lp/${x.path}">Editar</a>
+          <form method="post" action="${B}/lp/${x.path}/apagar" data-confirm="Apagar a landing page “${x.name}”? Ela sai do ar e não dá para desfazer (os contatos que já chegaram continuam no CRM)."><button class="btn ghost btn-sm danger-text">Apagar</button></form></span></li>`)}</ul>` : html`<p class="muted">Nenhuma ainda.</p>`}
     </section>
     <form method="post" action="${B}/landing" class="card stack"><h2>Criar landing page</h2>
       <label class="fld"><span>Nome (também vira o endereço)</span><input name="name" required maxlength="120" placeholder="Ex.: Workshop de ansiedade"></label>
