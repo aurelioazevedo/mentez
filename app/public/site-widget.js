@@ -2,6 +2,7 @@
 // Carregado por <script src="https://ENDERECO-DA-CLINICA/agendar/site.js" async></script>.
 // A configuração (número, textos, cores) vem da Mentez: Configurações → Agendamento online → No seu site.
 // Onde aparecer <div data-mentez-agendar></div> (ou o atalho [mentez_agendamento] do plugin), entra a seção completa.
+// Na seção: data-titulo, data-texto e data-cor (cor de destaque, ex.: #0ea5e9).
 // Opções no <script>: data-botao="nao" (sem botão flutuante), data-posicao="esquerda",
 // data-trocar="sim" (os links de WhatsApp que já existem no site passam a abrir o número escolhido na Mentez).
 (function (C) {
@@ -28,10 +29,11 @@
     '.mzw-head{max-width:680px;margin:0 auto 26px;text-align:center}' +
     '.mzw-eyebrow{display:inline-flex;align-items:center;gap:8px;margin:0 0 10px;padding:6px 14px;border-radius:999px;background:color-mix(in srgb,var(--mzw-c) 12%,transparent);color:var(--mzw-c);font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}' +
     '.mzw-eyebrow svg{width:16px;height:16px}' +
-    '.mzw-head h2{margin:0 0 10px;font-size:clamp(26px,4vw,38px);line-height:1.15}' +
-    '.mzw-head p{margin:0;opacity:.8;font-size:17px;line-height:1.55}' +
+    '.mzw-head h2{color:inherit;font-family:inherit;font-weight:800;margin:0 0 10px;font-size:clamp(26px,4vw,38px);line-height:1.15}' +
+    '.mzw-head p{color:inherit;margin:0;opacity:.8;font-size:17px;line-height:1.55}' +
+    '.mzw-head .mzw-eyebrow{color:var(--mzw-c);opacity:1;margin:0 0 10px;font-size:13px}' +
     '.mzw-steps{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:0 0 26px;padding:0;list-style:none}' +
-    '.mzw-steps li{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:12px;background:rgba(127,127,127,.08);font-size:14px;font-weight:600}' +
+    '.mzw-steps li{color:inherit;margin:0;display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:12px;background:rgba(127,127,127,.08);font-size:14px;font-weight:600}' +
     '.mzw-steps b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--mzw-c);color:#fff;font-size:12px}' +
     '.mzw-card{position:relative;max-width:760px;margin:0 auto;padding:20px 22px 8px;border-radius:22px;overflow:hidden;background:#fff;box-shadow:0 30px 60px -36px rgba(0,0,0,.45);border:1px solid rgba(0,0,0,.07)}' +
     '.mzw-card iframe{display:block;width:100%;height:520px;border:0;background:#fff;transition:height .25s ease}' +
@@ -77,6 +79,7 @@
     if (el.getAttribute('data-mz-ok')) return; el.setAttribute('data-mz-ok', '1');
     var title = el.getAttribute('data-titulo') || C.title; var text = el.getAttribute('data-texto') || C.text;
     var s = d.createElement('section'); s.className = 'mzw-book'; if (!d.getElementById('agendar')) s.id = 'agendar';
+    var cor = el.getAttribute('data-cor'); if (cor && /^#[0-9a-f]{3,8}$/i.test(cor)) s.style.setProperty('--mzw-c', cor);
     var head = '<div class="mzw-head"><p class="mzw-eyebrow">' + CAL_ICON + 'Agendamento on-line</p><h2>' + esc(title) + '</h2><p>' + esc(text) + '</p></div>';
     var alt = '<div class="mzw-alt">' + (waUrl ? '<span>Prefere conversar antes?</span><a class="mzw-wa" href="' + esc(waUrl) + '" target="_blank" rel="noopener">' + WA_ICON + 'Falar no WhatsApp</a>' : '') +
       (C.enabled ? '<a href="' + esc(bookUrl) + '" target="_blank" rel="noopener">Abrir em tela cheia ↗</a>' : '') + '</div>';

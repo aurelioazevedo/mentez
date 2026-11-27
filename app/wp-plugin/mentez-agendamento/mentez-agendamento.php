@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Mentez — Agendamento on-line e WhatsApp
  * Description: Coloca no site o botão flutuante de WhatsApp (atendente virtual ou WhatsApp da clínica) e a seção de Agendamento on-line integrada à Mentez. Textos, número e regras são configurados na própria Mentez (Configurações → Agendamento online).
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Mentez
  * Author URI: https://mentez.com.br
  * Requires at least: 5.6
@@ -13,7 +13,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('MENTEZ_AG_VERSION', '1.0.0');
+define('MENTEZ_AG_VERSION', '1.1.0');
 define('MENTEZ_AG_DEFAULT_URL', '__MENTEZ_URL__'); // preenchido ao baixar o plugin pela Mentez
 
 function mentez_ag_opts() {
@@ -46,12 +46,13 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 
 // ---------- seção de Agendamento on-line: [mentez_agendamento titulo="..." texto="..."] ----------
 function mentez_ag_section($atts = array()) {
-	$a = shortcode_atts(array('titulo' => '', 'texto' => ''), $atts, 'mentez_agendamento');
+	$a = shortcode_atts(array('titulo' => '', 'texto' => '', 'cor' => ''), $atts, 'mentez_agendamento');
 	$u = mentez_ag_url();
 	if (!$u) return current_user_can('manage_options') ? '<p><em>Mentez: informe o endereço do sistema em Configurações → Mentez.</em></p>' : '';
 	$out = '<div data-mentez-agendar';
 	if ($a['titulo'] !== '') $out .= ' data-titulo="' . esc_attr($a['titulo']) . '"';
 	if ($a['texto'] !== '') $out .= ' data-texto="' . esc_attr($a['texto']) . '"';
+	if (preg_match('/^#[0-9a-fA-F]{3,8}$/', $a['cor'])) $out .= ' data-cor="' . esc_attr($a['cor']) . '"';
 	// sem JavaScript (ou antes de carregar), fica um link para a página de agendamento
 	$out .= '><p style="text-align:center;padding:40px 0"><a href="' . esc_url($u . '/agendar') . '" target="_blank" rel="noopener">Agendar consulta on-line</a></p></div>';
 	return $out;
@@ -123,7 +124,7 @@ function mentez_ag_admin() {
 					<p class="description">Se outro plugin já mostra um botão de WhatsApp (ex.: Joinchat, Click to Chat), desative-o para não aparecerem dois.</p></td></tr>
 				<tr><th scope="row">Seção de agendamento</th>
 					<td><label><input type="checkbox" name="inicio" value="1" <?php checked($o['inicio']); ?>> Mostrar no fim da página inicial</label>
-					<p class="description">Em qualquer outra página ou bloco, use o atalho <code>[mentez_agendamento]</code> (bloco “Código curto”). Para mudar o título: <code>[mentez_agendamento titulo="Agende sua sessão"]</code>.<br>
+					<p class="description">Em qualquer outra página ou bloco, use o atalho <code>[mentez_agendamento]</code> (bloco “Código curto”). Para mudar o título e a cor: <code>[mentez_agendamento titulo="Agende sua sessão" cor="#0ea5e9"]</code>.<br>
 					Para um botão do site abrir o WhatsApp escolhido, use o link <code>#whatsapp</code>; para levar à seção, <code>#agendar</code>.</p>
 					<?php if ($page) echo '<p>Página exclusiva: <a href="' . esc_url($page) . '" target="_blank" rel="noopener">' . esc_html($page) . '</a></p>'; ?></td></tr>
 			</table>
