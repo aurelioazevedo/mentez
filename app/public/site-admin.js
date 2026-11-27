@@ -23,6 +23,15 @@
     ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('is-over'); }); });
     drop.addEventListener('drop', function (e) { if (e.dataTransfer.files.length) send(e.dataTransfer.files); });
   }
+  // envio de PDF (material gratuito)
+  d.querySelectorAll('[data-site-pdf]').forEach(function (inp) {
+    inp.addEventListener('change', async function () {
+      var f = inp.files[0]; if (!f) return; var lb = inp.closest('label'); lb.firstChild.textContent = 'Enviando…';
+      var r = await fetch(inp.dataset.sitePdf, { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(f.name) }, body: f, credentials: 'same-origin' }).catch(function () { return null; });
+      var j = r ? await r.json().catch(function () { return {}; }) : {};
+      if (j.ok) location.reload(); else { alert(j.error || 'Não foi possível enviar.'); lb.firstChild.textContent = 'Enviar PDF'; }
+    });
+  });
   // ponto de foco: clique na foto, salva sozinho
   d.querySelectorAll('[data-focal]').forEach(function (box) {
     var img = box.querySelector('img'); var dot = box.querySelector('.site-focal__dot'); if (!dot) return;
@@ -44,6 +53,24 @@
   d.querySelectorAll('input[name=layout][data-motion]').forEach(function (r) {
     r.addEventListener('change', function () { var viva = d.querySelector('input[name=motion][value=viva]'); var suave = d.querySelector('input[name=motion][value=suave]'); if (r.dataset.motion === '1' && suave && suave.checked && viva) viva.checked = true; });
   });
+  // ✨ IA: sugere o texto de um campo da seção (o texto atual é usado como base)
+  d.querySelectorAll('[data-site-ai]').forEach(function (b) {
+    b.addEventListener('click', async function (e) {
+      e.preventDefault();
+      var fld = b.closest('.fld').querySelector('input, textarea'); if (!fld) return;
+      var old = b.textContent; b.disabled = true; b.textContent = 'Escrevendo…';
+      try {
+        var r = await fetch('/marketing/site/ia/secao', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+          body: JSON.stringify({ section: b.dataset.section, label: b.dataset.label, kind: b.dataset.kind, current: fld.value }) });
+        var j = await r.json().catch(function () { return { ok: false, error: 'Resposta inválida.' }; });
+        if (j.ok) { fld.value = j.text; fld.dispatchEvent(new Event('input', { bubbles: true })); fld.classList.add('site-ai-new'); setTimeout(function () { fld.classList.remove('site-ai-new'); }, 1600); if (j.risks && j.risks.length) alert('Revise antes de publicar: ' + j.risks.join(', ') + '.'); }
+        else alert(j.error || 'Não foi possível sugerir agora.');
+      } catch (err) { alert('Falha de conexão.'); }
+      b.disabled = false; b.textContent = old;
+    });
+  });
+  // botão que avisa que vai demorar (escrever artigo com IA)
+  d.querySelectorAll('[data-busy]').forEach(function (b) { var f = b.closest('form'); if (f) f.addEventListener('submit', function () { setTimeout(function () { b.disabled = true; b.textContent = b.dataset.busy; }, 0); }); });
   // seção ligada/desligada
   d.querySelectorAll('[data-sec-on]').forEach(function (c) { c.addEventListener('change', function () { c.closest('.site-sec').classList.toggle('is-off', !c.checked); }); });
   // prévia do Google ao digitar

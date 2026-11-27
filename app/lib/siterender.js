@@ -74,7 +74,7 @@ export function render(site, ctx) {
         <div class="wrap hero__grid">
           <div class="hero__text">
             ${s.eyebrow ? html`<p class="hero__eyebrow">${s.eyebrow}</p>` : ''}
-            <h1 class="h1" data-words>${s.title || b.who}</h1>
+            <h1 class="h1" data-words${s.titleB ? html` data-ab="${s.titleB}"` : ''}>${s.title || b.who}</h1>
             ${s.text ? html`<div class="hero__lead">${paras(s.text)}</div>` : ''}
             <div class="hero__actions">${btn(s.cta || 'Agendar consulta')}${book ? waBtn() : ''}</div>
           </div>
@@ -133,7 +133,11 @@ export function render(site, ctx) {
     form: (s) => { const st = ctx.form || {}; return html`<section class="sec sec--form" id="form"><div class="wrap form-wrap">
         <div class="form-wrap__intro">${eyebrow(SL.form)}<h2 class="h2">${s.title}</h2>${s.text ? html`<div class="prose">${paras(s.text)}</div>` : ''}
           ${waUrl ? html`<p class="book__alt">Prefere chamar agora? <a href="${waUrl}" target="_blank" rel="noopener">Fale pelo WhatsApp</a>.</p>` : ''}</div>
-        <div class="form-card">${st.sent ? html`<div class="lead-ok" role="status"><b>✓</b><p>${s.success || 'Recebemos seu contato! Em breve falamos com você.'}</p></div>` : html`
+        <div class="form-card">${st.sent ? html`<div class="lead-ok" role="status"><b>✓</b><p>${s.success || 'Recebemos seu contato! Em breve falamos com você.'}</p>
+          ${st.file ? html`<p class="lead-dl"><a class="btn" href="/d/${st.file.token}" target="_blank" rel="noopener">Baixar o material (PDF)${ico('arrow', 'i btn__i')}</a></p>` : ''}
+          ${st.pix ? html`<div class="lead-pix"><p><b>Para confirmar a inscrição, pague R$ ${st.pix.amount.toFixed(2).replace('.', ',')} pelo Pix</b></p>${raw(`<img src="${st.pix.qr}" alt="QR code do Pix" width="220" height="220">`)}
+            <label><span>Pix copia e cola</span><textarea readonly rows="3" data-copy-src>${st.pix.code}</textarea></label><button type="button" class="btn btn--ghost" data-copy-pix>Copiar código</button>
+            <small>Também enviamos o código pelo WhatsApp. A confirmação da vaga chega depois que o pagamento for identificado.</small></div>` : ''}</div>` : html`
           ${st.error ? html`<p class="lead-err" role="alert">${st.error}</p>` : ''}
           <form method="post" action="/f" class="lead" data-lead>
             <input type="hidden" name="p" value="${ctx.path || ''}"><input type="hidden" name="src" value=""><input type="hidden" name="cmp" value="">
@@ -152,12 +156,14 @@ export function render(site, ctx) {
   const SL = Object.fromEntries(Object.entries(Sites.SECTIONS).map(([k, v]) => [k, v.label]));
   SL.modalidades = 'Atendimento'; SL.beneficios = 'Benefícios'; SL.evento = 'Informações'; SL.form = 'Contato';
 
-  const body = on.map((s) => S[s.type]?.(s) || '');
+  // ctx.page: página avulsa no visual do site (blog): troca o conteúdo e os dados do Google; os links do menu voltam à página inicial
+  const pg = ctx.page || null; const pre = pg ? '/' : '';
+  const body = pg ? [pg.main] : on.map((s) => S[s.type]?.(s) || '');
   const nav = site.landing ? [] : on.filter((s) => Sites.SECTIONS[s.type].nav && s.type !== 'inicio' && s.type !== 'agendamento' && s.type !== 'form' && s.type !== 'evento').slice(0, 6);
   // logo e favicon da Identidade visual (servidos pelo próprio endereço do site)
   const logo = b.logo ? b.logoUrl : '';
   const logoDark = b.logoDark ? b.logoDarkUrl : logo;
-  const darkHeader = L.dark || (L.hero === 'cover' && sec('inicio')?.image);
+  const darkHeader = L.dark || (!pg && L.hero === 'cover' && sec('inicio')?.image);
   // com abertura escura, mostra a logo para fundo escuro enquanto o topo está sobre a foto e a normal depois de rolar
   const brandMark = (dark) => {
     if (!logo && !logoDark) return html`<span class="brand__name">${b.who || b.name}</span>`;
@@ -168,8 +174,8 @@ export function render(site, ctx) {
   const heroImg = sec('inicio')?.image;
   const shareId = site.seo.image || heroImg || sec('sobre')?.image;
   const share = shareId && ctx.mediaMap.get(Number(shareId))?.kind === 'img' ? `${ctx.siteUrl}${ctx.media(shareId, ctx.mediaMap.get(Number(shareId)).v, '16x9', 1600)}` : '';
-  const title = site.seo.title || b.who || b.name;
-  const desc = site.seo.description || '';
+  const title = pg?.title || site.seo.title || b.who || b.name;
+  const desc = pg ? pg.desc || '' : site.seo.description || '';
   const cssVars = `:root{--bg:${pal.bg};--surface:${pal.surface};--ink:${pal.ink};--muted:${pal.muted};--accent:${pal.accent};--accent-text:${pal.accentText};--on-accent:${pal.onAccent};--soft:${pal.soft};--line:${pal.line};--serif:"${pal.serif}",Georgia,serif;--sans:"${pal.sans}",system-ui,-apple-system,"Segoe UI",sans-serif}`;
   const ld = {
     '@context': 'https://schema.org', '@type': ['MedicalBusiness', 'ProfessionalService'], name: b.name || b.who, url: ctx.siteUrl || undefined, description: desc || undefined,
@@ -185,8 +191,8 @@ export function render(site, ctx) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(title)}</title>
 ${desc ? `<meta name="description" content="${esc(desc)}">` : ''}
-${ctx.preview ? '<meta name="robots" content="noindex, nofollow">' : `<link rel="canonical" href="${esc(ctx.siteUrl)}/${esc(ctx.path || '')}">`}
-<meta property="og:type" content="website"><meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ''}${ctx.siteUrl ? `<meta property="og:url" content="${esc(ctx.siteUrl)}/${esc(ctx.path || '')}">` : ''}${share ? `<meta property="og:image" content="${esc(share)}"><meta name="twitter:card" content="summary_large_image">` : ''}
+${ctx.preview ? '<meta name="robots" content="noindex, nofollow">' : `<link rel="canonical" href="${esc(ctx.siteUrl)}/${esc(pg?.path ?? ctx.path ?? '')}">`}
+<meta property="og:type" content="${pg?.type || 'website'}"><meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}">` : ''}${ctx.siteUrl ? `<meta property="og:url" content="${esc(ctx.siteUrl)}/${esc(pg?.path ?? ctx.path ?? '')}">` : ''}${(pg?.share || share) ? `<meta property="og:image" content="${esc(pg?.share || share)}"><meta name="twitter:card" content="summary_large_image">` : ''}
 ${site.seo.google && !ctx.preview ? `<meta name="google-site-verification" content="${esc(site.seo.google)}">` : ''}
 <meta name="theme-color" content="${esc(pal.bg)}">
 ${b.faviconUrl ? `<link rel="icon" href="${esc(b.faviconUrl)}">` : ''}
@@ -194,20 +200,20 @@ ${b.faviconUrl ? `<link rel="icon" href="${esc(b.faviconUrl)}">` : ''}
 <link rel="stylesheet" href="${esc(Sites.fontsUrl(pal))}">
 <link rel="stylesheet" href="/static/site/site.css?v=${VERSION}">
 <style>${cssVars}</style>
-<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>
+<script type="application/ld+json">${JSON.stringify(pg?.ld || ld).replace(/</g, '\\u003c')}</script>
 </head>
-<body class="L-${site.layout} S-${site.style} M-${site.motion || 'suave'}${L.dark ? ' is-dark' : ''}${L.motion ? ' is-motion' : ''}${site.nav === 'vidro' ? ' nav-glass' : ''}${site.landing ? ' is-landing' : ''}${ctx.preview ? ' has-preview' : ''}"${ctx.preview ? '' : ` data-stats="${esc(ctx.path || '')}"`}>
+<body class="L-${site.layout} S-${site.style} M-${site.motion || 'suave'}${L.dark ? ' is-dark' : ''}${L.motion ? ' is-motion' : ''}${site.nav === 'vidro' ? ' nav-glass' : ''}${site.landing ? ' is-landing' : ''}${ctx.preview ? ' has-preview' : ''}"${ctx.preview ? '' : ` data-stats="${esc(pg?.path ?? ctx.path ?? '')}"`}>
 ${ctx.preview ? '<div class="preview-bar">Prévia do rascunho: só você vê esta versão. Publique em Marketing → Site para colocar no ar.</div>' : ''}
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 ${site.layout === 'clinica' ? String(html`<div class="topbar"><div class="wrap topbar__in">${b.address ? html`<span>${ico('pin')}${[b.address, b.place].filter(Boolean).join(' · ')}</span>` : ''}${waUrl ? html`<a href="${waUrl}" target="_blank" rel="noopener">${ico('wa')}${fmtPhone(b.whatsapp || b.phone || ctx.wa)}</a>` : ''}</div></div>`) : ''}
 <header class="header${darkHeader ? ' header--ondark' : ''}${site.nav === 'vidro' ? ' header--glass' : ''}" data-header>
   <div class="wrap header__in">
-    <a class="brand" href="${site.landing ? '/' : '#inicio'}">${String(brandMark(darkHeader))}</a>
-    <nav class="nav" aria-label="Principal"><ul data-navpill>${site.nav === 'vidro' ? '<li class="nav__pill" aria-hidden="true"></li>' : ''}${nav.map((s) => `<li><a href="#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}</ul></nav>
-    <a class="btn btn--sm header__cta" href="${esc(ctaHref)}"${/^#/.test(ctaHref) ? '' : ' target="_blank" rel="noopener"'}>${ctaHref === '#agendamento' ? 'Agendar' : ctaHref === '#form' ? (site.landing ? 'Quero participar' : 'Fale comigo') : 'Fale comigo'}</a>
+    <a class="brand" href="${site.landing || pg ? '/' : '#inicio'}">${String(brandMark(darkHeader))}</a>
+    <nav class="nav" aria-label="Principal"><ul data-navpill>${site.nav === 'vidro' ? '<li class="nav__pill" aria-hidden="true"></li>' : ''}${nav.map((s) => `<li><a href="${pre}#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}${ctx.blogCount && !site.landing ? `<li><a href="/blog"${pg?.blog ? ' class="is-on"' : ''}>Blog</a></li>` : ''}</ul></nav>
+    <a class="btn btn--sm header__cta" href="${esc(/^#/.test(ctaHref) ? pre + ctaHref : ctaHref)}"${/^#/.test(ctaHref) ? '' : ' target="_blank" rel="noopener"'}>${ctaHref === '#agendamento' ? 'Agendar' : ctaHref === '#form' ? (site.landing ? 'Quero participar' : 'Fale comigo') : 'Fale comigo'}</a>
     <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu" data-menu>${ico('menu')}<span class="sr">Abrir menu</span></button>
   </div>
-  <div class="menu" id="menu" hidden data-menu-panel><ul>${nav.map((s) => `<li><a href="#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}${book ? '<li><a href="#agendamento">Agendar on-line</a></li>' : ''}</ul></div>
+  <div class="menu" id="menu" hidden data-menu-panel><ul>${nav.map((s) => `<li><a href="${pre}#${anchor(s.type)}">${esc(Sites.SECTIONS[s.type].nav)}</a></li>`).join('')}${ctx.blogCount && !site.landing ? `<li><a href="/blog"${pg?.blog ? ' class="is-on"' : ''}>Blog</a></li>` : ''}${book ? `<li><a href="${pre}#agendamento">Agendar on-line</a></li>` : ''}</ul></div>
 </header>
 <main id="conteudo">
 ${body.map(String).join('\n')}
@@ -215,7 +221,7 @@ ${body.map(String).join('\n')}
 <footer class="footer">
   <div class="wrap footer__in">
     <div><p class="footer__name">${esc(b.name || b.who)}</p>${b.signLine ? `<p>${esc(b.signLine)}</p>` : ''}${b.address ? `<p>${esc([b.address, b.place].filter(Boolean).join(' · '))}</p>` : ''}</div>
-    <div class="footer__links"><a href="/politica-de-privacidade">Política de privacidade</a>${book ? '<a href="#agendamento">Agendar on-line</a>' : ''}${waUrl ? `<a href="${esc(waUrl)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</div>
+    <div class="footer__links"><a href="/politica-de-privacidade">Política de privacidade</a>${book ? `<a href="${pre}#agendamento">Agendar on-line</a>` : ''}${ctx.blogCount ? '<a href="/blog">Blog</a>' : ''}${waUrl ? `<a href="${esc(waUrl)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</div>
   </div>
   <div class="wrap footer__small"><span>© ${new Date().getFullYear()} ${esc(b.name || b.who)}</span><span>Em caso de crise ou emergência, ligue 188 (CVV) ou 192 (SAMU).</span><a href="https://mentez.com.br" target="_blank" rel="noopener">Site feito com Mentez</a></div>
 </footer>
@@ -275,3 +281,33 @@ function fmtPhone(p) {
   const d = String(p || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
   return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : String(p || '');
 }
+
+// ---------- Blog ----------
+// Monta o conteúdo das páginas do blog; o cabeçalho, as cores e o rodapé são os do site (render com ctx.page)
+export function blogIndex(posts, ctx, md) {
+  const card = (p) => { const m = p.cover && ctx.mediaMap.get(Number(p.cover)); return html`<article class="post-card"><a href="/blog/${p.slug}">
+    ${m ? raw(`<img src="${ctx.media(m.id, m.v, '3x2', 768)}" alt="" width="1500" height="1000" loading="lazy" decoding="async">`) : html`<span class="post-card__ph" aria-hidden="true"></span>`}
+    <small>${dateBR(p.published_at)}</small><h2 class="h3">${p.title}</h2>${p.excerpt ? html`<p>${p.excerpt}</p>` : ''}<span class="post-card__more">Ler ${ico('arrow', 'i')}</span></a></article>`; };
+  return String(html`<section class="sec blog"><div class="wrap"><header class="sec__head"><p class="eyebrow">Blog</p><h1 class="h2">Artigos</h1><div class="sec__lead"><p>Textos para entender melhor as emoções, as relações e o cuidado com a saúde mental.</p></div></header>
+    ${posts.length ? html`<div class="posts">${posts.map(card)}</div>` : html`<p>Em breve, os primeiros artigos.</p>`}</div></section>`);
+}
+export function blogPost(p, related, ctx, md, extra = '') {
+  const m = p.cover && ctx.mediaMap.get(Number(p.cover));
+  const waUrl = ctx.wa ? `https://wa.me/${ctx.wa}?text=${encodeURIComponent(`Olá! Li o artigo "${p.title}" no site e gostaria de conversar.`)}` : '';
+  const share = `https://wa.me/?text=${encodeURIComponent(`${p.title} ${ctx.siteUrl}/blog/${p.slug}`)}`;
+  return String(html`<article class="sec article"><div class="wrap article__in">
+      <p class="article__back"><a href="/blog">← Todos os artigos</a></p>
+      <p class="eyebrow">${dateBR(p.published_at)} · ${Math.max(1, Math.round(String(p.body || '').split(/\s+/).length / 200))} min de leitura</p>
+      <h1 class="h1 article__title">${p.title}</h1>
+      ${p.excerpt ? html`<p class="article__lead">${p.excerpt}</p>` : ''}
+      ${m ? raw(`<figure class="article__cover"><img src="${ctx.media(m.id, m.v, '16x9', 1080)}" srcset="${[768, 1080, 1600].map((w) => `${ctx.media(m.id, m.v, '16x9', w)} ${w}w`).join(', ')}" sizes="(min-width: 900px) 760px, 92vw" alt="${esc(m.alt || '')}" width="1600" height="900" fetchpriority="high"></figure>`) : ''}
+      <div class="article__body">${raw(md(p.body))}</div>
+      <aside class="article__cta"><p><b>Precisa conversar sobre isso?</b> O acompanhamento psicológico ajuda a entender o que você sente e a encontrar caminhos.</p>
+        <p class="article__btns">${ctx.bookingOn ? html`<a class="btn" href="/#agendamento">Agendar consulta${ico('arrow', 'i btn__i')}</a>` : ''}${waUrl ? html`<a class="btn btn--ghost" href="${waUrl}" target="_blank" rel="noopener">${ico('wa', 'i btn__i')}Falar no WhatsApp</a>` : ''}</p></aside>
+      <p class="article__share"><a href="${share}" target="_blank" rel="noopener">${ico('wa', 'i')}Compartilhar no WhatsApp</a></p>
+      <p class="article__note">Este conteúdo é informativo e não substitui o atendimento profissional. Em crise ou emergência, ligue 188 (CVV) ou 192 (SAMU).</p>
+      ${raw(extra)}
+    </div></article>
+    ${related.length ? html`<section class="sec alt"><div class="wrap"><h2 class="h2">Leia também</h2><div class="posts">${related.map((r) => { const rm = r.cover && ctx.mediaMap.get(Number(r.cover)); return html`<article class="post-card"><a href="/blog/${r.slug}">${rm ? raw(`<img src="${ctx.media(rm.id, rm.v, '3x2', 768)}" alt="" width="1500" height="1000" loading="lazy">`) : html`<span class="post-card__ph" aria-hidden="true"></span>`}<small>${dateBR(r.published_at)}</small><h3 class="h3">${r.title}</h3></a></article>`; })}</div></div></section>` : ''}`);
+}
+function dateBR(d) { if (!d) return ''; const x = new Date(d); return `${String(x.getDate()).padStart(2, '0')}/${String(x.getMonth() + 1).padStart(2, '0')}/${x.getFullYear()}`; }

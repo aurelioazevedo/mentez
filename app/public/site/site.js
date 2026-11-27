@@ -20,14 +20,23 @@
   } catch (e) { /* navegação privada */ }
   var beacon = function (k) {
     if (statPath === null) return;
-    var data = JSON.stringify({ p: statPath, s: src, k: k });
+    var data = JSON.stringify({ p: statPath, s: src, k: k, ab: ab });
     try { if (navigator.sendBeacon) navigator.sendBeacon('/v', data); else fetch('/v', { method: 'POST', body: data, keepalive: true }); } catch (e) { /* sem rede */ }
   };
-  if (statPath !== null && !/[?&](enviado|erro)=/.test(location.search)) beacon('view');
   d.addEventListener('click', function (e) { var a = e.target.closest('a[href*="wa.me/"]'); if (a) beacon('wa'); });
-  d.querySelectorAll('[data-lead]').forEach(function (f) { var a = f.querySelector('[name=src]'); var b2 = f.querySelector('[name=cmp]'); if (a) a.value = src; if (b2) b2.value = cmp; });
+  d.querySelectorAll('[data-lead]').forEach(function (f) { var a = f.querySelector('[name=src]'); var b2 = f.querySelector('[name=cmp]'); if (a) a.value = src; if (b2) b2.value = cmp; if (ab) { var h = d.createElement('input'); h.type = 'hidden'; h.name = 'ab'; h.value = ab; f.appendChild(h); } });
   var menuOpen = false; var lastY = window.scrollY;
 
+  // teste A/B do título: metade das visitas vê o título alternativo (a escolha vale para esta aba)
+  var ab = '';
+  var abH = d.querySelector('[data-ab]');
+  if (abH) {
+    try { ab = sessionStorage.getItem('mz_ab_' + location.pathname) || ''; } catch (e) { /* privado */ }
+    if (ab !== 'a' && ab !== 'b') ab = Math.random() < 0.5 ? 'a' : 'b';
+    try { sessionStorage.setItem('mz_ab_' + location.pathname, ab); } catch (e) { /* privado */ }
+    if (ab === 'b') abH.textContent = abH.getAttribute('data-ab');
+  }
+  if (statPath !== null && !/[?&](enviado|erro)=/.test(location.search)) beacon('view');
   // título da abertura palavra por palavra (Expressivas)
   if (viva) d.querySelectorAll('[data-words]').forEach(function (h) {
     var words = h.textContent.trim().split(/\s+/); h.setAttribute('aria-label', h.textContent.trim()); h.textContent = '';
@@ -93,6 +102,9 @@
       var top = d.getElementById('inicio'); if (top) new IntersectionObserver(function (es) { if (es[0].isIntersecting) { current = null; links.forEach(function (x) { x.classList.remove('is-on'); }); pill.style.opacity = '0'; } }, { rootMargin: '-45% 0px -50% 0px' }).observe(top);
     }
   }
+
+  // copiar o Pix copia e cola
+  d.querySelectorAll('[data-copy-pix]').forEach(function (b) { b.addEventListener('click', function () { var t = b.parentNode.querySelector('[data-copy-src]'); if (!t) return; t.select(); try { navigator.clipboard.writeText(t.value); } catch (e) { d.execCommand('copy'); } b.textContent = 'Código copiado ✓'; }); });
 
   // seções surgem ao rolar (Suaves e Expressivas)
   if (motion !== 'off' && !reduce && 'IntersectionObserver' in window) {

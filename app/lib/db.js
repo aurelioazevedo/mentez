@@ -1265,6 +1265,33 @@ const SCHEMA = [
     n INT NOT NULL DEFAULT 0,
     PRIMARY KEY (day, path, source, kind)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Blog do site (Marketing → Site → Blog)
+  `CREATE TABLE IF NOT EXISTS site_posts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    slug VARCHAR(90) NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    excerpt VARCHAR(300) NULL,
+    seo VARCHAR(170) NULL,
+    body MEDIUMTEXT NULL,
+    cover INT NULL,
+    status VARCHAR(10) NOT NULL DEFAULT 'rascunho',
+    author_id INT NULL,
+    published_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY (slug), INDEX (status, published_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Arquivos do site (material gratuito em PDF): entregues pelo link /d/<token> depois do formulário
+  `CREATE TABLE IF NOT EXISTS site_files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(160) NOT NULL,
+    mime VARCHAR(60) NOT NULL,
+    bytes INT NOT NULL DEFAULT 0,
+    token CHAR(24) NOT NULL,
+    data MEDIUMBLOB NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY (token)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS site_media_var (
     media_id INT NOT NULL,
     aspect VARCHAR(6) NOT NULL,

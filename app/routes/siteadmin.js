@@ -8,6 +8,9 @@ import * as R from '../lib/siterender.js';
 import { context, siteHeaders, sendMedia, clinicBase } from './sitepub.js';
 import { audit } from '../lib/db.js';
 import * as Lead from '../lib/sitelead.js';
+import * as Blog from '../lib/siteblog.js';
+import * as SAI from '../lib/siteai.js';
+import * as Import from '../lib/siteimport.js';
 import { page, html, raw, brDateTime, VERSION } from '../lib/html.js';
 import { router, send, str } from '../lib/router.js';
 
@@ -20,7 +23,7 @@ const arr = (v) => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.k
 admin.use((req, res, next) => { req.sp = ''; req.sb = B; next(); });
 const kb = (n) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-const TABS = [['', 'Conteúdo'], ['aparencia', 'Aparência'], ['imagens', 'Imagens'], ['landing', 'Landing pages'], ['resultados', 'Resultados'], ['endereco', 'Endereço'], ['seo', 'Google e privacidade'], ['versoes', 'Versões']];
+const TABS = [['', 'Conteúdo'], ['aparencia', 'Aparência'], ['imagens', 'Imagens e PDFs'], ['blog', 'Blog'], ['landing', 'Landing pages'], ['resultados', 'Resultados'], ['endereco', 'Endereço'], ['seo', 'Google e privacidade'], ['versoes', 'Versões']];
 const LP_TABS = [['', 'Conteúdo'], ['aparencia', 'Aparência'], ['seo', 'Google e endereço'], ['versoes', 'Versões']];
 async function shell(req, tab, title, body) {
   const sp = req.sp || ''; const sb = req.sb || B;
@@ -49,11 +52,13 @@ const imgSelect = (name, val, media) => html`<span class="site-imgsel"><select n
 function field(i, s, [k, label, kind], media) {
   const n = `s[${i}][${k}]`;
   const v = s[k];
-  if (kind === 'text') return html`<label class="fld"><span>${label}</span><input name="${n}" value="${v || ''}" maxlength="200"></label>`;
-  if (kind === 'area') return html`<label class="fld"><span>${label}</span><textarea name="${n}" rows="4" maxlength="3000">${v || ''}</textarea></label>`;
+  const ai = (k2) => html`<button type="button" class="chip site-ai" data-site-ai data-section="${Sites.SECTIONS[s.type]?.label}" data-label="${label}" data-kind="${k2}" title="Sugerir um texto com IA">✨ IA</button>`;
+  if (kind === 'text') return html`<label class="fld"><span>${label} ${['title', 'eyebrow', 'cta', 'button'].includes(k) && k !== 'cta' ? ai('text') : ''}</span><input name="${n}" value="${v || ''}" maxlength="200"></label>`;
+  if (kind === 'area') return html`<label class="fld"><span>${label} ${ai('area')}</span><textarea name="${n}" rows="4" maxlength="3000">${v || ''}</textarea></label>`;
   if (kind === 'lines') return html`<label class="fld"><span>${label}</span><textarea name="${n}" rows="3">${(v || []).join('\n')}</textarea></label>`;
   if (kind === 'check') return html`<label class="fld check"><input type="checkbox" name="${n}" value="1" ${ck(v)}><span>${label}</span></label>`;
   if (kind === 'image') return html`<div class="fld"><span>${label}</span>${imgSelect(n, v, media)}</div>`;
+  if (kind === 'file') return html`<label class="fld"><span>${label}</span><select name="${n}"><option value="">Nenhum</option>${(media.files || []).map((f) => html`<option value="${f.id}" ${Number(v) === f.id ? raw('selected') : ''}>${f.name}</option>`)}</select><small class="muted">Envie o PDF na aba <a href="${B}/imagens#pdfs">Imagens e PDFs</a>.</small></label>`;
   if (kind === 'items') {
     const faq = s.type === 'duvidas'; const rows = [...(v || []), { t: '', d: '' }, { t: '', d: '' }];
     return html`<fieldset class="fld site-items"><legend>${label} <small class="muted">(deixe em branco para apagar uma linha)</small></legend>
@@ -68,9 +73,15 @@ function field(i, s, [k, label, kind], media) {
 }
 ed.get('/', async (req, res) => {
   const site = await Sites.draft(req.sp);
-  const media = await Sites.mediaList();
+  const media = await Sites.mediaList(); media.files = await Sites.fileList();
   const bk = await (await import('../lib/booking.js')).config().catch(() => ({ enabled: false }));
   send(res, await shell(req, '', 'Conteúdo', html`
+    ${req.sp ? '' : html`<details class="card site-import"><summary><b>Já tem um site?</b> Importe os textos e as imagens dele para começar mais rápido</summary>
+      <form method="post" action="${B}/importar" class="site-slug" data-confirm="Os textos da abertura, do “Sobre” e de “Como posso ajudar” do rascunho serão substituídos pelos do site importado. Continuar?">
+        <label class="fld"><span>Endereço do site atual</span><input name="url" required maxlength="300" placeholder="https://seusite.com.br"></label>
+        <label class="fld check"><input type="checkbox" name="imgs" value="1" checked><span>Trazer imagens (até 3)</span></label>
+        <button class="btn ghost" data-busy="Importando…">Importar</button></form>
+      <p class="muted small">Traz o título, a descrição, parágrafos e temas para o rascunho; nada vai ao ar sem você publicar. Revise tudo: textos de outros sites podem precisar de ajustes.</p></details>`}
     <form method="post" action="${req.sb}/conteudo" class="stack site-form">
       <p class="muted small">Marque as seções que aparecem no site e use as setas para mudar a ordem. Os textos começam com sugestões a partir dos dados da clínica: revise e escreva com a sua voz. Imagens: envie na aba <a href="${B}/imagens">Imagens</a> do site e escolha aqui.</p>
       ${site.sections.map((s, i) => { const def = Sites.SECTIONS[s.type]; return html`<section class="card site-sec ${s.on ? '' : 'is-off'}">
@@ -139,7 +150,7 @@ ed.post('/aparencia', async (req, res) => {
 // ---------- Imagens ----------
 admin.get('/imagens', async (req, res) => {
   const site = await Sites.draft(); const used = Sites.usedMedia(site);
-  const list = await Sites.mediaList();
+  const list = await Sites.mediaList(); const files = await Sites.fileList();
   send(res, await shell(req, 'imagens', 'Imagens', html`
     <section class="card site-up" data-site-upload="${B}/imagens">
       <h2>Enviar imagens</h2>
@@ -147,7 +158,12 @@ admin.get('/imagens', async (req, res) => {
       <label class="site-drop"><input type="file" accept="image/*,.heic,.heif,.svg" multiple data-site-file hidden><span>Arraste as imagens para cá ou <u>escolha no computador</u></span></label>
       <div class="site-up__log" data-site-log aria-live="polite"></div>
     </section>
-    <section class="card"><h2>Biblioteca <small class="muted">(${list.length} de ${Sites.MAX_MEDIA})</small></h2>
+    <section class="card" id="pdfs"><h2>Materiais em PDF <small class="muted">(${files.length} de ${Sites.MAX_FILES})</small></h2>
+      <p class="muted small">E-books, guias e exercícios oferecidos nas landing pages. Escolha o PDF na seção “Formulário de contato”: depois do envio, a pessoa recebe o link na tela e pelo WhatsApp.</p>
+      ${files.length ? html`<ul class="list">${files.map((f) => html`<li class="site-dom"><span><b>${f.name}</b><br><small class="muted">${kb(f.bytes)} · enviado em ${brDateTime(f.created_at)}</small></span>
+        <form method="post" action="${B}/arquivos/${f.id}/apagar" data-confirm="Apagar ${f.name}? Quem tem o link deixa de conseguir baixar."><button class="btn ghost btn-sm danger-text">Apagar</button></form></li>`)}</ul>` : ''}
+      <label class="btn ghost site-pdf-up">Enviar PDF<input type="file" accept="application/pdf,.pdf" data-site-pdf="${B}/arquivos" hidden></label></section>
+    <section class="card"><h2>Biblioteca de imagens <small class="muted">(${list.length} de ${Sites.MAX_MEDIA})</small></h2>
       ${list.length ? html`<p class="muted small">Clique na foto para marcar o <b>ponto de foco</b> (o rosto, por exemplo): os recortes da página ficam centrados nele.</p>
       <div class="site-media">${list.map((m) => html`<form method="post" action="${B}/imagens/${m.id}" class="site-m">
         <div class="site-focal" data-focal>${m.kind === 'svg' ? html`<img src="${B}/m/${m.id}/${m.v}/o/480.svg" alt="">` : html`<img src="${B}/m/${m.id}/${m.v}/o/768.webp" alt="" width="${m.w}" height="${m.h}"><i class="site-focal__dot" style="left:${Number(m.fx) * 100}%;top:${Number(m.fy) * 100}%"></i>`}</div>
@@ -166,6 +182,10 @@ admin.post('/imagens', express.raw({ type: () => true, limit: '16mb' }), async (
     res.json({ ok: true, ...m });
   } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
 });
+admin.post('/arquivos', express.raw({ type: () => true, limit: '13mb' }), async (req, res) => {
+  try { const f = await Sites.fileUpload(Buffer.isBuffer(req.body) ? req.body : null, decodeURIComponent(String(req.get('x-file-name') || '')).slice(0, 160)); await audit(req, 'site-pdf-enviar', String(f.id)); res.json({ ok: true }); } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+admin.post('/arquivos/:id/apagar', async (req, res) => { await Sites.fileDelete(Number(req.params.id)); await audit(req, 'site-pdf-apagar', req.params.id); res.flash('PDF apagado.').redirect(`${B}/imagens#pdfs`); });
 admin.post('/imagens/:id', async (req, res) => {
   await Sites.mediaUpdate(Number(req.params.id), { alt: req.body.alt, fx: req.body.fx, fy: req.body.fy });
   res.flash('Imagem salva.').redirect(`${B}/imagens`);
@@ -357,7 +377,99 @@ admin.get('/resultados', async (req, res) => {
         <p class="muted small">Para saber qual anúncio ou post trouxe a pessoa, use links com <code>?utm_source=instagram&amp;utm_campaign=nome</code>.</p></section>
       <section class="card"><h2>Páginas</h2>${Object.keys(r.byPath).length ? html`<table class="tbl"><thead><tr><th>Página</th><th>Visitas</th><th>Contatos</th></tr></thead><tbody>${rank(r.byPath).map(([k, v]) => html`<tr><td>${k ? names[k] || `/${k}` : 'Página inicial'}</td><td>${v.view}</td><td>${v.act}</td></tr>`)}</tbody></table>` : html`<p class="muted">Sem dados ainda.</p>`}</section>
     </div>
+    ${Object.keys(r.ab).length ? html`<section class="card"><h2>Teste A/B dos títulos</h2>
+      <table class="tbl"><thead><tr><th>Página</th><th>Título</th><th>Visitas</th><th>Contatos</th><th>Conversão</th></tr></thead><tbody>
+      ${Object.entries(r.ab).map(([k, v]) => { const cv = (x) => (x.view ? (x.act / x.view) * 100 : 0); const best = cv(v.a) === cv(v.b) ? '' : cv(v.a) > cv(v.b) ? 'a' : 'b'; return ['a', 'b'].map((x) => html`<tr><td>${x === 'a' ? (k ? names[k] || `/${k}` : 'Página inicial') : ''}</td><td>${x === 'a' ? 'Principal (A)' : 'Alternativo (B)'}${best === x && (v.a.view + v.b.view) >= 40 ? html` <span class="badge b-realizada">melhor</span>` : ''}</td><td>${v[x].view}</td><td>${v[x].act}</td><td>${v[x].view ? `${cv(v[x]).toFixed(1).replace('.', ',')}%` : '—'}</td></tr>`); })}
+      </tbody></table><p class="muted small">O “melhor” aparece a partir de 40 visitas somadas. Quando um título vencer com folga, deixe só ele (apague o título alternativo) e publique.</p></section>` : ''}
     <p class="muted small">Contagem sem cookies e sem guardar dados de quem visita (LGPD). Robôs de busca não entram na conta. Os contatos do formulário ficam no <a href="/crm">CRM</a>.</p>`));
+});
+
+
+
+// ---------- IA nos textos ----------
+admin.post('/ia/secao', express.json({ limit: '20kb' }), async (req, res) => {
+  const b = req.body || {};
+  const about = (await Sites.draft())?.sections.find((x) => x.type === 'sobre')?.text || '';
+  const r = await SAI.sectionText({ section: str(b.section, 80), label: str(b.label, 120), kind: b.kind === 'text' ? 'text' : 'area', current: str(b.current, 3000), about, tone: str(b.tone, 20), userId: req.user.id });
+  res.status(r.ok ? 200 : 400).json(r);
+});
+
+// ---------- Blog ----------
+const postForm = async (req, p) => {
+  const media = await Sites.mediaList(); const base = await Sites.siteUrl();
+  return html`<form method="post" action="${B}/blog/${p.id || 'novo'}" class="stack site-post">
+    <section class="card stack">
+      <label class="fld"><span>Título</span><input name="title" value="${p.title || ''}" maxlength="160" required></label>
+      <label class="fld"><span>Resumo <small class="muted">(aparece na lista de artigos e ao compartilhar)</small></span><textarea name="excerpt" rows="2" maxlength="300">${p.excerpt || ''}</textarea></label>
+      <div class="fld"><span>Imagem de capa</span>${imgSelect('cover', p.cover, media)}</div>
+      <label class="fld"><span>Texto</span><textarea name="body" rows="22" class="site-post__body">${p.body || ''}</textarea></label>
+      <p class="muted small">Formatação: linha em branco separa parágrafos · <code>## Subtítulo</code> · <code>- item de lista</code> · <code>**negrito**</code> · <code>*itálico*</code> · <code>&gt; citação</code> · <code>[texto do link](https://…)</code></p>
+    </section>
+    <section class="card stack"><h2>Google</h2>
+      <label class="fld"><span>Endereço do artigo</span><span class="site-slug__in"><span class="muted">${base.replace(/^https:\/\//, '')}/blog/</span><input name="slug" value="${p.slug || ''}" maxlength="90" placeholder="(gerado pelo título)"></span></label>
+      <label class="fld"><span>Descrição para o Google <small class="muted">(até 160 letras)</small></span><textarea name="seo" rows="2" maxlength="170">${p.seo || ''}</textarea></label>
+    </section>
+    <div class="actions site-save">
+      <label class="fld check"><input type="radio" name="status" value="rascunho" ${p.status !== 'publicado' ? raw('checked') : ''}><span>Rascunho</span></label>
+      <label class="fld check"><input type="radio" name="status" value="publicado" ${p.status === 'publicado' ? raw('checked') : ''}><span>Publicado</span></label>
+      <button class="btn">Salvar</button>
+      ${p.id ? html`<a class="btn ghost" href="${B}/blog/${p.id}/previa" target="_blank" rel="noopener">Ver prévia</a>${p.status === 'publicado' ? html`<a class="btn ghost" href="${base}/blog/${p.slug}" target="_blank" rel="noopener">Abrir no site</a>` : ''}
+        <button class="btn ghost danger-text" formaction="${B}/blog/${p.id}/apagar" data-confirm-btn="Apagar este artigo?">Apagar</button>` : ''}
+    </div></form>`;
+};
+admin.get('/blog', async (req, res) => {
+  const posts = await Blog.list(); const base = await Sites.siteUrl();
+  send(res, await shell(req, 'blog', 'Blog', html`
+    <form method="post" action="${B}/blog/ia" class="card stack site-blog-ai"><h2>✨ Escrever um artigo com IA</h2>
+      <p class="muted small">Diga o tema e a IA escreve um rascunho completo (título, resumo, texto e descrição para o Google), seguindo as normas de publicidade da psicologia. Você revisa, ajusta com a sua voz e publica.</p>
+      <div class="form-grid"><label class="fld"><span>Tema</span><input name="topic" required maxlength="300" placeholder="Ex.: Como diferenciar ansiedade normal de um transtorno de ansiedade"></label>
+        <label class="fld"><span>Para quem <small class="muted">(opcional)</small></span><input name="audience" maxlength="200" placeholder="Ex.: mães de primeira viagem"></label>
+        <label class="fld"><span>Tom</span><select name="tone">${Object.entries(SAI.TONES).map(([k, l]) => html`<option value="${k}" ${k === 'claro' ? raw('selected') : ''}>${l}</option>`)}</select></label></div>
+      <div class="actions"><button class="btn" data-busy="Escrevendo… pode levar até 1 minuto">Escrever rascunho</button><a class="btn ghost" href="${B}/blog/novo">Escrever do zero</a></div></form>
+    <section class="card"><h2>Artigos</h2>
+      ${posts.length ? html`<ul class="list">${posts.map((p) => html`<li class="site-dom"><span><a href="${B}/blog/${p.id}"><b>${p.title}</b></a> ${p.status === 'publicado' ? html`<span class="badge b-realizada">Publicado</span>` : html`<span class="badge b-agendada">Rascunho</span>`}<br><small class="muted">${p.published_at ? brDateTime(p.published_at) : 'não publicado'}${p.author ? ` · ${p.author}` : ''}</small></span>
+        <span class="actions">${p.status === 'publicado' ? html`<a class="btn ghost btn-sm" href="${base}/blog/${p.slug}" target="_blank" rel="noopener">Abrir</a>` : ''}<a class="btn btn-sm" href="${B}/blog/${p.id}">Editar</a></span></li>`)}</ul>` : html`<p class="muted">Nenhum artigo ainda. O link “Blog” aparece no menu do site quando o primeiro artigo for publicado.</p>`}
+    </section>`));
+});
+admin.post('/blog/ia', async (req, res) => {
+  const r = await SAI.blogPost({ topic: str(req.body.topic, 300), audience: str(req.body.audience, 200), tone: str(req.body.tone, 20), userId: req.user.id });
+  if (!r.ok) return res.flash(r.error || 'Não foi possível escrever agora.', 'err').redirect(`${B}/blog`);
+  const p = await Blog.save(null, { title: r.title, excerpt: r.excerpt, seo: r.seo, body: r.body, status: 'rascunho' }, req.user.id);
+  await audit(req, 'site-blog-ia', String(p.id));
+  res.flash(`Rascunho escrito pela IA. Revise com atenção antes de publicar${r.risks?.length ? ` (atenção: ${r.risks.join(', ')})` : ''}.`, r.risks?.length ? 'warn' : 'ok').redirect(`${B}/blog/${p.id}`);
+});
+admin.get('/blog/novo', async (req, res) => send(res, await shell(req, 'blog', 'Novo artigo', await postForm(req, { status: 'rascunho' }))));
+admin.get('/blog/:id', async (req, res, next) => {
+  const p = await Blog.byId(Number(req.params.id)); if (!p) return next();
+  send(res, await shell(req, 'blog', p.title, await postForm(req, p)));
+});
+admin.post('/blog/:id', async (req, res) => {
+  const id = req.params.id === 'novo' ? null : Number(req.params.id);
+  try { const p = await Blog.save(id, req.body, req.user.id); await audit(req, 'site-blog-salvar', String(p.id)); res.flash(p.status === 'publicado' ? 'Artigo publicado.' : 'Rascunho salvo.').redirect(`${B}/blog/${p.id}`); } catch (e) { res.flash(e.message, 'err').redirect(id ? `${B}/blog/${id}` : `${B}/blog/novo`); }
+});
+admin.post('/blog/:id/apagar', async (req, res) => { await Blog.remove(Number(req.params.id)); await audit(req, 'site-blog-apagar', req.params.id); res.flash('Artigo apagado.').redirect(`${B}/blog`); });
+admin.get('/blog/:id/previa', async (req, res, next) => {
+  const p = await Blog.byId(Number(req.params.id)); if (!p) return next();
+  const site = await Sites.draft();
+  siteHeaders(res, clinicBase());
+  const ctx = await context(site, { preview: true, mediaBase: `${B}/m` });
+  ctx.page = { blog: true, path: `blog/${p.slug}`, title: p.title, desc: p.seo || '', main: R.blogPost({ ...p, published_at: p.published_at || new Date() }, [], ctx, Blog.md) };
+  res.type('html').send(R.render(site, ctx));
+});
+
+
+
+// ---------- importar site existente ----------
+admin.post('/importar', async (req, res) => {
+  try {
+    const f = await Import.fromUrl(str(req.body.url, 300), { images: !!req.body.imgs });
+    const site = await Sites.draft();
+    const done = Import.apply(site, f);
+    if (!done.length) throw new Error('Não encontramos textos para importar nesta página.');
+    await Sites.saveDraft(site); await audit(req, 'site-importar', f.host);
+    res.flash(`Importado de ${f.host}: ${done.join(', ')}. Revise o rascunho e veja a prévia.`);
+  } catch (e) { res.flash(`Não foi possível importar: ${e.message}`, 'err'); }
+  res.redirect(B);
 });
 
 // landing page em edição: as mesmas telas do site, em /marketing/site/lp/<endereço>/…

@@ -96,7 +96,7 @@ export function palette(site, b = Brand.get()) {
 // ---------- seções ----------
 // Tipos de campo: text, area (parágrafos), lines (um item por linha), items (título + texto), people, image, check
 export const SECTIONS = {
-  inicio: { label: 'Abertura', nav: 'Início', fields: [['eyebrow', 'Linha acima do título', 'text'], ['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['cta', 'Texto do botão principal', 'text'], ['image', 'Foto', 'image']] },
+  inicio: { label: 'Abertura', nav: 'Início', fields: [['eyebrow', 'Linha acima do título', 'text'], ['title', 'Título', 'text'], ['titleB', 'Título alternativo (teste A/B, opcional): metade das visitas vê este, e os Resultados mostram qual traz mais contatos', 'text'], ['text', 'Texto', 'area'], ['cta', 'Texto do botão principal', 'text'], ['image', 'Foto', 'image']] },
   sobre: { label: 'Sobre', nav: 'Sobre', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['highlights', 'Destaques (um por linha: formação, especializações…)', 'lines'], ['image', 'Foto', 'image']] },
   ajuda: { label: 'Como posso ajudar', nav: 'Como ajudo', fields: [['title', 'Título', 'text'], ['text', 'Texto de abertura', 'area'], ['items', 'Temas atendidos', 'items']] },
   abordagem: { label: 'Abordagem', nav: 'Abordagem', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['image', 'Imagem (opcional)', 'image']] },
@@ -109,8 +109,8 @@ export const SECTIONS = {
   contato: { label: 'Contato', nav: 'Contato', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['map', 'Mostrar o link “Ver no mapa”', 'check']] },
   final: { label: 'Chamada final', nav: '', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['cta', 'Texto do botão', 'text']] },
   beneficios: { label: 'Benefícios (lista com marcadores)', nav: '', fields: [['title', 'Título', 'text'], ['list', 'Itens (um por linha)', 'lines']] },
-  evento: { label: 'Evento (data, horário, local e valor)', nav: 'Informações', fields: [['title', 'Título', 'text'], ['date', 'Data', 'text'], ['time', 'Horário', 'text'], ['place', 'Local (ou “On-line”)', 'text'], ['price', 'Valor', 'text'], ['vagas', 'Vagas', 'text'], ['text', 'Observações', 'area']] },
-  form: { label: 'Formulário de contato (vira oportunidade no CRM)', nav: 'Contato', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['button', 'Texto do botão', 'text'], ['success', 'Mensagem depois de enviar', 'text'], ['email', 'Pedir e-mail', 'check'], ['message', 'Campo de mensagem', 'check']] },
+  evento: { label: 'Evento (data, horário, local e valor)', nav: 'Informações', fields: [['title', 'Título', 'text'], ['date', 'Data', 'text'], ['time', 'Horário', 'text'], ['place', 'Local (ou “On-line”)', 'text'], ['price', 'Valor', 'text'], ['vagas', 'Vagas', 'text'], ['text', 'Observações', 'area'], ['pix', 'Cobrar a inscrição por Pix (QR code e copia e cola logo depois do formulário)', 'check'], ['amount', 'Valor do Pix em reais (ex.: 120,00)', 'text']] },
+  form: { label: 'Formulário de contato (vira oportunidade no CRM)', nav: 'Contato', fields: [['title', 'Título', 'text'], ['text', 'Texto', 'area'], ['button', 'Texto do botão', 'text'], ['success', 'Mensagem depois de enviar', 'text'], ['email', 'Pedir e-mail', 'check'], ['message', 'Campo de mensagem', 'check'], ['file', 'Material entregue depois do envio (PDF: link na tela e pelo WhatsApp)', 'file']] },
 };
 export const ORDER = ['inicio', 'sobre', 'ajuda', 'abordagem', 'processo', 'modalidades', 'equipe', 'agendamento', 'valores', 'duvidas', 'contato', 'beneficios', 'evento', 'form', 'final'];
 const it = (t, d) => ({ t, d });
@@ -258,7 +258,7 @@ export function normalize(s) {
     if (!SECTIONS[x?.type] || seen.has(x.type)) continue; seen.add(x.type);
     const y = { type: x.type, on: !!x.on };
     for (const [k, , kind] of SECTIONS[x.type].fields) {
-      if (kind === 'image') y[k] = Number(x[k]) > 0 ? Number(x[k]) : null;
+      if (kind === 'image' || kind === 'file') y[k] = Number(x[k]) > 0 ? Number(x[k]) : null;
       else if (kind === 'check') y[k] = !!x[k];
       else if (kind === 'lines') y[k] = (Array.isArray(x[k]) ? x[k] : []).map((v) => str(v, 160).trim()).filter(Boolean).slice(0, 12);
       else if (kind === 'items') y[k] = (Array.isArray(x[k]) ? x[k] : []).map((v) => ({ t: str(v?.t, 160).trim(), d: str(v?.d, 900).trim() })).filter((v) => v.t || v.d).slice(0, 16);
@@ -440,3 +440,21 @@ export async function setSiteSlug(tenantId, slug) {
 
 // cache do HTML publicado (por clínica), limpo ao publicar ou mexer nas imagens
 export const cache = new Map();
+
+// ---------- arquivos (material gratuito em PDF) ----------
+export const MAX_FILES = 20;
+export async function fileUpload(buf, name) {
+  if (!buf?.length) throw new Error('Arquivo vazio.');
+  if (buf.length > 12 * 1024 * 1024) throw new Error('O PDF precisa ter até 12 MB.');
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') throw new Error('Envie o material em PDF.');
+  if (((await one('SELECT COUNT(*) n FROM site_files'))?.n || 0) >= MAX_FILES) throw new Error(`Limite de ${MAX_FILES} arquivos. Apague um para enviar outro.`);
+  const crypto = await import('node:crypto');
+  const token = crypto.randomBytes(18).toString('base64url').slice(0, 24);
+  const nm = String(name || 'material.pdf').replace(/[^\p{L}\p{N} ._()-]/gu, '').slice(0, 160) || 'material.pdf';
+  const r = await q("INSERT INTO site_files (name, mime, bytes, token, data) VALUES (?, 'application/pdf', ?, ?, ?)", [nm, buf.length, token, buf]);
+  return { id: r.insertId, token };
+}
+export const fileList = () => q('SELECT id, name, bytes, token, created_at FROM site_files ORDER BY id DESC');
+export const fileInfo = (id) => one('SELECT id, name, bytes, token FROM site_files WHERE id = ?', [id]);
+export const fileByToken = (token) => one('SELECT name, mime, data FROM site_files WHERE token = ?', [String(token || '').slice(0, 24)]);
+export async function fileDelete(id) { await q('DELETE FROM site_files WHERE id = ?', [id]); }
