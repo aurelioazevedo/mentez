@@ -3019,3 +3019,15 @@ body.mv-glass .glass-tip.on { opacity: 1; transform: none; }
 .site-post__body { font: 15px/1.6 var(--sans); min-height: 420px; }
 .site-import summary { cursor: pointer; }
 .site-import form { margin-top: 12px; }
+/* prévia do site dentro do sistema */
+.site-prev { width: min(1400px, 96vw); height: 94vh; max-height: 94vh; padding: 0; border: 0; border-radius: 18px; background: var(--bg); overflow: hidden; }
+.site-prev::backdrop { background: rgba(7,15,30,.55); }
+.site-prev[open] { display: flex; flex-direction: column; }
+.site-prev__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--card); }
+.site-prev__bar b { margin-right: auto; }
+.site-prev__sizes { display: flex; gap: 4px; }
+.site-prev__sizes .chip.on { background: var(--terracota); border-color: var(--terracota); color: #fff; }
+.site-prev__stage { flex: 1; display: flex; justify-content: center; padding: 14px; background: repeating-linear-gradient(45deg, var(--bg), var(--bg) 10px, var(--bg2, #eef1f6) 10px, var(--bg2, #eef1f6) 20px); overflow: auto; }
+.site-prev__stage iframe { width: 390px; max-width: 100%; height: 100%; border: 0; border-radius: 22px; background: #fff; box-shadow: 0 20px 60px -20px rgba(0,0,0,.45); }
+.site-prev.is-desk .site-prev__stage iframe { width: 100%; border-radius: 10px; }
+@media (max-width: 700px) { .site-prev { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; } .site-prev__stage { padding: 0; } .site-prev__stage iframe { width: 100%; border-radius: 0; } .site-prev__sizes { display: none; } }

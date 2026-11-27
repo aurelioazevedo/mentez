@@ -21,6 +21,8 @@ const ck = (v) => (v ? raw('checked') : '');
 const arr = (v) => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.keys(v).sort((a, b) => a - b).map((k) => v[k]) : []);
 // página em edição: o site (req.sp = '') ou uma landing page (/lp/<endereço>)
 admin.use((req, res, next) => { req.sp = ''; req.sb = B; next(); });
+// prévias abrem numa janela dentro do sistema (no aplicativo instalado, abrir outra aba tira a pessoa do app)
+const allowFrame = (res) => { res.set('Content-Security-Policy', String(res.get('Content-Security-Policy') || '').replace("frame-ancestors 'none'", "frame-ancestors 'self'")); res.removeHeader('X-Frame-Options'); };
 const kb = (n) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 const TABS = [['', 'Conteúdo'], ['aparencia', 'Aparência'], ['imagens', 'Imagens e PDFs'], ['blog', 'Blog'], ['landing', 'Landing pages'], ['resultados', 'Resultados'], ['endereco', 'Endereço'], ['seo', 'Google e privacidade'], ['versoes', 'Versões']];
@@ -301,7 +303,7 @@ ed.get('/versoes', async (req, res) => {
 });
 ed.get('/versoes/:id', async (req, res) => {
   const site = await Sites.version(Number(req.params.id), req.sp); if (!site) return res.status(404).send('Versão não encontrada.');
-  siteHeaders(res, clinicBase());
+  siteHeaders(res, clinicBase()); allowFrame(res);
   res.type('html').send(R.render(site, await context(site, { preview: true, mediaBase: `${B}/m`, path: req.sp })));
 });
 ed.post('/versoes/:id/restaurar', async (req, res) => {
@@ -313,13 +315,13 @@ ed.post('/versoes/:id/restaurar', async (req, res) => {
 // ---------- prévia e publicação ----------
 ed.get('/previa', async (req, res) => {
   const site = await Sites.draft(req.sp);
-  siteHeaders(res, clinicBase());
-  res.set('Content-Security-Policy', String(res.get('Content-Security-Policy')).replace("frame-ancestors 'none'", "frame-ancestors 'self'")).removeHeader('X-Frame-Options');
+  siteHeaders(res, clinicBase()); allowFrame(res);
+  allowFrame(res);
   res.type('html').send(R.render(site, await context(site, { preview: true, mediaBase: `${B}/m`, path: req.sp })));
 });
 ed.get('/previa/privacidade', async (req, res) => {
   const site = await Sites.draft(req.sp);
-  siteHeaders(res, clinicBase());
+  siteHeaders(res, clinicBase()); allowFrame(res);
   res.type('html').send(R.privacy(site, await context(site, { preview: true, mediaBase: `${B}/m` })));
 });
 ed.post('/publicar', async (req, res) => {
@@ -452,7 +454,7 @@ admin.post('/blog/:id/apagar', async (req, res) => { await Blog.remove(Number(re
 admin.get('/blog/:id/previa', async (req, res, next) => {
   const p = await Blog.byId(Number(req.params.id)); if (!p) return next();
   const site = await Sites.draft();
-  siteHeaders(res, clinicBase());
+  siteHeaders(res, clinicBase()); allowFrame(res);
   const ctx = await context(site, { preview: true, mediaBase: `${B}/m` });
   ctx.page = { blog: true, path: `blog/${p.slug}`, title: p.title, desc: p.seo || '', main: R.blogPost({ ...p, published_at: p.published_at || new Date() }, [], ctx, Blog.md) };
   res.type('html').send(R.render(site, ctx));

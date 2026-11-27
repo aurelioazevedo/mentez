@@ -1,6 +1,27 @@
 // Marketing → Site: envio de imagens, ponto de foco, miniatura das imagens escolhidas e prévia do Google.
 (function () {
   var d = document;
+  // prévia dentro do sistema: janela por cima com o site em tamanho de celular ou de computador
+  var dlg = null;
+  var openPreview = function (url) {
+    if (!dlg) {
+      dlg = d.createElement('dialog'); dlg.className = 'site-prev';
+      dlg.innerHTML = '<div class="site-prev__bar"><b>Prévia</b><span class="site-prev__sizes"><button type="button" class="chip on" data-w="m">Celular</button><button type="button" class="chip" data-w="d">Computador</button></span><a class="chip" target="_blank" rel="noopener">Abrir em nova aba</a><button type="button" class="btn btn-sm" data-close>Fechar</button></div><div class="site-prev__stage"><iframe title="Prévia do site"></iframe></div>';
+      d.body.appendChild(dlg);
+      dlg.querySelector('[data-close]').addEventListener('click', function () { dlg.close(); });
+      dlg.addEventListener('close', function () { dlg.querySelector('iframe').src = 'about:blank'; });
+      dlg.querySelectorAll('[data-w]').forEach(function (b) { b.addEventListener('click', function () { dlg.querySelectorAll('[data-w]').forEach(function (x) { x.classList.toggle('on', x === b); }); dlg.classList.toggle('is-desk', b.dataset.w === 'd'); }); });
+    }
+    var wide = window.innerWidth >= 1100; dlg.classList.toggle('is-desk', wide);
+    dlg.querySelectorAll('[data-w]').forEach(function (x) { x.classList.toggle('on', (x.dataset.w === 'd') === wide); });
+    dlg.querySelector('a').href = url; dlg.querySelector('iframe').src = url;
+    dlg.showModal();
+  };
+  d.addEventListener('click', function (e) {
+    var a = e.target.closest('a[href*="/marketing/site/"]'); if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (!/\/(previa|versoes\/\d+)(\/|$|\?)/.test(a.getAttribute('href'))) return;
+    e.preventDefault(); openPreview(a.href);
+  });
   // envio de imagens (uma por vez, com o andamento)
   var up = d.querySelector('[data-site-upload]');
   if (up) {
