@@ -22,6 +22,19 @@ export const LAYOUTS = {
   classico: { name: 'Clássico', desc: 'Centralizado e tradicional, com foto de fundo na abertura.', hero: 'cover' },
   escuro: { name: 'Escuro elegante', desc: 'Fundo escuro com destaques luminosos. Sofisticado e moderno.', hero: 'split', dark: true },
   clinica: { name: 'Clínica e equipe', desc: 'Para clínicas com vários profissionais: equipe e serviços em destaque, contatos no topo.', hero: 'cover' },
+  // Layouts pensados para movimento (ficam estáticos e elegantes com as animações desligadas)
+  fluido: { name: 'Fluido', desc: 'Cores que se movem devagar ao fundo da abertura, como uma aurora, e faixa de temas deslizando.', hero: 'aurora', motion: true, marquee: true },
+  sereno: { name: 'Sereno', desc: 'Um círculo que “respira” ao redor da foto convida a desacelerar. Calmo e contemplativo.', hero: 'breath', motion: true },
+  revista: { name: 'Revista', desc: 'Títulos que surgem palavra por palavra, fotos que se revelam e leve efeito de profundidade.', hero: 'split', motion: true },
+  horizonte: { name: 'Horizonte', desc: 'Abertura em texto grande, faixa de temas em movimento e etapas com linha de progresso.', hero: 'text', motion: true, marquee: true },
+  mosaico: { name: 'Mosaico', desc: 'Várias fotos que flutuam suavemente na abertura e cartões que se destacam ao passar o mouse.', hero: 'mosaic', motion: true },
+  noturno: { name: 'Noturno', desc: 'Fundo escuro com brilhos que se movem devagar e destaques luminosos. Sofisticado e moderno.', hero: 'aurora', motion: true, dark: true, marquee: true },
+};
+// Animações do site: desligadas, suaves (seções aparecem ao rolar) ou expressivas (efeitos de cada layout)
+export const MOTION = {
+  off: { name: 'Desligadas', desc: 'Tudo aparece parado, sem movimento. Mais simples e leve.' },
+  suave: { name: 'Suaves', desc: 'As seções surgem com delicadeza ao rolar a página.' },
+  viva: { name: 'Expressivas', desc: 'Títulos palavra por palavra, fotos que se revelam, profundidade ao rolar e os efeitos próprios do layout.' },
 };
 const F = (a, b) => ({ serif: a, sans: b });
 export const STYLES = {
@@ -153,7 +166,7 @@ export async function state() {
 // garante a forma do site (seções conhecidas, todas presentes, campos limitados)
 const str = (v, n) => String(v ?? '').replace(/\r/g, '').slice(0, n);
 export function normalize(s) {
-  const out = { layout: LAYOUTS[s?.layout] ? s.layout : 'editorial', style: STYLES[s?.style] ? s.style : 'areia', sections: [], seo: {}, privacy: {} };
+  const out = { layout: LAYOUTS[s?.layout] ? s.layout : 'editorial', style: STYLES[s?.style] ? s.style : 'areia', motion: MOTION[s?.motion] ? s.motion : 'suave', sections: [], seo: {}, privacy: {} };
   const seen = new Set();
   for (const x of Array.isArray(s?.sections) ? s.sections : []) {
     if (!SECTIONS[x?.type] || seen.has(x.type)) continue; seen.add(x.type);

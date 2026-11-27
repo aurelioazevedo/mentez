@@ -105,9 +105,12 @@ admin.get('/aparencia', async (req, res) => {
   send(res, await shell(req, 'aparencia', 'Aparência', html`
     <form method="post" action="${B}/aparencia" class="stack">
       <section class="card"><h2>Layout</h2><p class="muted small">A estrutura do site: como a abertura e as seções são apresentadas.</p>
-        <div class="site-layouts">${Object.entries(Sites.LAYOUTS).map(([k, l]) => html`<label class="site-layout"><input type="radio" name="layout" value="${k}" ${ck(site.layout === k)}>
+        <div class="site-layouts">${Object.entries(Sites.LAYOUTS).map(([k, l]) => html`<label class="site-layout"><input type="radio" name="layout" value="${k}" ${ck(site.layout === k)} data-motion="${l.motion ? 1 : 0}">
           <span class="site-mock site-mock--${k}" aria-hidden="true"><i class="m-top"></i><i class="m-hero"></i><i class="m-img"></i><i class="m-row"></i><i class="m-row m-row2"></i></span>
-          <b>${l.name}</b><small class="muted">${l.desc}</small></label>`)}</div></section>
+          <b>${l.name}${l.motion ? html` <span class="badge b-confirmada">Animado</span>` : ''}</b><small class="muted">${l.desc}</small></label>`)}</div></section>
+      <section class="card"><h2>Animações</h2><p class="muted small">Vale para qualquer layout; os marcados como “Animado” têm efeitos próprios (aurora, respiração, fotos flutuando, faixa de temas). Quem configurou o aparelho para “reduzir movimento” sempre vê o site parado.</p>
+        <div class="site-motions">${Object.entries(Sites.MOTION).map(([k, m]) => html`<label class="site-style site-motion"><input type="radio" name="motion" value="${k}" ${ck(site.motion === k)}>
+          <span class="site-mo site-mo--${k}" aria-hidden="true"><i></i><i></i><i></i></span><b>${m.name}</b><small class="muted">${m.desc}</small></label>`)}</div></section>
       <section class="card"><h2>Estilo</h2><p class="muted small">Cores e fontes. “Cores da marca” usa a cor principal cadastrada em <a href="/configuracoes/identidade">Identidade visual</a>${b.color ? '' : ' (nenhuma cadastrada ainda)'}. O contraste é ajustado automaticamente para a leitura ficar confortável.</p>
         <div class="site-styles">${Object.entries(Sites.STYLES).map(([k, st]) => { const p = Sites.palette({ style: k, layout: 'editorial' }, b); return html`<label class="site-style"><input type="radio" name="style" value="${k}" ${ck(site.style === k)}>
           <span class="site-sw" style="background:${p.bg};color:${p.ink}"><span class="site-sw__aa" style="font-family:'${p.serif}',Georgia,serif">Aa</span><span class="site-sw__dot" style="background:${p.accent}"></span></span>
@@ -117,7 +120,7 @@ admin.get('/aparencia', async (req, res) => {
 });
 admin.post('/aparencia', async (req, res) => {
   const site = await Sites.draft();
-  await Sites.saveDraft({ ...site, layout: str(req.body.layout, 20), style: str(req.body.style, 20) });
+  await Sites.saveDraft({ ...site, layout: str(req.body.layout, 20), style: str(req.body.style, 20), motion: str(req.body.motion, 10) || site.motion });
   await audit(req, 'site-aparencia');
   res.flash('Aparência salva no rascunho.').redirect(`${B}/aparencia`);
 });

@@ -39,6 +39,12 @@ export function render(site, ctx) {
     const style = pos ? raw(` style="object-position:${Math.round(Number(m.fx) * 100)}% ${Math.round(Number(m.fy) * 100)}%"`) : '';
     return html`<img class="${cls}" src="${ctx.media(m.id, m.v, aspect, 1080)}" srcset="${widths.map((x) => `${ctx.media(m.id, m.v, aspect, x)} ${x}w`).join(', ')}" sizes="${sizes}" width="${w}" height="${h}" alt="${a}"${style} ${raw(eager ? 'fetchpriority="high"' : 'loading="lazy"')} decoding="async">`;
   };
+  const marquee = () => {
+    const items = (sec('ajuda')?.items || []).map((x) => x.t).filter(Boolean);
+    if (items.length < 3) return '';
+    const row = html`${items.map((t) => html`<span>${t}</span><i aria-hidden="true">✦</i>`)}`;
+    return html`<div class="marquee" aria-hidden="true"><div class="marquee__track"><div class="marquee__row">${row}</div><div class="marquee__row">${row}</div></div></div>`;
+  };
   let n = 0;
   const num = () => String(++n).padStart(2, '0');
   const eyebrow = (label) => html`<p class="eyebrow"><span class="eyebrow__n">${num()}</span>${label}</p>`;
@@ -48,41 +54,49 @@ export function render(site, ctx) {
 
   const S = {
     inicio: (s) => {
-      const media = { split: ['4x5', '(min-width: 960px) 42vw, 92vw'], round: ['1x1', '(min-width: 960px) 30vw, 70vw'], text: ['4x5', '(min-width: 960px) 28vw, 60vw'], cover: ['o', '100vw'] }[L.hero];
+      const media = { split: ['4x5', '(min-width: 960px) 42vw, 92vw'], round: ['1x1', '(min-width: 960px) 30vw, 70vw'], text: ['4x5', '(min-width: 960px) 28vw, 60vw'], cover: ['o', '100vw'], aurora: ['1x1', '(min-width: 960px) 30vw, 70vw'], breath: ['1x1', '(min-width: 960px) 30vw, 66vw'], mosaic: ['4x5', '(min-width: 960px) 30vw, 70vw'] }[L.hero];
       const pic = img(s.image, media[0], media[1], 'hero__img', { eager: true, pos: L.hero === 'cover' });
+      // Mosaico: até duas fotos a mais (das outras seções) flutuando em volta da principal
+      const extras = L.hero === 'mosaic' ? [...new Set(site.sections.flatMap((x) => [x.image, ...(x.people || []).map((p) => p.image)]).filter((id) => id && id !== s.image && ctx.mediaMap.get(Number(id))?.kind === 'img'))].slice(0, 2) : [];
+      const mediaHtml = !pic ? '' : L.hero === 'breath'
+        ? html`<figure class="hero__media breath"><span class="breath__ring" aria-hidden="true"></span><span class="breath__ring breath__ring--2" aria-hidden="true"></span>${pic}<figcaption class="breath__cap" aria-hidden="true"><span class="breath__in">Inspire…</span><span class="breath__out">Solte o ar…</span></figcaption></figure>`
+        : L.hero === 'mosaic'
+          ? html`<figure class="hero__media mosaic">${pic}${extras.map((id, i) => html`<span class="mosaic__x mosaic__x--${i + 1}">${img(id, '1x1', '(min-width: 960px) 14vw, 32vw', '')}</span>`)}</figure>`
+          : L.hero !== 'cover' ? html`<figure class="hero__media"${L.hero === 'split' || L.hero === 'text' ? raw(' data-parallax') : ''}>${pic}</figure>` : '';
       return html`<section class="hero hero--${L.hero}${pic ? '' : ' hero--noimg'}" id="inicio">
-        ${L.hero === 'cover' && pic ? html`<div class="hero__bg">${pic}</div>` : ''}
+        ${L.hero === 'cover' && pic ? html`<div class="hero__bg" data-parallax>${pic}</div>` : ''}
+        ${L.hero === 'aurora' ? raw('<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>') : ''}
         <div class="wrap hero__grid">
           <div class="hero__text">
             ${s.eyebrow ? html`<p class="hero__eyebrow">${s.eyebrow}</p>` : ''}
-            <h1 class="h1">${s.title || b.who}</h1>
+            <h1 class="h1" data-words>${s.title || b.who}</h1>
             ${s.text ? html`<div class="hero__lead">${paras(s.text)}</div>` : ''}
             <div class="hero__actions">${btn(s.cta || 'Agendar consulta')}${book ? waBtn() : ''}</div>
           </div>
-          ${L.hero !== 'cover' && pic ? html`<figure class="hero__media">${pic}</figure>` : ''}
+          ${mediaHtml}
         </div>
-      </section>`;
+      </section>${L.marquee ? marquee() : ''}`;
     },
     sobre: (s) => html`<section class="sec sec--sobre" id="sobre"><div class="wrap split">
-        ${s.image ? html`<figure class="split__media">${img(s.image, '4x5', '(min-width: 960px) 38vw, 92vw', 'rounded')}</figure>` : ''}
+        ${s.image ? html`<figure class="split__media" data-parallax>${img(s.image, '4x5', '(min-width: 960px) 38vw, 92vw', 'rounded')}</figure>` : ''}
         <div class="split__text">${eyebrow(SL.sobre)}<h2 class="h2">${s.title}</h2><div class="prose">${paras(s.text)}</div>
           ${s.highlights?.length ? html`<ul class="ticks">${s.highlights.map((h) => html`<li>${h}</li>`)}</ul>` : ''}</div>
       </div></section>`,
     ajuda: (s) => html`<section class="sec sec--ajuda" id="ajuda"><div class="wrap">${head(s, SL.ajuda)}
-        <div class="cards">${s.items.map((x) => html`<article class="card"><h3 class="h3">${x.t}</h3>${x.d ? html`<p>${x.d}</p>` : ''}</article>`)}</div></div></section>`,
+        <div class="cards">${s.items.map((x, i) => html`<article class="card" style="--i:${i % 6}"><h3 class="h3">${x.t}</h3>${x.d ? html`<p>${x.d}</p>` : ''}</article>`)}</div></div></section>`,
     abordagem: (s) => html`<section class="sec sec--abordagem alt" id="abordagem"><div class="wrap ${s.image ? 'split split--rev' : 'narrow'}">
         <div class="split__text">${eyebrow(SL.abordagem)}<h2 class="h2">${s.title}</h2><div class="prose">${paras(s.text)}</div></div>
         ${s.image ? html`<figure class="split__media">${img(s.image, '3x2', '(min-width: 960px) 44vw, 92vw', 'rounded')}</figure>` : ''}
       </div></section>`,
     processo: (s) => html`<section class="sec sec--processo" id="processo"><div class="wrap">${head(s, SL.processo)}
-        <ol class="steps">${s.items.map((x, i) => html`<li class="step"><span class="step__n">${String(i + 1).padStart(2, '0')}</span><h3 class="h3">${x.t}</h3>${x.d ? html`<p>${x.d}</p>` : ''}</li>`)}</ol></div></section>`,
+        <ol class="steps" data-steps><li class="steps__line" aria-hidden="true"><i></i></li>${s.items.map((x, i) => html`<li class="step" style="--i:${i}"><span class="step__n">${String(i + 1).padStart(2, '0')}</span><h3 class="h3">${x.t}</h3>${x.d ? html`<p>${x.d}</p>` : ''}</li>`)}</ol></div></section>`,
     modalidades: (s) => html`<section class="sec sec--modos alt" id="atendimento"><div class="wrap">${head(s, SL.modalidades)}
         <div class="modes">
           ${s.presencial ? html`<article class="mode">${ico('home', 'i mode__i')}<h3 class="h3">Presencial</h3>${paras(s.presencial)}</article>` : ''}
           ${s.online ? html`<article class="mode">${ico('video', 'i mode__i')}<h3 class="h3">On-line</h3>${paras(s.online)}</article>` : ''}
         </div>${book ? html`<p class="sec__cta">${btn('Ver horários disponíveis', '#agendamento')}</p>` : ''}</div></section>`,
     equipe: (s) => html`<section class="sec sec--equipe" id="equipe"><div class="wrap">${head(s, SL.equipe)}
-        <div class="team">${s.people.map((p) => html`<article class="person">${p.image ? img(p.image, '1x1', '(min-width: 960px) 22vw, 45vw', 'person__img') : html`<span class="person__ph" aria-hidden="true">${initials(p.name)}</span>`}
+        <div class="team">${s.people.map((p, i) => html`<article class="person" style="--i:${i % 6}">${p.image ? img(p.image, '1x1', '(min-width: 960px) 22vw, 45vw', 'person__img') : html`<span class="person__ph" aria-hidden="true">${initials(p.name)}</span>`}
           <h3 class="h3">${p.name}</h3>${p.role ? html`<p class="person__role">${p.role}</p>` : ''}${p.text ? html`<p class="person__text">${p.text}</p>` : ''}</article>`)}</div></div></section>`,
     agendamento: (s) => html`<section class="sec sec--book" id="agendamento"><div class="wrap book">
         <div class="book__intro">${eyebrow(SL.agendamento)}<h2 class="h2">${s.title}</h2>${s.text ? html`<div class="prose">${paras(s.text)}</div>` : ''}
@@ -155,7 +169,7 @@ ${b.faviconUrl ? `<link rel="icon" href="${esc(b.faviconUrl)}">` : ''}
 <style>${cssVars}</style>
 <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>
 </head>
-<body class="L-${site.layout} S-${site.style}${L.dark ? ' is-dark' : ''}${ctx.preview ? ' has-preview' : ''}">
+<body class="L-${site.layout} S-${site.style} M-${site.motion || 'suave'}${L.dark ? ' is-dark' : ''}${L.motion ? ' is-motion' : ''}${ctx.preview ? ' has-preview' : ''}">
 ${ctx.preview ? '<div class="preview-bar">Prévia do rascunho: só você vê esta versão. Publique em Marketing → Site para colocar no ar.</div>' : ''}
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 ${site.layout === 'clinica' ? String(html`<div class="topbar"><div class="wrap topbar__in">${b.address ? html`<span>${ico('pin')}${[b.address, b.place].filter(Boolean).join(' · ')}</span>` : ''}${waUrl ? html`<a href="${waUrl}" target="_blank" rel="noopener">${ico('wa')}${fmtPhone(b.whatsapp || b.phone || ctx.wa)}</a>` : ''}</div></div>`) : ''}

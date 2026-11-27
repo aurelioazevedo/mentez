@@ -40,6 +40,10 @@
     var upd = function () { var o = sel.selectedOptions[0]; if (o && o.dataset.thumb) { th.src = o.dataset.thumb; th.hidden = false; } else th.hidden = true; };
     sel.addEventListener('change', upd); upd();
   });
+  // ao escolher um layout animado com as animações em “Suaves”, sugere “Expressivas”
+  d.querySelectorAll('input[name=layout][data-motion]').forEach(function (r) {
+    r.addEventListener('change', function () { var viva = d.querySelector('input[name=motion][value=viva]'); var suave = d.querySelector('input[name=motion][value=suave]'); if (r.dataset.motion === '1' && suave && suave.checked && viva) viva.checked = true; });
+  });
   // seção ligada/desligada
   d.querySelectorAll('[data-sec-on]').forEach(function (c) { c.addEventListener('change', function () { c.closest('.site-sec').classList.toggle('is-off', !c.checked); }); });
   // prévia do Google ao digitar
