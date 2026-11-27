@@ -620,6 +620,44 @@ document.querySelectorAll('[data-side-toggle]').forEach((b) => b.addEventListene
   document.cookie = `menu=${min ? 'min' : ''}; Path=/; Max-Age=${min ? 31536000 : 0}; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
 }));
 
+// ---------- Menu de vidro: destaque que desliza até o item e balão com o nome (menu recolhido / topo) ----------
+(() => {
+  if (!document.body.classList.contains('mv-glass')) return;
+  const tip = document.querySelector('.glass-tip');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('[data-glass-nav]').forEach((nav) => {
+    const pill = nav.querySelector('.glass-pill'); if (!pill) return;
+    const active = () => nav.querySelector('a.on');
+    const place = (a, instant) => {
+      if (!a || !a.offsetParent || !nav.offsetParent) { pill.style.opacity = '0'; return; }
+      if (instant || reduce) pill.style.transition = 'none';
+      pill.style.width = `${a.offsetWidth}px`; pill.style.height = `${a.offsetHeight}px`;
+      pill.style.transform = `translate(${a.offsetLeft}px, ${a.offsetTop}px)`; pill.style.opacity = '1';
+      if (instant || reduce) { void pill.offsetWidth; pill.style.transition = ''; }
+    };
+    place(active(), true);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => place(active(), true));
+    const hideTip = () => tip && tip.classList.remove('on');
+    nav.addEventListener('mouseover', (e) => {
+      const a = e.target.closest('a'); if (!a || !nav.contains(a)) return;
+      place(a);
+      if (!tip) return;
+      const sp = a.querySelector('span');
+      if (sp && getComputedStyle(sp).display !== 'none') { hideTip(); return; } // o nome já aparece
+      tip.textContent = a.dataset.tip || a.title || '';
+      const r = a.getBoundingClientRect();
+      if (nav.closest('.side')) { tip.style.left = `${r.right + 12}px`; tip.style.top = `${r.top + r.height / 2 - tip.offsetHeight / 2}px`; }
+      else { tip.style.left = `${Math.max(8, r.left + r.width / 2 - tip.offsetWidth / 2)}px`; tip.style.top = `${r.bottom + 12}px`; }
+      tip.classList.add('on');
+    });
+    nav.addEventListener('mouseleave', () => { place(active()); hideTip(); });
+    nav.addEventListener('focusin', (e) => { const a = e.target.closest('a'); if (a) place(a); });
+    nav.addEventListener('focusout', () => place(active()));
+    window.addEventListener('resize', () => place(active(), true));
+    document.querySelectorAll('[data-side-toggle]').forEach((b) => b.addEventListener('click', () => { hideTip(); setTimeout(() => place(active(), true), 30); setTimeout(() => place(active(), true), 300); }));
+  });
+})();
+
 // ---------- Atualização ao vivo (todas as telas, todos os usuários) ----------
 // O servidor avisa (SSE em /live; se o proxy bloquear, consulta /live/since a cada 3 s) quais áreas mudaram.
 // A página busca o próprio conteúdo de novo e troca só a área central e o sino — sem recarregar e sem

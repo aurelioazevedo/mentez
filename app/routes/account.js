@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import QRCode from 'qrcode';
 import * as Briefing from '../lib/briefing.js';
 import { q, one, audit } from '../lib/db.js';
-import { page, html, raw, brDateTime, avatar, themeOf, logoTag, appLogo } from '../lib/html.js';
+import { page, html, raw, brDateTime, avatar, themeOf, logoTag, appLogo, menuUi, MENU_UI } from '../lib/html.js';
 import { router, send } from '../lib/router.js';
 import { can, ROLES, homeFor, isClinician } from '../lib/perm.js';
 import { bare } from '../lib/html.js';
@@ -145,6 +145,12 @@ r.get('/', async (req, res) => {
         <noscript><button class="btn ghost">Salvar</button></noscript>
       </form>
       <p class="muted small">Também dá para alternar pelo ícone de lua/sol no topo. A escolha vale para este navegador.</p>
+      <h3 class="sub-h">Menu</h3>
+      <form method="post" action="/conta/menu" class="menu-pick">${Object.entries(MENU_UI).map(([v, l]) => html`<label class="menu-opt"><input type="radio" name="menu" value="${v}" ${menuUi(req) === v ? raw('checked') : ''} data-autosubmit-check>
+        <span class="menu-prev menu-prev--${v}" aria-hidden="true"><i class="mp-bar"></i><i class="mp-pill"></i><i class="mp-c1"></i><i class="mp-c2"></i><i class="mp-c3"></i></span>
+        <b>${l}</b><small class="muted">${{ lateral: 'O menu de sempre, ao lado, com cartões.', vidro: 'Flutuante, com efeito de vidro e um destaque que desliza até o item. Recolhe só para ícones.', topo: 'Barra flutuante de vidro no alto da tela; mais espaço para o conteúdo.' }[v]}</small></label>`)}
+        <noscript><button class="btn ghost">Salvar</button></noscript></form>
+      <p class="muted small">No celular, o menu fica embaixo (com efeito de vidro nas opções de vidro). Vale para este navegador.</p>
     </section>
     <div class="grid2">
       <section class="card"><h2>Verificação em duas etapas</h2>
@@ -281,6 +287,12 @@ r.post('/pix', async (req, res) => {
   res.flash(type ? 'Chave Pix salva.' : 'Chave Pix removida.').redirect('/conta#pix');
 });
 
+r.post('/menu', (req, res) => {
+  const m = ['vidro', 'topo'].includes(req.body.menu) ? req.body.menu : 'lateral';
+  const secure = req.secure || req.get('x-forwarded-proto') === 'https' ? '; Secure' : '';
+  res.append('Set-Cookie', m === 'lateral' ? `menu_ui=; Path=/; Max-Age=0; SameSite=Lax${secure}` : `menu_ui=${m}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`);
+  res.flash(m === 'topo' ? 'Menu no topo, com efeito de vidro.' : m === 'vidro' ? 'Menu lateral de vidro ativado.' : 'Menu lateral clássico.').redirect('/conta#aparencia');
+});
 r.post('/tema', (req, res) => {
   const t = ['escuro', 'auto'].includes(req.body.tema) ? req.body.tema : 'claro';
   const secure = req.secure || req.get('x-forwarded-proto') === 'https' ? '; Secure' : '';

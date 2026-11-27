@@ -88,6 +88,9 @@ export function themeOf(req) {
 }
 // Menu lateral recolhido (cookie “menu=min”), para a página já abrir no estado escolhido.
 export const sideMin = (req) => /(?:^|;\s*)menu=min(?:;|$)/.test(req?.headers?.cookie || '');
+// Tipo de menu (cookie “menu_ui”, por navegador): lateral clássico, lateral de vidro ou topo de vidro
+export const MENU_UI = { lateral: 'Lateral clássico', vidro: 'Lateral de vidro', topo: 'Topo de vidro' };
+export const menuUi = (req) => { const m = /(?:^|;\s*)menu_ui=(vidro|topo)(?:;|$)/.exec(req?.headers?.cookie || ''); return m?.[1] || 'lateral'; };
 function head(title, theme = '', o = {}) {
   return html`<!doctype html>
 <html lang="pt-BR"${theme ? raw(` data-theme="${theme}"`) : ''}>
@@ -150,20 +153,23 @@ export function page(req, { title, active = '', body, flash = '', live = null })
   const u = req.user;
   const nav = NAV.filter(([, , , perms, feat]) => (!feat || FEATURES[feat]) && (!perms || perms.some((p) => can(u, p))));
   const notes = req.notes || { count: 0, items: [] };
+  const ui = menuUi(req);
+  const navLinks = html`<span class="glass-pill" aria-hidden="true"></span>${nav.map(([href, label, ic]) => html`<a href="${href}" class="${active === ic ? 'on' : ''}" title="${label}" data-tip="${label}">${icon(ic)}<span>${label}</span></a>`)}`;
   return html`${head(title, themeOf(req))}
-<body class="app${sideMin(req) ? ' side-min' : ''}" data-live="${live || (LIVE[active] ?? '*')}"${u && (u.role === 'admin' || u.role === 'psicologo') ? raw(' data-tele-poll="1"') : ''}>
+<body class="app${sideMin(req) ? ' side-min' : ''}${ui !== 'lateral' ? ` mv-${ui} mv-glass` : ''}" data-live="${live || (LIVE[active] ?? '*')}"${u && (u.role === 'admin' || u.role === 'psicologo') ? raw(' data-tele-poll="1"') : ''}>
 <aside class="side">
   ${brandLink()}
   <div class="side-card">
     <button type="button" class="side-toggle" data-side-toggle aria-expanded="${sideMin(req) ? 'false' : 'true'}" title="${sideMin(req) ? 'Expandir menu' : 'Recolher menu'}">${icon('recolher')}<span>Recolher menu</span></button>
-    <nav>${nav.map(([href, label, ic]) => html`<a href="${href}" class="${active === ic ? 'on' : ''}" title="${label}">${icon(ic)}<span>${label}</span></a>`)}</nav>
+    <nav data-glass-nav>${navLinks}</nav>
     ${u ? html`<div class="side-user"><a class="who ${active === 'conta' ? 'on' : ''}" href="/conta" title="Minha conta">${avatar(u)}<span><b>${u.name}</b><small>${ROLES[u.role]?.label || ''}</small></span></a>
       <form method="post" action="/logout" class="logout"><button type="submit" title="Sair">${icon('sair')}<span>Sair</span></button></form></div>` : ''}
   </div>
 </aside>
 <div class="shell">
   ${u ? html`<header class="topbar">
-    ${can(u, 'cadastro') ? html`<form class="tsearch" action="/pacientes" method="get" role="search">${icon('busca')}<input type="search" name="q" placeholder="Buscar paciente por nome ou telefone" aria-label="Buscar paciente"></form>` : html`<div class="tsearch-gap"></div>`}
+    ${ui === 'topo' ? html`<div class="tnav-wrap">${brandLink()}<nav class="tnav" data-glass-nav aria-label="Menu principal">${navLinks}</nav></div>` : ''}
+    ${can(u, 'cadastro') ? html`<form class="tsearch" action="/pacientes" method="get" role="search">${icon('busca')}<input type="search" name="q" placeholder="${ui === 'topo' ? 'Buscar paciente' : 'Buscar paciente por nome ou telefone'}" aria-label="Buscar paciente"></form>` : html`<div class="tsearch-gap"></div>`}
     <div class="tactions">
       <button type="button" class="tinstall" data-install hidden title="Instalar o sistema como aplicativo neste aparelho">${icon('baixar')}<span class="ti-long">Instalar aplicativo</span><span class="ti-short">Instalar</span></button>
       <button type="button" class="ticon" data-theme-toggle title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro"><span class="theme-ico-moon">${icon('lua')}</span><span class="theme-ico-sun">${icon('sol')}</span></button>
@@ -215,6 +221,7 @@ ${u && Tenancy.multi() && HELPBOT.on ? html`<div class="hb${/(?:^|;\s*)hb_seen=1
     <p class="hb-note">Respostas geradas por IA. Não escreva dados de pacientes. Precisa da equipe? <a href="/suporte/novo">Abrir chamado</a></p>
   </section>
 </div>` : ''}
+${ui !== 'lateral' ? raw('<div class="glass-tip" aria-hidden="true"></div>') : ''}
 <script src="/static/app.js?v=${VERSION}"></script>
 </body></html>`;
 }

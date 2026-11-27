@@ -2877,3 +2877,121 @@ body.tele-body { background: var(--tv-d, #0b0f17); color: #eef2f7; }
 @keyframes sm-reveal { 0% { transform: scaleX(.2); } 40%, 100% { transform: scaleX(1); } }
 @keyframes sm-up { 0%, 100% { transform: translateY(6px); opacity: .5; } 50% { transform: none; opacity: 1; } }
 @keyframes sm-bounce { to { transform: translateY(-10px) scale(1.04); } }
+
+/* ---------- Menu de vidro (Minha conta → Aparência → Menu): lateral de vidro ou topo de vidro ---------- */
+.glass-pill, .glass-tip, .tnav-wrap { display: none; }
+body.mv-glass {
+  --glass-bg: linear-gradient(165deg, rgba(255,255,255,.66) 0%, rgba(255,255,255,.36) 42%, rgba(255,255,255,.30) 70%, rgba(255,255,255,.48) 100%);
+  --glass-line: rgba(255,255,255,.78);
+  --glass-hi: inset 0 1px 0 rgba(255,255,255,.9), inset 0 -1px 0 rgba(255,255,255,.25);
+  --glass-shadow: 0 26px 60px -30px rgba(7,25,54,.42), 0 8px 20px -12px rgba(7,25,54,.18);
+  --pill: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.58));
+  --pill-shadow: inset 0 1px 0 #fff, inset 0 0 0 1px rgba(255,255,255,.8), 0 8px 20px -6px rgba(7,25,54,.18);
+  --tile: rgba(255,255,255,.55); --tile-line: rgba(255,255,255,.8);
+  background-image: radial-gradient(900px 620px at -5% -5%, color-mix(in srgb, var(--terracota-l, #07C6BC) 24%, transparent), transparent 62%),
+    radial-gradient(820px 600px at 105% 8%, color-mix(in srgb, var(--musgo, #5B47C9) 16%, transparent), transparent 60%),
+    radial-gradient(900px 700px at 55% 112%, color-mix(in srgb, var(--terracota, #04857E) 14%, transparent), transparent 62%);
+  background-attachment: fixed;
+}
+:root[data-theme="dark"] body.mv-glass {
+  --glass-bg: linear-gradient(165deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.05) 40%, rgba(255,255,255,.03) 70%, rgba(255,255,255,.09) 100%), rgba(14,18,26,.42);
+  --glass-line: rgba(255,255,255,.14); --glass-hi: inset 0 1px 0 rgba(255,255,255,.22);
+  --glass-shadow: 0 26px 60px -24px rgba(0,0,0,.6), 0 8px 20px -10px rgba(0,0,0,.35);
+  --pill: linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.08)); --pill-shadow: inset 0 1px 0 rgba(255,255,255,.32), inset 0 0 0 1px rgba(255,255,255,.14), 0 8px 20px -8px rgba(0,0,0,.4);
+  --tile: rgba(255,255,255,.06); --tile-line: rgba(255,255,255,.12);
+}
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] body.mv-glass {
+  --glass-bg: linear-gradient(165deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.05) 40%, rgba(255,255,255,.03) 70%, rgba(255,255,255,.09) 100%), rgba(14,18,26,.42);
+  --glass-line: rgba(255,255,255,.14); --glass-hi: inset 0 1px 0 rgba(255,255,255,.22);
+  --glass-shadow: 0 26px 60px -24px rgba(0,0,0,.6), 0 8px 20px -10px rgba(0,0,0,.35);
+  --pill: linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.08)); --pill-shadow: inset 0 1px 0 rgba(255,255,255,.32), inset 0 0 0 1px rgba(255,255,255,.14), 0 8px 20px -8px rgba(0,0,0,.4);
+  --tile: rgba(255,255,255,.06); --tile-line: rgba(255,255,255,.12);
+} }
+/* a superfície de vidro */
+body.mv-vidro .side-card, body.mv-topo .topbar, body.mv-glass .glass-tip {
+  background: var(--glass-bg) !important; border: 1px solid var(--glass-line) !important;
+  box-shadow: var(--glass-hi), var(--glass-shadow) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.6) brightness(1.04) !important; backdrop-filter: blur(22px) saturate(1.6) brightness(1.04) !important;
+}
+/* itens: ícone em “azulejo” de vidro; o ativo ganha a cor da clínica; a pílula de vidro desliza por trás */
+body.mv-glass [data-glass-nav] { position: relative; }
+body.mv-glass .glass-pill { display: block; position: absolute; left: 0; top: 0; z-index: 0; width: 0; height: 0; border-radius: 13px; background: var(--pill); box-shadow: var(--pill-shadow); opacity: 0; pointer-events: none;
+  transition: transform .5s cubic-bezier(.2,.9,.25,1.12), width .5s cubic-bezier(.2,.9,.25,1.12), height .5s, opacity .25s; }
+body.mv-glass [data-glass-nav] a { position: relative; z-index: 1; background: transparent !important; border-color: transparent !important; box-shadow: none !important; color: var(--marrom-deep) !important; }
+body.mv-glass [data-glass-nav] a svg { box-sizing: content-box; width: 18px; height: 18px; padding: 8px; border-radius: 11px; background: var(--tile); box-shadow: inset 0 0 0 1px var(--tile-line); transition: background .25s, color .25s, box-shadow .25s; }
+body.mv-glass [data-glass-nav] a.on { font-weight: 650; }
+body.mv-glass [data-glass-nav] a.on svg { background: var(--terracota); color: #fff; box-shadow: 0 0 0 1px color-mix(in srgb, var(--terracota) 70%, #fff), 0 6px 18px -4px color-mix(in srgb, var(--terracota) 75%, transparent); }
+:root[data-theme="dark"] body.mv-glass [data-glass-nav] a.on svg { color: var(--bg); }
+body.mv-glass .glass-tip { display: block; position: fixed; left: 0; top: 0; z-index: 80; padding: 7px 13px; border-radius: 11px; font: 600 13px var(--sans); color: var(--marrom-deep); white-space: nowrap; pointer-events: none; opacity: 0; transform: translateX(-4px) scale(.96); transition: opacity .18s, transform .22s cubic-bezier(.2,.9,.25,1.12); }
+body.mv-glass .glass-tip.on { opacity: 1; transform: none; }
+
+@media (min-width: 861px) {
+  /* Lateral de vidro: flutua, sem cartões nos itens */
+  body.mv-vidro .side { padding: 16px 0 16px 16px; }
+  body.mv-vidro .side-card { border-radius: 28px !important; padding: 12px 10px; }
+  body.mv-vidro .side nav { gap: 2px; }
+  body.mv-vidro .side nav a { padding: 5px 10px 5px 5px; gap: 12px; border-radius: 13px; font-size: 14.5px; }
+  body.mv-vidro .side-user { border-top-color: var(--glass-line); }
+  body.mv-vidro .logout button { background: transparent; border-color: color-mix(in srgb, var(--err) 30%, transparent); }
+  body.mv-vidro .side-toggle:hover { background: var(--tile); }
+  body.mv-vidro.side-min .side nav a { width: auto; padding: 5px; justify-content: center; }
+  body.mv-vidro.side-min .app, body.mv-vidro.side-min { grid-template-columns: 92px minmax(0, 1fr); }
+
+  /* Topo de vidro: barra flutuante no alto, menu com ícones (o item atual mostra o nome) */
+  body.mv-topo.app { grid-template-columns: minmax(0, 1fr); }
+  body.mv-topo .side { display: none; }
+  body.mv-topo .topbar { top: 12px; margin: 12px clamp(12px, 2vw, 28px) 4px; padding: 8px 10px 8px 14px; border-radius: 22px; gap: 10px; }
+  body.mv-topo .tnav-wrap { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  body.mv-topo .topbar .brand { flex-direction: row; align-items: center; padding: 0 4px 0 0; }
+  body.mv-topo .topbar .brand img.brand-full { width: auto; height: 30px; max-width: 150px; object-fit: contain; }
+  body.mv-topo .topbar .brand .brand-mini, body.mv-topo .topbar .brand span { display: none !important; }
+  body.mv-topo .tnav { display: flex; align-items: center; gap: 2px; }
+  body.mv-topo .tnav a { display: flex; align-items: center; gap: 8px; padding: 5px; border-radius: 13px; text-decoration: none; font-size: 14px; font-weight: 500; white-space: nowrap; }
+  body.mv-topo .tnav a span { display: none; }
+  body.mv-topo .tnav a.on span { display: inline; padding-right: 8px; }
+  body.mv-topo .tsearch { flex: 0 1 230px; max-width: 230px; box-shadow: none; background: var(--tile) !important; border-color: var(--tile-line) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; transition: flex-basis .3s, max-width .3s; }
+  body.mv-topo .tsearch:focus-within { flex-basis: 360px; max-width: 360px; }
+  body.mv-topo .tsearch input { padding: 9px 0; }
+  body.mv-topo .tsearch-gap { flex: 1; }
+  body.mv-topo .main { padding-top: 14px; }
+}
+@media (min-width: 861px) and (max-width: 1180px) { body.mv-topo .topbar .brand { display: none; } body.mv-topo .tsearch { flex-basis: 42px; max-width: 160px; } }
+
+/* Celular e tablet: menu de baixo, flutuante e de vidro (um só elemento com desfoque: leve) */
+@media (max-width: 860px) {
+  body.mv-glass .side { padding: 0 10px calc(10px + env(safe-area-inset-bottom)); }
+  body.mv-glass .side-card { border-radius: 24px !important; padding: 6px !important; background: var(--glass-bg) !important; border: 1px solid var(--glass-line) !important;
+    box-shadow: var(--glass-hi), 0 16px 40px -16px rgba(7,25,54,.5) !important; -webkit-backdrop-filter: blur(18px) saturate(1.6) !important; backdrop-filter: blur(18px) saturate(1.6) !important; }
+  body.mv-glass .side nav a { padding: 4px 2px !important; gap: 3px; }
+  body.mv-glass .side nav a svg { padding: 6px; }
+  body.mv-glass .side nav a.on { background: transparent !important; }
+  body.mv-glass .glass-tip { display: none; }
+  body.mv-topo .topbar { margin: 8px 10px 0; top: 8px; border-radius: 20px; padding: 8px 10px; }
+  body.mv-glass .main { padding-bottom: 116px; }
+}
+@media (prefers-reduced-motion: reduce) { body.mv-glass .glass-pill, body.mv-glass .glass-tip, body.mv-topo .tsearch { transition: none; } }
+
+/* Minha conta → Aparência → Menu (prévias) */
+.menu-pick { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin: 8px 0; }
+.menu-opt { position: relative; display: grid; gap: 4px; padding: 12px; border: 1.5px solid var(--line); border-radius: 14px; cursor: pointer; }
+.menu-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.menu-opt:has(input:checked) { border-color: var(--terracota); box-shadow: 0 0 0 3px color-mix(in srgb, var(--terracota) 18%, transparent); }
+.menu-opt:has(input:focus-visible) { outline: 2px solid var(--terracota); outline-offset: 2px; }
+.menu-prev { position: relative; display: block; height: 92px; margin-bottom: 6px; border-radius: 10px; overflow: hidden; background: radial-gradient(circle at 15% 15%, #CFF1EC, transparent 55%), radial-gradient(circle at 90% 30%, #E2DBFB, transparent 50%), #F3F6FB; }
+.menu-prev i { position: absolute; display: block; border-radius: 6px; }
+.menu-prev .mp-c1, .menu-prev .mp-c2, .menu-prev .mp-c3 { background: rgba(255,255,255,.9); box-shadow: 0 2px 6px rgba(7,25,54,.08); }
+.menu-prev--lateral .mp-bar { left: 6px; top: 6px; bottom: 6px; width: 26%; background: #fff; border: 1px solid #E3E8F0; }
+.menu-prev--lateral .mp-pill { left: 11px; top: 16px; width: 20%; height: 9px; background: var(--terracota); }
+.menu-prev--lateral .mp-c1 { left: 34%; right: 6px; top: 10px; height: 18px; } .menu-prev--lateral .mp-c2 { left: 34%; width: 30%; top: 34px; bottom: 8px; } .menu-prev--lateral .mp-c3 { left: 68%; right: 6px; top: 34px; bottom: 8px; }
+.menu-prev--vidro .mp-bar { left: 8px; top: 8px; bottom: 8px; width: 22%; border-radius: 12px; background: linear-gradient(165deg, rgba(255,255,255,.75), rgba(255,255,255,.35)); border: 1px solid rgba(255,255,255,.9); box-shadow: 0 8px 18px -8px rgba(7,25,54,.35); }
+.menu-prev--vidro .mp-pill { left: 12px; top: 22px; width: 17%; height: 11px; border-radius: 6px; background: #fff; box-shadow: 0 2px 8px rgba(7,25,54,.15); }
+.menu-prev--vidro .mp-c1 { left: 32%; right: 8px; top: 10px; height: 18px; } .menu-prev--vidro .mp-c2 { left: 32%; width: 31%; top: 34px; bottom: 8px; } .menu-prev--vidro .mp-c3 { left: 67%; right: 8px; top: 34px; bottom: 8px; }
+.menu-prev--topo .mp-bar { left: 8px; right: 8px; top: 8px; height: 16px; border-radius: 9px; background: linear-gradient(165deg, rgba(255,255,255,.8), rgba(255,255,255,.4)); border: 1px solid rgba(255,255,255,.9); box-shadow: 0 8px 18px -8px rgba(7,25,54,.35); }
+.menu-prev--topo .mp-pill { left: 22%; top: 11px; width: 14%; height: 10px; border-radius: 6px; background: #fff; box-shadow: 0 2px 8px rgba(7,25,54,.15); }
+.menu-prev--topo .mp-c1 { left: 8px; right: 8px; top: 32px; height: 16px; } .menu-prev--topo .mp-c2 { left: 8px; width: 46%; top: 54px; bottom: 8px; } .menu-prev--topo .mp-c3 { left: 52%; right: 8px; top: 54px; bottom: 8px; }
+@media (prefers-reduced-motion: no-preference) {
+  .menu-opt:hover .menu-prev--vidro .mp-pill { animation: mp-slide 1.6s ease-in-out infinite alternate; }
+  .menu-opt:hover .menu-prev--topo .mp-pill { animation: mp-slide-x 1.6s ease-in-out infinite alternate; }
+}
+@keyframes mp-slide { to { transform: translateY(44px); } }
+@keyframes mp-slide-x { to { transform: translateX(260%); } }
