@@ -3,7 +3,14 @@
   --serif: "Fraunces", Georgia, serif; --sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --r: 18px; --shadow: 0 24px 60px -36px rgba(7,25,54,.45); }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+body { overflow-x: hidden; }
+@supports (overflow-x: clip) { html, body { overflow-x: clip; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+/* barra de rolagem na cor da marca (turquesa → violeta) */
+html { scrollbar-color: var(--tq) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--tq2), var(--tq) 50%, var(--vio)); border-radius: 999px; border: 3px solid var(--bg); }
 a { color: var(--tq); } img { display: block; max-width: 100%; }
 h1, h2, h3 { margin: 0; line-height: 1.15; } h1 { font-family: var(--serif); font-weight: 600; letter-spacing: -.02em; } h2 { font-family: var(--serif); font-weight: 600; font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.2rem); margin-bottom: 1rem; }
 p { margin: 0 0 .9em; } .muted { color: var(--muted); } .small { font-size: .88rem; } .center { text-align: center; }
@@ -125,3 +132,4 @@ p { margin: 0 0 .9em; } .muted { color: var(--muted); } .small { font-size: .88r
   .fbox > summary b { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--tq); color: #fff; font-size: .78rem; }
   .fbox[open] > summary { margin-bottom: .6rem; }
 }
+@media (max-width: 380px) { .top__in { gap: .6rem; padding-inline: 12px 8px; } .logo { font-size: 1rem; gap: .4rem; } .top__in > .btn--sm { padding-inline: .75rem; font-size: .8rem; } }
