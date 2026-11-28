@@ -3,11 +3,13 @@ import * as T from '../lib/tenancy.js';
 import * as Dir from '../lib/directory.js';
 import { html, raw } from '../lib/html.js';
 import { send, str } from '../lib/router.js';
+import { mount as mountBlog } from './platform-bemblog.js';
 
 const portal = () => `https://${[...Dir.hosts()][0] || 'bemestarmental.com.br'}`;
 const ST = { pendente: ['Aguardando CRP', 'agendada'], ativo: ['No ar', 'realizada'], oculto: ['Oculto', 'cancelada'], suspenso: ['Suspenso', 'falta'] };
 export function mount(handle, { need, layout, log }) {
   handle.use(/^\/diretorio(\/|$)/, (req, res, next) => { Dir.migrate().then(() => next(), next); });
+  mountBlog(handle, { need, layout, log }); // antes de /diretorio/:id
   handle.get('/diretorio', need, async (req, res) => {
     const f = { st: str(req.query.st, 12), q: str(req.query.q, 80) };
     const where = ['1=1']; const args = [];
@@ -17,7 +19,7 @@ export function mount(handle, { need, layout, log }) {
     for (const p of rows) p.tierEff = await Dir.tierOf(p);
     const reqs = await T.pq("SELECT r.*, p.name, p.slug FROM dir_requests r JOIN dir_profiles p ON p.id = r.profile_id WHERE r.status = 'novo' ORDER BY r.id DESC LIMIT 50");
     const count = (s) => rows.filter((x) => x.status === s).length;
-    send(res, layout(req, 'Bem-Estar Mental', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Bem-Estar Mental</h1><p class="muted">Diretório de psicólogos em <a href="${portal()}" target="_blank" rel="noopener">${portal().replace('https://', '')}</a>. Confira o CRP no cadastro do Conselho (cadastro.cfp.org.br) antes de liberar os perfis grátis.</p></div></header>
+    send(res, layout(req, 'Bem-Estar Mental', html`<header class="ph"><div><p class="eyebrow">Painel</p><h1>Bem-Estar Mental</h1><p class="muted">Diretório de psicólogos em <a href="${portal()}" target="_blank" rel="noopener">${portal().replace('https://', '')}</a>. Confira o CRP no cadastro do Conselho (cadastro.cfp.org.br) antes de liberar os perfis grátis.</p></div><div class="ph-actions"><a class="btn" href="/diretorio/blog">Blog do portal</a></div></header>
       <section class="tk-kpis"><div class="card"><span>Aguardando CRP</span><b>${count('pendente')}</b></div><div class="card"><span>No ar</span><b>${count('ativo')}</b></div><div class="card"><span>Pedidos de destaque</span><b>${reqs.length}</b></div></section>
       ${reqs.length ? html`<section class="card"><h2>Pedidos de destaque</h2><ul class="list">${reqs.map((r) => html`<li class="site-dom"><span><a href="/diretorio/${r.profile_id}"><b>${r.name}</b></a> quer o <b>${Dir.TIERS[r.tier]?.name}</b> (R$ ${Dir.TIERS[r.tier]?.price}/mês)<br><small class="muted">${new Date(r.created_at).toLocaleString('pt-BR')}</small></span>
         <form method="post" action="/diretorio/pedido/${r.id}"><button class="btn btn-sm ghost">Marcar como tratado</button></form></li>`)}</ul><p class="muted small">Envie a cobrança pelo WhatsApp ou e-mail da Mentez e, depois do pagamento, ative o destaque no perfil com a data de validade.</p></section>` : ''}

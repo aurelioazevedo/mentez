@@ -5,6 +5,8 @@ import * as Dir from '../lib/directory.js';
 import * as PlatComm from '../lib/platcomm.js';
 import * as PlatPush from '../lib/platpush.js';
 import * as Lead from '../lib/sitelead.js';
+import * as Blog from '../lib/bemblog.js';
+import { md, readingMinutes } from '../lib/siteblog.js';
 import { html, raw, esc, VERSION } from '../lib/html.js';
 
 export const router = express.Router();
@@ -44,13 +46,13 @@ ${ld ? `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 <header class="top"><div class="wrap top__in">
   <a class="logo" href="/"><span class="logo__ring" aria-hidden="true"></span>Bem-Estar <b>Mental</b></a>
-  <nav class="top__nav" aria-label="Principal"><a href="/psicologos"${active === 'busca' ? ' class="on"' : ''}>Encontrar psicólogo</a><a href="/#temas">Temas</a><a href="/para-profissionais"${active === 'pro' ? ' class="on"' : ''}>Para profissionais</a></nav>
+  <nav class="top__nav" aria-label="Principal"><a href="/psicologos"${active === 'busca' ? ' class="on"' : ''}>Encontrar psicólogo</a><a href="/#temas">Temas</a><a href="/blog"${active === 'blog' ? ' class="on"' : ''}>Blog</a><a href="/para-profissionais"${active === 'pro' ? ' class="on"' : ''}>Para profissionais</a></nav>
   <a class="btn btn--sm btn--line" href="${me ? '/meu-perfil' : '/entrar'}">${me ? 'Meu perfil' : 'Sou profissional'}</a>
 </div></header>
 <main id="conteudo">${body}</main>
 <footer class="foot"><div class="wrap foot__in">
   <div><a class="logo" href="/"><span class="logo__ring" aria-hidden="true"></span>Bem-Estar <b>Mental</b></a><p>Encontre psicólogas e psicólogos com CRP conferido, perto de você ou on-line.</p></div>
-  <nav><b>Pacientes</b><a href="/psicologos">Buscar profissionais</a><a href="/psicologos/online">Atendimento on-line</a><a href="/#temas">Temas</a></nav>
+  <nav><b>Pacientes</b><a href="/psicologos">Buscar profissionais</a><a href="/psicologos/online">Atendimento on-line</a><a href="/#temas">Temas</a><a href="/blog">Blog</a></nav>
   <nav><b>Profissionais</b><a href="/para-profissionais">Planos e destaque</a><a href="/cadastro">Criar perfil grátis</a><a href="/entrar">Entrar</a><a href="https://mentez.com.br" target="_blank" rel="noopener">Sistema Mentez</a></nav>
   <nav><b>Bem-Estar Mental</b><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a></nav>
 </div><div class="wrap foot__small"><p><b>Em crise ou emergência:</b> ligue 188 (CVV, 24 horas, gratuito) ou 192 (SAMU). Este site não presta atendimento de urgência.</p><p>© ${new Date().getFullYear()} Bem-Estar Mental · uma iniciativa <a href="https://mentez.com.br" target="_blank" rel="noopener">Mentez</a></p></div></footer>
@@ -202,7 +204,7 @@ router.get(/^\/foto\/(\d+)\/\d+\.webp$/, async (req, res) => {
 // ---------- início ----------
 router.get('/', async (req, res, next) => {
   try {
-    const [feat, cities] = await Promise.all([Dir.featured(6), Dir.cities()]);
+    const [feat, cities, posts] = await Promise.all([Dir.featured(6), Dir.cities(), Blog.published({ limit: 3 }).catch(() => [])]);
     const temasTop = ['ansiedade', 'depressao', 'relacionamentos', 'autoestima', 'luto', 'estresse', 'tdah', 'casal', 'traumas', 'panico', 'autismo', 'maternidade'];
     const body = html`<section class="hero"><div class="wrap hero__in">
       <p class="eyebrow">Psicólogas e psicólogos com CRP conferido</p>
@@ -223,11 +225,76 @@ router.get('/', async (req, res, next) => {
       <li><b>2</b><h3>Compare</h3><p>Veja a abordagem, os temas, os valores e os horários livres.</p></li>
       <li><b>3</b><h3>Agende</h3><p>Marque direto com o profissional, pelo site dele ou pelo WhatsApp.</p></li></ol></div></section>
     ${cities.length ? html`<section class="sec sec--alt"><div class="wrap"><h2>Cidades</h2><p class="chips">${cities.slice(0, 30).map((c) => html`<a href="/psicologos/${c.city_slug}">${c.city} - ${c.uf}</a>`)}<a href="/psicologos/online">On-line (todo o Brasil)</a></p></div></section>` : ''}
+    ${posts.length ? html`<section class="sec"><div class="wrap"><div class="sec__head"><h2>Do blog</h2><a href="/blog">Ver todos os artigos</a></div><div class="posts">${posts.map(postCard)}</div></div></section>` : ''}
     <section class="band"><div class="wrap band__in"><div><p class="eyebrow">Para profissionais</p><h2>Você é psicóloga ou psicólogo?</h2><p>Crie seu perfil grátis, receba pacientes e, se quiser, tenha agenda on-line, teleconsulta e prontuário com a Mentez.</p></div>
       <p><a class="btn btn--lg btn--light" href="/para-profissionais">Conheça os planos</a></p></div></section>
     <section class="sec"><div class="wrap crisis"><b>Precisa de ajuda agora?</b> Em crise ou emergência, ligue <a href="tel:188">188</a> (CVV, 24 horas, gratuito) ou <a href="tel:192">192</a> (SAMU).</div></section>`;
     return send(res, shell(req, { title: `${B} · Encontre psicólogas e psicólogos perto de você ou on-line`, desc: 'Psicólogas e psicólogos com CRP conferido, presencial e on-line. Compare abordagens, temas e valores e agende direto com o profissional.', body, canonical: '/',
       ld: { '@context': 'https://schema.org', '@type': 'WebSite', name: B, url: `https://${req.hostname}/`, potentialAction: { '@type': 'SearchAction', target: `https://${req.hostname}/psicologos?q={busca}`, 'query-input': 'required name=busca' } } }));
+  } catch (e) { next(e); }
+});
+
+// ---------- blog ----------
+const COVERS = ['#04857E,#07C6BC', '#8065E8,#B9A8FF', '#1E3663,#4C6FB1', '#C2577A,#F0A3B9', '#D08A2E,#F4C77B', '#2E8B57,#8FD3A6'];
+const coverOf = (tema) => COVERS[[...String(tema)].reduce((a, ch) => a + ch.charCodeAt(0), 0) % COVERS.length];
+const dateBR = (d) => new Date(d).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' });
+const postCard = (p) => html`<article class="post"><a class="post__cover" href="/blog/${p.slug}" style="--g:${coverOf(p.tema)}" tabindex="-1" aria-hidden="true"><span>${Blog.TEMAS[p.tema] || ''}</span></a>
+  <div class="post__body"><p class="post__meta"><a href="/blog/tema/${p.tema}">${Blog.TEMAS[p.tema] || ''}</a>${p.len ? ` · ${Math.max(1, Math.round(p.len / 1150))} min de leitura` : ''}</p>
+  <h3><a href="/blog/${p.slug}">${p.title}</a></h3>${p.excerpt ? html`<p>${p.excerpt}</p>` : ''}</div></article>`;
+const PER_PAGE = 12;
+async function blogList(req, res, tema) {
+  const page = Math.max(1, Math.min(500, Number(req.query.pagina) || 1));
+  const [posts, total, temas] = await Promise.all([Blog.published({ tema, limit: PER_PAGE, offset: (page - 1) * PER_PAGE }), Blog.countPublished(tema), Blog.temasLive()]);
+  if (page > 1 && !posts.length) return null;
+  const pages = Math.ceil(total / PER_PAGE); const base = tema ? `/blog/tema/${tema}` : '/blog';
+  const label = tema ? Blog.TEMAS[tema] : '';
+  const body = html`<section class="phero"><div class="wrap"><p class="eyebrow">Blog</p><h1>${tema ? label : 'Saúde mental, sem complicação'}</h1>
+      <p class="muted">${tema ? `Artigos sobre ${label.toLowerCase()}: o que é, sinais, como lidar e quando procurar ajuda.` : 'Artigos claros e acolhedores sobre o que você sente, como funciona a terapia e quando procurar um psicólogo.'}</p>
+      ${temas.length > 1 ? html`<p class="chips">${tema ? html`<a href="/blog">Todos</a>` : ''}${temas.map((t) => html`<a href="/blog/tema/${t.tema}" class="${t.tema === tema ? 'on' : ''}">${Blog.TEMAS[t.tema]}</a>`)}</p>` : ''}</div></section>
+    <section class="sec"><div class="wrap">${posts.length ? html`<div class="posts">${posts.map(postCard)}</div>` : html`<p class="muted center">Os primeiros artigos chegam em breve.</p>`}
+      ${pages > 1 ? html`<nav class="pager" aria-label="Páginas">${page > 1 ? html`<a href="${base}${page > 2 ? `?pagina=${page - 1}` : ''}" rel="prev">← Anteriores</a>` : html`<span></span>`}<span>Página ${page} de ${pages}</span>${page < pages ? html`<a href="${base}?pagina=${page + 1}" rel="next">Próximos →</a>` : html`<span></span>`}</nav>` : ''}
+    </div></section>`;
+  return shell(req, { title: `${tema ? `${label} · Blog` : 'Blog'} | ${B}${page > 1 ? ` · página ${page}` : ''}`, desc: tema ? `Artigos sobre ${label.toLowerCase()} para entender o que você sente e saber quando procurar um psicólogo.` : 'Artigos sobre saúde mental, terapia e bem-estar, escritos para quem busca informação confiável e acolhedora.', body, active: 'blog', canonical: `${base}${page > 1 ? `?pagina=${page}` : ''}` });
+}
+router.get('/blog', async (req, res, next) => { try { const s = await blogList(req, res, null); return s ? send(res, s) : next(); } catch (e) { next(e); } });
+router.get('/blog/tema/:tema', async (req, res, next) => { try { if (!Blog.TEMAS[req.params.tema]) return next(); const s = await blogList(req, res, req.params.tema); return s ? send(res, s) : next(); } catch (e) { next(e); } });
+// perguntas frequentes do fim do artigo (### pergunta + resposta) para o Google
+function faqOf(body) {
+  const m = /^##\s+Perguntas frequentes\s*$([\s\S]*)/im.exec(String(body || '')); if (!m) return [];
+  const out = []; let cur = null;
+  for (const l of m[1].split('\n')) {
+    const h = /^###\s+(.+)/.exec(l.trim()); if (/^##\s/.test(l.trim())) break;
+    if (h) { cur = { q: h[1].trim(), a: '' }; out.push(cur); } else if (cur && l.trim()) cur.a += `${cur.a ? ' ' : ''}${l.trim().replace(/\*\*/g, '')}`;
+  }
+  return out.filter((x) => x.q && x.a).slice(0, 6);
+}
+router.get('/blog/:slug', async (req, res, next) => {
+  try {
+    const p = await Blog.bySlug(req.params.slug); if (!p) return next();
+    const temaDir = Dir.TEMAS[p.tema] ? p.tema : '';
+    const [rel, found] = await Promise.all([Blog.related(p, 3), Dir.search({ tema: temaDir, online: true }, { limit: 3 })]);
+    const pros = [...found.sponsored, ...found.organic].slice(0, 3);
+    const temaTxt = temaDir ? Dir.TEMAS[temaDir].toLowerCase() : '';
+    const find = temaDir ? `/psicologos/online/${temaDir}` : '/psicologos';
+    const h = `https://${req.hostname}`;
+    const faq = faqOf(p.body);
+    const ld = [{ '@context': 'https://schema.org', '@type': 'BlogPosting', headline: p.title, description: p.seo || p.excerpt || '', datePublished: new Date(p.pub).toISOString(), dateModified: new Date(p.updated_at).toISOString(),
+      mainEntityOfPage: `${h}/blog/${p.slug}`, inLanguage: 'pt-BR', author: { '@type': 'Organization', name: `Equipe ${B}`, url: `${h}/` }, publisher: { '@type': 'Organization', name: B, url: `${h}/`, logo: { '@type': 'ImageObject', url: `${h}/static/bem/icone.svg` } } },
+    { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Blog', item: `${h}/blog` }, { '@type': 'ListItem', position: 2, name: Blog.TEMAS[p.tema] || 'Artigos', item: `${h}/blog/tema/${p.tema}` }, { '@type': 'ListItem', position: 3, name: p.title }] }];
+    if (faq.length) ld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map((x) => ({ '@type': 'Question', name: x.q, acceptedAnswer: { '@type': 'Answer', text: x.a } })) });
+    const cta = html`<aside class="cta-box"><p class="eyebrow">Ajuda profissional</p><h2>${temaTxt ? `Psicólogos que atendem ${temaTxt}` : 'Encontre um psicólogo'}</h2>
+      <p>Compare abordagens e valores e agende direto, on-line ou perto de você. Todos com CRP conferido.</p>
+      ${pros.length ? html`<ul class="cta-pros">${pros.map((x) => html`<li><a href="/p/${x.slug}">${avatar(x, 'av av--sm')}<span><b>${x.name}</b><small>${where(x)}</small></span></a></li>`)}</ul>` : ''}
+      <a class="btn btn--block" href="${find}">${ico('search')}Ver profissionais</a></aside>`;
+    const body = html`<article class="article"><header class="phero phero--post"><div class="wrap">
+        <nav class="crumbs" aria-label="Você está em"><a href="/blog">Blog</a> › <a href="/blog/tema/${p.tema}">${Blog.TEMAS[p.tema] || 'Artigos'}</a></nav>
+        <h1>${p.title}</h1>${p.excerpt ? html`<p class="lead">${p.excerpt}</p>` : ''}
+        <p class="post__meta">Equipe ${B} · ${dateBR(p.pub)} · ${readingMinutes(p.body)} min de leitura</p></div></header>
+      <div class="wrap article__grid"><div class="article__body prose">${raw(md(p.body))}
+          <p class="note"><b>Conteúdo informativo.</b> Este artigo não substitui a avaliação de um profissional de saúde mental. Em crise ou emergência, ligue <a href="tel:188">188</a> (CVV, 24 horas, gratuito) ou <a href="tel:192">192</a> (SAMU).</p></div>
+        <div class="article__side">${cta}</div></div></article>
+      ${rel.length ? html`<section class="sec sec--alt"><div class="wrap"><h2>Leia também</h2><div class="posts">${rel.map(postCard)}</div></div></section>` : ''}`;
+    return send(res, shell(req, { title: `${p.title} | ${B}`, desc: p.seo || p.excerpt || '', body, active: 'blog', canonical: `/blog/${p.slug}`, ld }));
   } catch (e) { next(e); }
 });
 
@@ -420,9 +487,11 @@ router.get('/robots.txt', (req, res) => res.type('text/plain').send(`User-agent:
 router.get('/sitemap.xml', async (req, res) => {
   const h = `https://${req.hostname}`;
   const profs = await T.pq("SELECT slug, updated_at, city_slug, online, temas FROM dir_profiles WHERE status = 'ativo'");
-  const urls = new Set(['/', '/psicologos', '/psicologos/online', '/para-profissionais']);
+  const urls = new Set(['/', '/psicologos', '/psicologos/online', '/para-profissionais', '/blog']);
+  const posts = await T.pq("SELECT slug, tema, updated_at FROM bem_posts WHERE status = 'publicado' OR (status = 'fila' AND publish_at <= NOW())").catch(() => []);
+  for (const t of new Set(posts.map((x) => x.tema))) urls.add(`/blog/tema/${t}`);
   for (const p of profs) { if (p.city_slug) urls.add(`/psicologos/${p.city_slug}`); for (const t of Dir.list(p.temas)) { if (p.city_slug) urls.add(`/psicologos/${p.city_slug}/${t}`); if (p.online) urls.add(`/psicologos/online/${t}`); } }
-  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[...urls].map((u) => `<url><loc>${h}${u}</loc></url>`).join('')}${profs.map((p) => `<url><loc>${h}/p/${p.slug}</loc><lastmod>${new Date(p.updated_at).toISOString().slice(0, 10)}</lastmod></url>`).join('')}</urlset>`);
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[...urls].map((u) => `<url><loc>${h}${u}</loc></url>`).join('')}${profs.map((p) => `<url><loc>${h}/p/${p.slug}</loc><lastmod>${new Date(p.updated_at).toISOString().slice(0, 10)}</lastmod></url>`).join('')}${posts.map((p) => `<url><loc>${h}/blog/${p.slug}</loc><lastmod>${new Date(p.updated_at).toISOString().slice(0, 10)}</lastmod></url>`).join('')}</urlset>`);
 });
 router.get('/_mentez/saude', (req, res) => res.json({ ok: true }));
 router.use((req, res) => res.status(404).type('html').set('Cache-Control', NO_STORE).send(shell(req, { title: `Página não encontrada | ${B}`, noindex: true, body: html`<section class="sec"><div class="wrap narrow center"><h1>Página não encontrada</h1><p>O endereço não existe ou o perfil saiu do ar.</p><p><a class="btn" href="/psicologos">Buscar profissionais</a></p></div></section>` })));

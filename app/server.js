@@ -87,6 +87,7 @@ import * as Live from './lib/live.js';
 import * as Fin from './lib/fin.js';
 import * as Sites from './lib/sites.js';
 import * as Dir from './lib/directory.js';
+import * as BemBlog from './lib/bemblog.js';
 import { router as bemRouter } from './routes/bem.js';
 import { admin as bemAdmin } from './routes/bemadmin.js';
 import * as SitePub from './routes/sitepub.js';
@@ -381,6 +382,7 @@ async function boot() {
     await Domains.migrate();
     await Sites.migratePlatform();
     await Dir.migrate();
+    await BemBlog.migrate();
     await Tenancy.forEachTenant(() => migrate(), 'migração'); // cada clínica no seu banco, sempre no esquema atual
   } else await migrate();
 }
@@ -405,6 +407,7 @@ boot()
   .finally(() => (httpServer = app.listen(port, () => {
     console.log(`Sistema rodando na porta ${port}`);
     startWhatsApp();
+    if (Tenancy.multi()) { const bt = () => BemBlog.tick().catch((e) => console.error('blog bem-estar:', e.message)); setTimeout(bt, 2 * 60e3).unref(); setInterval(bt, Number(process.env.BEM_BLOG_TICK_MS) || 10 * 60e3).unref(); }
     if (Tenancy.multi()) { const dt = () => Domains.tick().catch((e) => console.error('domínios:', e.message)); setTimeout(dt, 60e3).unref(); setInterval(dt, Number(process.env.DOMAIN_TICK_MS) || 10 * 60e3).unref(); }
     every(3600e3, () => Live.cleanup(), 'live', 5e3);
     every(6 * 3600e3, () => Fin.ensureRecurring(), 'recorrentes', 10e3);
